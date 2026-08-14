@@ -1,0 +1,4 @@
+# 由 dsh.bundle.patch 自动合并到 profile。主机端与 dsh.client 浏览器端共用此行。
+- insert:
+    - id: qingagent
+      name: 'dsh-qingagent'
