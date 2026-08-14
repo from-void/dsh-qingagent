@@ -18,7 +18,7 @@ const TONES = new Set(['info', 'success', 'warning', 'danger', 'neutral'])
 
 interface SanitizeContext {
   doc: Document
-  notes: Map<string, string>
+  notes: Map<string, { note: string; index: number }>
   title: string | null
 }
 
@@ -170,13 +170,17 @@ function buildFootnoteReference(source: Element, context: SanitizeContext): Node
   const rawId = source.getAttribute('id')?.trim() ?? ''
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(rawId)) return context.doc.createTextNode(source.textContent ?? '')
   const note = source.textContent?.trim() ?? ''
-  if (!context.notes.has(rawId)) context.notes.set(rawId, note)
+  let entry = context.notes.get(rawId)
+  if (!entry) {
+    entry = { note, index: context.notes.size + 1 }
+    context.notes.set(rawId, entry)
+  }
   const sup = context.doc.createElement('sup')
   sup.className = 'qing-footnote-ref'
   const anchor = context.doc.createElement('a')
   anchor.href = `#qing-note-${rawId}`
-  anchor.textContent = `[${context.notes.size}]`
-  anchor.setAttribute('aria-label', `脚注：${note}`)
+  anchor.textContent = `[${entry.index}]`
+  anchor.setAttribute('aria-label', `脚注：${entry.note}`)
   sup.append(anchor)
   return sup
 }
@@ -187,10 +191,10 @@ function buildFootnotes(context: SanitizeContext): Element {
   const heading = context.doc.createElement('h2')
   heading.textContent = '脚注'
   const list = context.doc.createElement('ol')
-  for (const [id, note] of context.notes) {
+  for (const [id, entry] of context.notes) {
     const item = context.doc.createElement('li')
     item.id = `qing-note-${id}`
-    item.textContent = note
+    item.textContent = entry.note
     list.append(item)
   }
   section.append(heading, list)
@@ -202,7 +206,7 @@ function copySafeAttributes(source: Element, target: Element, tag: string): void
     const align = source.getAttribute('align')?.toLowerCase()
     if (align && ALIGN.has(align)) target.setAttribute('data-align', align)
     const anchor = source.getAttribute('anchor')
-    if (anchor && /^[A-Za-z0-9_-]{1,64}$/.test(anchor)) target.id = anchor
+    if (anchor && /^[A-Za-z0-9_-]{1,64}$/.test(anchor)) target.id = `qing-anchor-${anchor}`
   }
   if (tag === 'ol') {
     const style = source.getAttribute('style')
@@ -249,12 +253,12 @@ function copySafeAttributes(source: Element, target: Element, tag: string): void
 
 function safeHref(value: string): boolean {
   const trimmed = value.trim()
-  return trimmed.startsWith('#') || trimmed.startsWith('/') || /^(https?:|mailto:)/i.test(trimmed)
+  return trimmed.startsWith('#') || (trimmed.startsWith('/') && !trimmed.startsWith('//')) || /^(https?:|mailto:)/i.test(trimmed)
 }
 
 function safeImageSource(value: string): boolean {
   const trimmed = value.trim()
-  return trimmed.startsWith('/') || /^https?:/i.test(trimmed)
+  return (trimmed.startsWith('/') && !trimmed.startsWith('//')) || /^https?:/i.test(trimmed)
 }
 
 function safeColor(value: string): boolean {

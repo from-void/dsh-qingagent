@@ -227,6 +227,19 @@
   font: 12px/1.55 var(--qing-font-sans);
 }
 
+.failureNotice {
+  position: sticky;
+  bottom: 12px;
+  max-width: 650px;
+  margin: 18px auto 0;
+  padding: 10px 13px;
+  color: var(--qing-ink-2);
+  border: 1px solid var(--qing-line-2);
+  background: color-mix(in srgb, var(--qing-bg-paper-deep) 94%, transparent);
+  box-shadow: var(--qing-shadow-1);
+  font: 12px/1.55 var(--qing-font-sans);
+}
+
 :global(.qing-paper .qing-document-title) {
   margin: 0 0 1.25em;
   padding-bottom: 0.55em;

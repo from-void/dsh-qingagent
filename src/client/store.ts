@@ -8,7 +8,9 @@ export interface QingClientSnapshot {
   streaming: boolean
   blocks: number
   words: number
+  bindingCount: number
   reviewCount?: number
+  draftFailure?: string
   error?: string
 }
 
@@ -26,6 +28,7 @@ const EMPTY: QingClientSnapshot = {
   streaming: false,
   blocks: 0,
   words: 0,
+  bindingCount: 0,
 }
 
 export class QingClientStore {
@@ -39,6 +42,11 @@ export class QingClientStore {
     const entry = this.entry(sessionId)
     entry.listeners.add(listener)
     return () => entry.listeners.delete(listener)
+  }
+
+  hasPanelContent(sessionId: string): boolean {
+    const snapshot = this.getSnapshot(sessionId)
+    return snapshot.streaming || snapshot.bindingCount > 0
   }
 
   retain(sessionId: string, openDetails?: () => void): () => void {
@@ -79,6 +87,7 @@ export class QingClientStore {
       qingml: doc.qingml,
       streaming: false,
       reviewCount: doc.state === 'pendingReview' ? entry.snapshot.reviewCount : undefined,
+      draftFailure: undefined,
       error: undefined,
     })
   }
@@ -98,6 +107,7 @@ export class QingClientStore {
     entry.source = source
     const eventNames: BridgeEvent['type'][] = [
       'draft-chunk',
+      'draft-failed',
       'doc-committed',
       'doc-review-pending',
       'binding-changed',
@@ -128,6 +138,18 @@ export class QingClientStore {
         blocks: event.blocks,
         words: event.words,
         reviewCount: undefined,
+        draftFailure: undefined,
+        error: undefined,
+      })
+      this.open(entry)
+      return
+    }
+    if (event.type === 'draft-failed') {
+      this.update(entry, {
+        ...entry.snapshot,
+        activeEngineSessionId: event.engineSessionId,
+        streaming: false,
+        draftFailure: event.message,
         error: undefined,
       })
       this.open(entry)
@@ -143,6 +165,7 @@ export class QingClientStore {
         blocks: event.blocks,
         words: event.words,
         reviewCount: undefined,
+        draftFailure: undefined,
         error: undefined,
       })
       this.open(entry)
@@ -158,6 +181,7 @@ export class QingClientStore {
         blocks: event.blocks,
         words: event.words,
         reviewCount: event.count,
+        draftFailure: undefined,
         error: undefined,
       })
       this.open(entry)
@@ -174,6 +198,7 @@ export class QingClientStore {
       this.update(entry, {
         ...entry.snapshot,
         state: entry.snapshot.state ? { ...entry.snapshot.state, binding: event.binding } : undefined,
+        bindingCount: event.binding.docs.length,
         activeEngineSessionId: event.binding.activeEngineSessionId,
       })
       if (event.binding.docs.length) this.open(entry)
@@ -195,14 +220,17 @@ export class QingClientStore {
         const state = await response.json() as BridgeState
         const activeEngineSessionId = state.binding.activeEngineSessionId
         // state 拉取可能与第一块并发；以落地瞬间的 live snapshot 为准，不能让较慢的空文档响应抹掉写作流。
-        const keep = (preserveDraft || entry.snapshot.streaming) && entry.snapshot.activeEngineSessionId === activeEngineSessionId
+        const sameActiveDoc = entry.snapshot.activeEngineSessionId === activeEngineSessionId
+        const keepStreaming = entry.snapshot.streaming && sameActiveDoc
+        const keepDraft = (preserveDraft && sameActiveDoc) || keepStreaming
         this.update(entry, {
           ...entry.snapshot,
           state,
+          bindingCount: state.binding.docs.length,
           activeEngineSessionId,
           activeDoc: state.activeDoc,
-          qingml: keep ? entry.snapshot.qingml : state.activeDoc?.qingml ?? '',
-          streaming: keep ? entry.snapshot.streaming : false,
+          qingml: keepDraft ? entry.snapshot.qingml : state.activeDoc?.qingml ?? '',
+          streaming: keepStreaming,
           error: undefined,
         })
         if (state.binding.docs.length) this.open(entry)

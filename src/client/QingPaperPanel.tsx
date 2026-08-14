@@ -79,6 +79,11 @@ export function QingPaperPanel(props: QingPaperPanelProps) {
             审阅待处理 · {snapshot.reviewCount} 处变更。请在青简中处理；DSH 审阅界面将在后续批次提供。
           </div>
         ) : null}
+        {snapshot.draftFailure ? (
+          <div className={styles.failureNotice} role="status">
+            写作未完成 · {snapshot.draftFailure}
+          </div>
+        ) : null}
       </div>
     </section>
   )
