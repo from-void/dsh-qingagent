@@ -33,11 +33,62 @@ export class EngineHttpError extends Error {
   constructor(
     readonly status: number,
     readonly body: unknown,
-    message = `青简接口返回 HTTP ${status}`,
+    message?: string,
   ) {
-    super(message)
+    super(message ?? engineErrorMessage(status, body))
     this.name = 'EngineHttpError'
   }
+}
+
+interface EngineErrorBody {
+  error?: unknown
+  code?: unknown
+  nextStep?: unknown
+}
+
+const CODE_MESSAGES: Record<string, string> = {
+  REVIEW_PENDING: '审阅待处理',
+  AGENT_BUSY: '青简正在处理其他任务',
+  VERSION_CONFLICT: '文稿版本冲突',
+  RATE_LIMITED: '请求过于频繁',
+  SESSION_NOT_FOUND: '青简会话不存在',
+  NOT_FOUND: '青简资源不存在',
+}
+
+const STATUS_MESSAGES: Record<number, string> = {
+  404: '青简会话或资源不存在',
+  409: '青简当前状态不允许此操作',
+  429: '请求过于频繁',
+}
+
+const CODE_NEXT_STEPS: Record<string, string> = {
+  REVIEW_PENDING: '请先让用户处理待审变更，或在其明确授权后调用 qing_review_commit',
+  AGENT_BUSY: '请稍后重试一次；仍忙则告知用户等待',
+  VERSION_CONFLICT: '请重新读取文稿，基于最新版本重做操作，勿原样重发',
+  RATE_LIMITED: '请降低请求频率，稍后再试',
+  SESSION_NOT_FOUND: '请用 qing_list_docs 重新确认文稿引用，不要重试原引用',
+  NOT_FOUND: '请重新确认目标资源，不要重试原引用',
+}
+
+const STATUS_NEXT_STEPS: Record<number, string> = {
+  404: '请用 qing_list_docs 重新确认文稿引用，不要重试原引用',
+  409: '请重新读取文稿状态后再决定下一步',
+  429: '请降低请求频率，稍后再试',
+}
+
+function engineErrorMessage(status: number, body: unknown): string {
+  const details = isEngineErrorBody(body) ? body : undefined
+  const code = typeof details?.code === 'string' ? details.code.trim() : ''
+  const error = typeof details?.error === 'string' ? details.error.trim() : ''
+  const suppliedNextStep = typeof details?.nextStep === 'string' ? details.nextStep.trim() : ''
+  const headline = CODE_MESSAGES[code] ?? STATUS_MESSAGES[status] ?? `青简接口请求失败（HTTP ${status}）`
+  const withDetail = error && error !== code && error !== headline ? `${headline}：${error}` : headline
+  const nextStep = suppliedNextStep || CODE_NEXT_STEPS[code] || STATUS_NEXT_STEPS[status]
+  return nextStep ? `${withDetail}（${nextStep}）` : withDetail
+}
+
+function isEngineErrorBody(value: unknown): value is EngineErrorBody {
+  return typeof value === 'object' && value !== null
 }
 
 function defaultAlive(pid: number): boolean {

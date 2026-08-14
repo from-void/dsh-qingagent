@@ -50,6 +50,7 @@ export interface DraftMetrics {
 
 export type BridgeEvent =
   | ({ type: 'draft-chunk'; engineSessionId: string; chunkQingml: string; accumulatedBlocks: string[]; title: string } & DraftMetrics)
+  | { type: 'draft-failed'; engineSessionId: string; message: string }
   | ({ type: 'doc-committed'; engineSessionId: string; doc: ExternalDoc } & DraftMetrics)
   | ({ type: 'doc-review-pending'; engineSessionId: string; doc: ExternalDoc; count: number } & DraftMetrics)
   | { type: 'binding-changed'; binding: SessionBinding }
@@ -76,6 +77,35 @@ export interface ExternalValidationDiagnostic {
 export type ExternalProposalResponse =
   | { status: 'committed'; docVersion: number; seq?: number }
   | { status: 'review'; patchIds: string[]; count: number; seq?: number }
+
+export interface ExternalReviewCommitRequest {
+  expectedDocVersion: number
+  action: 'accept_all' | 'reject_all'
+}
+
+export interface ExternalReviewOutcomeHunk {
+  verdict: 'accepted' | 'rejected'
+  blockSummary: string
+  beforeText: string
+  afterText: string
+}
+
+export interface ExternalReviewOutcome {
+  acceptedCount: number
+  rejectedCount: number
+  hunks: ExternalReviewOutcomeHunk[]
+}
+
+export interface ExternalReviewCommitResponse {
+  status: 'reviewed'
+  docVersion: number
+  acceptedCount: number
+  rejectedCount: number
+  remainingCount: number
+  outcomeQueued: boolean
+  outcome: ExternalReviewOutcome
+  seq: number | null
+}
 
 export interface SideModelConfig {
   provider: string

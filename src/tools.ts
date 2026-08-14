@@ -4,7 +4,13 @@ import { createUserMessage, type FinishReason } from '@deepseek-ai/dsh-llm'
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { BindingStore } from './bindings.js'
 import type { BridgeHub } from './bridge.js'
-import type { ExternalDoc, ExternalProposalResponse, SideModelConfig } from './contracts.js'
+import type {
+  ExternalDoc,
+  ExternalProposalResponse,
+  ExternalReviewCommitRequest,
+  ExternalReviewCommitResponse,
+  SideModelConfig,
+} from './contracts.js'
 import { EngineHttpError, type EngineService } from './engine.js'
 import {
   QINGML_SYSTEM,
@@ -34,6 +40,7 @@ const outlineSchema = {
 export function registerTools(services: ToolServices): void {
   const { ctx } = services
   ctx.effect(() => ctx.tools.register(writeDraftTool(services)))
+  ctx.effect(() => ctx.tools.register(reviewCommitTool(services)))
   ctx.effect(() => ctx.tools.register(readDraftTool(services)))
   ctx.effect(() => ctx.tools.register(listDocsTool(services)))
   ctx.effect(() => ctx.tools.register(focusDocTool(services)))
@@ -104,60 +111,169 @@ function writeDraftTool(services: ToolServices) {
       }
 
       const docBefore = await readDoc(services.engine, bound.engineSessionId)
+      if (docBefore.state === 'pendingReview') {
+        throw new Error('文稿正在审阅中（可先 qing_review_commit 全收/全弃后重写，或请用户处理）。')
+      }
       const initialPrompt = makeDraftPrompt({ brief: args.brief, title: args.title, style: args.style })
-      let qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, initialPrompt)
+      let qingml: string
       let proposal: ExternalProposalResponse
       try {
-        proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
+        qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, initialPrompt)
+        try {
+          proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
+        } catch (error) {
+          if (!(error instanceof EngineHttpError) || error.status !== 400 || !hasDiagnostic(error.body)) throw error
+          const retryPrompt = makeDraftPrompt({
+            brief: args.brief,
+            title: args.title,
+            style: args.style,
+            correction: correctionPrompt(qingml, error.body.diagnostic),
+          })
+          qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, retryPrompt)
+          proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
+        }
       } catch (error) {
-        if (!(error instanceof EngineHttpError) || error.status !== 400 || !hasDiagnostic(error.body)) throw error
-        const retryPrompt = makeDraftPrompt({
-          brief: args.brief,
-          title: args.title,
-          style: args.style,
-          correction: correctionPrompt(qingml, error.body.diagnostic),
+        services.bridge.emit(dshSessionId, {
+          type: 'draft-failed',
+          engineSessionId: bound.engineSessionId,
+          message: readableError(error),
         })
-        qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, retryPrompt)
-        proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
+        throw error
       }
 
-      const official = await readDoc(services.engine, bound.engineSessionId)
-      const title = official.title?.trim() || extractTitle(qingml, args.title?.trim() || bound.title)
-      await services.bindings.updateTitle(dshSessionId, bound.engineSessionId, title)
-      // 大纲/计数以引擎落库读回的权威 QingML 为准:生成文本中不合规的块会被引擎 fail-open
-      // 剥除,若仍按本地文本汇报,模型与用户都无从察觉落库结构缺损。
-      const outline = outlineOf(official.qingml ?? qingml, title)
-      const submittedBlocks = completeTopLevelBlocks(qingml).blocks
-        .filter((block) => !/^<title(?:\s|>)/i.test(block)).length
-      const lostBlocks = Math.max(0, submittedBlocks - outline.blocks)
-      if (proposal.status === 'committed') {
-        services.bridge.emit(dshSessionId, {
-          type: 'doc-committed',
-          engineSessionId: bound.engineSessionId,
-          doc: official,
+      try {
+        const official = await readDoc(services.engine, bound.engineSessionId)
+        const title = official.title?.trim() || extractTitle(qingml, args.title?.trim() || bound.title)
+        await services.bindings.updateTitle(dshSessionId, bound.engineSessionId, title)
+        // 大纲/计数以引擎落库读回的权威 QingML 为准:生成文本中不合规的块会被引擎 fail-open
+        // 剥除,若仍按本地文本汇报,模型与用户都无从察觉落库结构缺损。
+        const outline = outlineOf(official.qingml ?? qingml, title)
+        const submittedBlocks = completeTopLevelBlocks(qingml).blocks
+          .filter((block) => !/^<title(?:\s|>)/i.test(block)).length
+        const lostBlocks = Math.max(0, submittedBlocks - outline.blocks)
+        if (proposal.status === 'committed') {
+          services.bridge.emit(dshSessionId, {
+            type: 'doc-committed',
+            engineSessionId: bound.engineSessionId,
+            doc: official,
+            blocks: outline.blocks,
+            words: outline.words,
+          })
+        } else {
+          services.bridge.emit(dshSessionId, {
+            type: 'doc-review-pending',
+            engineSessionId: bound.engineSessionId,
+            doc: official,
+            count: proposal.count,
+            blocks: outline.blocks,
+            words: outline.words,
+          })
+        }
+        return {
+          title,
           blocks: outline.blocks,
           words: outline.words,
-        })
-      } else {
-        services.bridge.emit(dshSessionId, {
-          type: 'doc-review-pending',
+          ...(lostBlocks > 0
+            ? { warning: `注意:提交了 ${submittedBlocks} 个块,落库仅 ${outline.blocks} 个——有 ${lostBlocks} 个块因 QingML 结构不合规被引擎剥除。请用 qing_read_draft 核对落库内容,缺失的部分需修正格式后重写。` }
+            : {}),
+          status: proposal.status,
           engineSessionId: bound.engineSessionId,
-          doc: official,
-          count: proposal.count,
-          blocks: outline.blocks,
-          words: outline.words,
+          outline: outline.headings.map((heading) => `${'  '.repeat(Math.max(0, heading.level - 1))}${heading.text}`),
+        }
+      } catch (error) {
+        services.bridge.emit(dshSessionId, {
+          type: 'draft-failed',
+          engineSessionId: bound.engineSessionId,
+          message: readableError(error),
         })
+        throw error
       }
-      return {
-        title,
+    },
+  })
+}
+
+function reviewCommitTool(services: ToolServices) {
+  return defineTool({
+    name: 'qing_review_commit',
+    description: '全量接受或拒绝青简文稿的待审变更。仅当用户明确表达过覆盖/接受意图时才可调用；默认应让用户裁决。docRef 省略时使用活跃文稿。',
+    parameters: {
+      docRef: { type: 'string', description: '青简会话 ID；省略时处理当前激活文稿。' },
+      action: { type: 'string', enum: ['accept_all', 'reject_all'], required: true, description: 'accept_all 全部接受；reject_all 全部拒绝。' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          status: { type: 'string', enum: ['reviewed', 'no_pending_review'], required: true },
+          message: { type: 'string', required: true },
+          engineSessionId: { type: 'string', required: true },
+          title: { type: 'string', required: true },
+          acceptedCount: { type: 'integer', required: true },
+          rejectedCount: { type: 'integer', required: true },
+        },
+      },
+      render: (_args, value) => textBlock(value.message),
+      presentationMeta: (_args, value) => ({
+        status: value.status,
+        engineSessionId: value.engineSessionId,
+        title: value.title,
+        acceptedCount: value.acceptedCount,
+        rejectedCount: value.rejectedCount,
+      }),
+    },
+    presentCall: (args) => ({
+      card: 'generic',
+      title: args.action === 'accept_all' ? '接受全部青简修改' : '拒绝全部青简修改',
+      kind: 'edit',
+    }),
+    presentResult: (_args, result) => ({
+      card: 'generic',
+      title: result.isError ? '青简审阅处理未完成' : '青简审阅已处理',
+    }),
+    execute: async (args, exec) => {
+      const dshSessionId = sessionIdOf(exec)
+      await assertEngineOnline(services.engine)
+      const engineSessionId = resolveDocRef(services.bindings, dshSessionId, args.docRef)
+      const before = await readDoc(services.engine, engineSessionId)
+      const beforeTitle = before.title?.trim() || services.bindings.listDocs(dshSessionId)
+        .find((doc) => doc.engineSessionId === engineSessionId)?.title || '未命名文稿'
+      if (before.state !== 'pendingReview') {
+        return {
+          status: 'no_pending_review' as const,
+          message: '无待审变更',
+          engineSessionId,
+          title: beforeTitle,
+          acceptedCount: 0,
+          rejectedCount: 0,
+        }
+      }
+
+      const body: ExternalReviewCommitRequest = {
+        expectedDocVersion: before.docVersion,
+        action: args.action,
+      }
+      const reviewed = await services.engine.fetchJson<ExternalReviewCommitResponse>(
+        `/sessions/${encodeURIComponent(engineSessionId)}/review/commit`,
+        { method: 'POST', body: JSON.stringify(body) },
+      )
+      const official = await readDoc(services.engine, engineSessionId)
+      const outline = outlineOf(official.qingml, official.title)
+      await services.bindings.updateTitle(dshSessionId, engineSessionId, outline.title)
+      services.bridge.emit(dshSessionId, {
+        type: 'doc-committed',
+        engineSessionId,
+        doc: official,
         blocks: outline.blocks,
         words: outline.words,
-        ...(lostBlocks > 0
-          ? { warning: `注意:提交了 ${submittedBlocks} 个块,落库仅 ${outline.blocks} 个——有 ${lostBlocks} 个块因 QingML 结构不合规被引擎剥除。请用 qing_read_draft 核对落库内容,缺失的部分需修正格式后重写。` }
-          : {}),
-        status: proposal.status,
-        engineSessionId: bound.engineSessionId,
-        outline: outline.headings.map((heading) => `${'  '.repeat(Math.max(0, heading.level - 1))}${heading.text}`),
+      })
+      return {
+        status: 'reviewed' as const,
+        message: `${args.action === 'accept_all' ? '已接受' : '已拒绝'}全部待审变更（接受 ${reviewed.acceptedCount} 处，拒绝 ${reviewed.rejectedCount} 处）。`,
+        engineSessionId,
+        title: outline.title,
+        acceptedCount: reviewed.acceptedCount,
+        rejectedCount: reviewed.rejectedCount,
       }
     },
   })
@@ -376,4 +492,8 @@ async function assertEngineOnline(engine: EngineService): Promise<void> {
 
 function hasDiagnostic(body: unknown): body is { diagnostic: unknown } {
   return typeof body === 'object' && body !== null && 'diagnostic' in body
+}
+
+function readableError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
