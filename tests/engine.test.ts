@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Logger } from '@deepseek-ai/cordis'
-import { EngineConnection, type EngineDependencies } from '../src/engine.js'
+import { EngineConnection, EngineHttpError, type EngineDependencies } from '../src/engine.js'
 
 const logger = {
   name: 'test',
@@ -22,6 +22,16 @@ function dependencies(overrides: Partial<EngineDependencies>): EngineDependencie
 }
 
 describe('EngineConnection', () => {
+  it.each([
+    [409, { error: '还有修改未裁决', code: 'REVIEW_PENDING', nextStep: '先处理审阅' }, '审阅待处理：还有修改未裁决（先处理审阅）'],
+    [409, { error: 'AGENT_BUSY', code: 'AGENT_BUSY', nextStep: '稍后再试' }, '青简正在处理其他任务（稍后再试）'],
+    [409, { error: '版本已变化', code: 'VERSION_CONFLICT', nextStep: '重新读取文稿' }, '文稿版本冲突：版本已变化（重新读取文稿）'],
+    [404, { error: 'missing' }, '青简会话或资源不存在：missing（请用 qing_list_docs 重新确认文稿引用，不要重试原引用）'],
+    [429, { error: '队列已满', code: 'RATE_LIMITED', nextStep: '降低频率' }, '请求过于频繁：队列已满（降低频率）'],
+  ])('EngineHttpError 将 HTTP %s 结构化错误转换为可行动消息', (status, body, message) => {
+    expect(new EngineHttpError(status, body).message).toBe(message)
+  })
+
   it('instance 缺失时 status 安全降级为 offline', async () => {
     const fetchMock = vi.fn()
     const engine = new EngineConnection(

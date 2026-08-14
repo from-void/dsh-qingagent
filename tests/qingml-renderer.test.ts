@@ -36,4 +36,29 @@ describe('QingML 白名单渲染', () => {
     expect(result.html).toContain('id="qing-note-n1"')
     expect(result.footnotes).toBe(1)
   })
+
+  it('拒绝 protocol-relative URL，并给正文 anchor 加安全前缀', () => {
+    const result = renderQingml([
+      '<h2 anchor="location">章节</h2>',
+      '<p><a href="//evil.example/path">外链</a><a href="/safe/path">站内</a></p>',
+      '<img src="//evil.example/image.png"><img src="/safe/image.png">',
+    ].join(''))
+
+    expect(result.html).toContain('id="qing-anchor-location"')
+    expect(result.html).toContain('href="/safe/path"')
+    expect(result.html).toContain('src="/safe/image.png"')
+    expect(result.html).not.toContain('//evil.example')
+  })
+
+  it('重复脚注沿用首次分配的编号', () => {
+    const result = renderQingml([
+      '<p>A<footnote id="n1">甲</footnote></p>',
+      '<p>B<footnote id="n2">乙</footnote></p>',
+      '<p>C<footnote id="n1">甲的重复引用</footnote></p>',
+    ].join(''))
+
+    const document = new DOMParser().parseFromString(result.html, 'text/html')
+    expect([...document.querySelectorAll('.qing-footnote-ref a')].map((node) => node.textContent)).toEqual(['[1]', '[2]', '[1]'])
+    expect([...document.querySelectorAll('.qing-footnotes li')].map((node) => node.textContent)).toEqual(['甲', '乙'])
+  })
 })

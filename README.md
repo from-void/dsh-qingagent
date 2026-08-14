@@ -2,11 +2,12 @@
 
 青简 × DeepSeek Harness 写作桥。Agent 在 DSH 中收敛写作方向后调用 `qing_write_draft`，主机端用当前 Agent 模型旁支生成 QingML、提交到本机青简引擎；浏览器右侧 details 列同步长出暖墨纸系文稿。青简文档是真身，聊天只保留摘要。
 
-批次 1 已覆盖“新建/整稿重写 → 流式预览 → 青简提交/待审阅”的闭环，不包含审阅操作界面、公式/图表真渲染和工作区导出。
+当前已覆盖“新建/整稿重写 → 流式预览 → 青简提交/待审阅 → 明确授权后的全量接受或拒绝”闭环，不包含逐条审阅操作界面、公式/图表真渲染和工作区导出。
 
 ## 能力
 
 - `qing_write_draft`：新建或整稿重写；按完整顶层 QingML 块向浏览器广播，400 结构诊断只修正重试一次。
+- `qing_review_commit`：在用户明确表达接受或覆盖意图后，全量接受/拒绝待审变更；非审阅态安全返回“无待审变更”。
 - `qing_read_draft`：默认读取标题层级、每节首句和字数；显式 `mode: full` 才回传全文 QingML。
 - `qing_list_docs` / `qing_focus_doc`：一个 DSH 会话可绑定多篇青简文稿，激活指针只决定视图和默认读取对象。
 - `ctx.qingagentEngine`：instance 文件/PID 探测、1.5 秒 health 超时、Bearer 封装、401 重读 token、自启动与 20 秒轮询。
@@ -106,8 +107,8 @@ QingML 渲染不是把输入 HTML 原样塞进页面：解析后逐节点创建�
 
 ## 取舍与已知缺口
 
-- `details` 是 single slot；本插件以 `priority: -10` 接管整列。无绑定、无流时组件返回 `null`，但此时不会回退显示官方 tool-details occupant，这是 DSH 单槽 shadow 语义的结果。
-- 已有文稿的整稿提案进入青简审阅。面板保留刚生成的预览并显示待审阅提示；接受/拒绝与权威版本刷新属于批次 2。
+- `details` 是 single slot；本插件只在当前会话有绑定文稿或生成流时以 `priority: -10` 接管整列，归零后注销，让官方 tool-details occupant 恢复。
+- 已有文稿的整稿提案进入青简审阅。面板保留刚生成的预览并显示待审阅提示；当前仅提供经用户明确授权的全收/全弃工具，逐条裁决仍需在青简中完成。
 - 待审阅候选正文只存在本次页面的流式缓冲；刷新后 external doc 端点只提供权威已提交版本，因此仍显示“待审阅”但不能恢复候选全文。
 - `math-block`、Mermaid、Draw.io 只显示安全等宽占位，不加载第三方渲染器。
 - `workspaceProjection` 按规格保留默认值，批次 1 不导出工作区文件。
@@ -122,4 +123,4 @@ npm run build
 npm pack --dry-run --ignore-scripts
 ```
 
-单测覆盖 QingML 白名单/XSS、自定义标签转换、流式顶层块边界与提纲、BindingStore 新建/聚焦/改名、Engine offline 降级和 401 token 单次重读。
+单测覆盖写稿提交与一次纠错、审阅态拦截/提交、失败终态、bridge 回环与会话隔离、details 动态让位、QingML 白名单/XSS/脚注、BindingStore，以及 Engine 错误降级与 401 token 单次重读。
