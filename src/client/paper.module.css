@@ -167,7 +167,9 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: clamp(18px, 4vw, 38px) clamp(15px, 4vw, 34px) 52px;
+  /* 容器查询基准:内层排版按列实际宽度(cqw)伸缩,窄列(dsh 右列 ~360px)自动紧凑,宽列保青简原纸面。 */
+  container-type: inline-size;
+  padding: clamp(10px, 3cqw, 38px) clamp(8px, 3cqw, 34px) 52px;
   color: var(--qing-ink-1);
   background:
     linear-gradient(rgba(250, 246, 236, 0.86), rgba(250, 246, 236, 0.93)),
@@ -180,12 +182,12 @@
   max-width: 760px;
   min-height: calc(100% - 18px);
   margin: 0 auto;
-  padding: clamp(29px, 7vw, 64px) clamp(24px, 7vw, 64px) 72px;
+  padding: clamp(18px, 6cqw, 64px) clamp(16px, 6cqw, 64px) clamp(36px, 9cqw, 72px);
   border: 1px solid var(--qing-line-1);
   border-radius: var(--qing-r);
   background: var(--qing-bg-canvas);
   box-shadow: var(--qing-shadow-2);
-  font-size: 16px;
+  font-size: clamp(14px, 4.2cqw, 16px);
   line-height: 1.95;
   overflow-wrap: anywhere;
 }
@@ -207,8 +209,7 @@
   display: block;
   width: 8px;
   height: 19px;
-  margin: -50px auto 42px;
-  transform: translateX(-330px);
+  margin: -44px 0 40px clamp(4px, 2cqw, 14px);
   background: var(--qing-ink-1);
   animation: qingBlink 0.9s steps(2, jump-none) infinite;
 }
@@ -231,7 +232,7 @@
   padding-bottom: 0.55em;
   color: var(--qing-ink-1);
   border-bottom: 1px solid var(--qing-line-2);
-  font: 700 clamp(28px, 5vw, 42px)/1.25 var(--qing-font-zh-serif);
+  font: 700 clamp(20px, 7.5cqw, 42px)/1.3 var(--qing-font-zh-serif);
   letter-spacing: 0.04em;
 }
 
