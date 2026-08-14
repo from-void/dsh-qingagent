@@ -60,12 +60,14 @@ function writeDraftTool(services: ToolServices) {
           status: { type: 'string', enum: ['committed', 'review'], required: true },
           engineSessionId: { type: 'string', required: true },
           outline: { ...outlineSchema, required: true },
+          warning: { type: 'string', description: '落库块数与提交块数不符时的缺损警告。' },
         },
       },
       render: (_args, value) => textBlock([
         `青简文稿《${value.title}》已${value.status === 'committed' ? '提交' : '进入审阅'}。`,
         `文稿引用：${value.engineSessionId}`,
         `共 ${value.blocks} 个块，约 ${value.words} 字。`,
+        ...(typeof value.warning === 'string' ? [`⚠ ${value.warning}`] : []),
         value.outline.length ? `提纲：\n${value.outline.map((line) => `- ${line}`).join('\n')}` : '提纲：暂无标题层级。',
       ].join('\n')),
       presentationMeta: (_args, value) => ({
@@ -122,7 +124,12 @@ function writeDraftTool(services: ToolServices) {
       const official = await readDoc(services.engine, bound.engineSessionId)
       const title = official.title?.trim() || extractTitle(qingml, args.title?.trim() || bound.title)
       await services.bindings.updateTitle(dshSessionId, bound.engineSessionId, title)
-      const outline = outlineOf(qingml, title)
+      // 大纲/计数以引擎落库读回的权威 QingML 为准:生成文本中不合规的块会被引擎 fail-open
+      // 剥除,若仍按本地文本汇报,模型与用户都无从察觉落库结构缺损。
+      const outline = outlineOf(official.qingml ?? qingml, title)
+      const submittedBlocks = completeTopLevelBlocks(qingml).blocks
+        .filter((block) => !/^<title(?:\s|>)/i.test(block)).length
+      const lostBlocks = Math.max(0, submittedBlocks - outline.blocks)
       if (proposal.status === 'committed') {
         services.bridge.emit(dshSessionId, {
           type: 'doc-committed',
@@ -145,6 +152,9 @@ function writeDraftTool(services: ToolServices) {
         title,
         blocks: outline.blocks,
         words: outline.words,
+        ...(lostBlocks > 0
+          ? { warning: `注意:提交了 ${submittedBlocks} 个块,落库仅 ${outline.blocks} 个——有 ${lostBlocks} 个块因 QingML 结构不合规被引擎剥除。请用 qing_read_draft 核对落库内容,缺失的部分需修正格式后重写。` }
+          : {}),
         status: proposal.status,
         engineSessionId: bound.engineSessionId,
         outline: outline.headings.map((heading) => `${'  '.repeat(Math.max(0, heading.level - 1))}${heading.text}`),
