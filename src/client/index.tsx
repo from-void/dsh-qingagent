@@ -1,7 +1,9 @@
 import type { ClientContext, ISessions } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import { QingDocPanel } from './QingDocPanel.js'
+import { QingSelectionDock } from './QingSelectionDock.js'
 import { QingWriteToolCard } from './QingWriteToolCard.js'
 import { qingClientStore } from './store.js'
 
@@ -66,4 +68,10 @@ export function apply(ctx: ClientContext): void {
     key: 'qing_write_draft',
     inject: () => ({ qingLayout: layout }),
   }, QingWriteToolCard))
+
+  slots.inject('conversation.input.dock', () => slots.register({
+    name: 'conversation.input.dock',
+    id: 'qingagent-selection',
+    order: -10,
+  }, QingSelectionDock))
 }

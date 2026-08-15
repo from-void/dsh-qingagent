@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-storage-domain'
 import type {} from '@deepseek-ai/dsh-system-prompt'
@@ -9,6 +10,7 @@ import { BindingDomainSpec, BindingStore } from './bindings.js'
 import { BridgeHub } from './bridge.js'
 import { EngineService } from './engine.js'
 import { QINGAGENT_SYSTEM_PROMPT } from './system-prompt.js'
+import { selectionSystemPrompt } from './selection.js'
 import { registerTools } from './tools.js'
 import type { SideModelConfig } from './contracts.js'
 
@@ -61,6 +63,11 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     order: 160,
     text: QINGAGENT_SYSTEM_PROMPT,
   }))
+  ctx.effect(() => ctx.systemPrompt.section({
+    name: 'plugin:qingagent-selection',
+    order: 161,
+    text: ({ agent }) => selectionSystemPrompt(agent ? bridge?.getSelection(String(agent.id)) : undefined),
+  }))
   registerTools({ ctx, engine, bindings, bridge, sideModel: config.sideModel })
 }
 
@@ -68,4 +75,5 @@ export { BindingStore, BindingDomainSpec } from './bindings.js'
 export { BridgeHub, isLoopback } from './bridge.js'
 export { EngineConnection, EngineHttpError, EngineService } from './engine.js'
 export { QINGML_SYSTEM, completeTopLevelBlocks, countWords, outlineOf } from './qingml.js'
+export { selectionSystemPrompt } from './selection.js'
 export type * from './contracts.js'

@@ -150,6 +150,60 @@ describe('BridgeHub', () => {
     dispose()
   })
 
+  it('选段按 dsh 会话存取清，doc-committed 后也自动清除', async () => {
+    const binding = {
+      docs: [{ engineSessionId: 'qing-a', title: 'A', createdAt: '2026-08-15T00:00:00.000Z' }],
+      activeEngineSessionId: 'qing-a',
+    }
+    const { hub, handler, dispose } = fixture({ 'dsh-a': binding })
+    const selection = {
+      dshSessionId: 'dsh-a',
+      engineSessionId: 'qing-a',
+      quote: '需要修改的原文',
+      anchor: { blockId: 'block-1', from: 3, to: 11 },
+    }
+
+    const stored = response()
+    await handler(
+      request('POST', '/qingagent-bridge/selection', '127.0.0.1', selection),
+      stored as unknown as ServerResponse,
+    )
+    expect(stored.status).toBe(200)
+    expect(hub.getSelection('dsh-a')).toEqual(selection)
+
+    const read = response()
+    await handler(
+      request('GET', '/qingagent-bridge/selection?dshSessionId=dsh-a'),
+      read as unknown as ServerResponse,
+    )
+    expect(JSON.parse(read.body)).toEqual({ selection })
+
+    const cleared = response()
+    await handler(
+      request('DELETE', '/qingagent-bridge/selection?dshSessionId=dsh-a'),
+      cleared as unknown as ServerResponse,
+    )
+    expect(cleared.status).toBe(200)
+    expect(hub.getSelection('dsh-a')).toBeUndefined()
+
+    await handler(
+      request('POST', '/qingagent-bridge/selection', '127.0.0.1', selection),
+      response() as unknown as ServerResponse,
+    )
+    hub.emit('dsh-a', {
+      type: 'doc-committed',
+      engineSessionId: 'qing-a',
+      doc: {
+        sessionId: 'qing-a', docVersion: 2, state: 'editing', agentBusy: false,
+        markdown: '', qingml: '<p>新稿</p>', title: 'A',
+      },
+      blocks: 1,
+      words: 2,
+    })
+    expect(hub.getSelection('dsh-a')).toBeUndefined()
+    dispose()
+  })
+
   it('PM 文档、审阅渲染模型与 verdict/commit 均按绑定会话代理到 external API', async () => {
     const binding = {
       docs: [{ engineSessionId: 'qing-a', title: 'A', createdAt: '2026-08-15T00:00:00.000Z' }],

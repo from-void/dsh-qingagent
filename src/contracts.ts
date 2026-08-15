@@ -95,7 +95,21 @@ export interface BridgeState {
   binding: SessionBinding
   docs: BridgeDocument[]
   activeDoc?: ExternalDoc
+  selection?: QingSelection
   engine: EngineStatusSnapshot
+}
+
+export interface QingSelectionAnchor {
+  blockId: string
+  from: number
+  to: number
+}
+
+export interface QingSelection {
+  dshSessionId: string
+  engineSessionId: string
+  quote: string
+  anchor: QingSelectionAnchor
 }
 
 export interface DraftMetrics {
@@ -110,6 +124,7 @@ export type BridgeEvent =
   | ({ type: 'doc-review-pending'; engineSessionId: string; doc: ExternalDoc; count: number } & DraftMetrics)
   | { type: 'binding-changed'; binding: SessionBinding }
   | { type: 'focus-changed'; engineSessionId: string }
+  | { type: 'selection-changed'; selection: QingSelection | null }
   | { type: 'engine-status'; engine: EngineStatusSnapshot }
 
 export interface ExternalSessionCreateResponse {

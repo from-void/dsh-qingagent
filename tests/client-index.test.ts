@@ -65,6 +65,11 @@ describe('client details 动态占槽', () => {
     } as unknown as Context
 
     apply(ctx)
+    expect(slots.register).toHaveBeenCalledWith({
+      name: 'conversation.input.dock',
+      id: 'qingagent-selection',
+      order: -10,
+    }, expect.any(Function))
     await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1))
     expect(activeDetails.size).toBe(0)
 

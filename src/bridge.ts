@@ -16,6 +16,7 @@ import type {
   ExternalReviewRenderModelResponse,
   ExternalReviewVerdictRequest,
   ExternalReviewVerdictResponse,
+  QingSelection,
   SessionBinding,
 } from './contracts.js'
 import { EngineHttpError, type EngineService } from './engine.js'
@@ -33,6 +34,7 @@ interface Subscriber {
 
 export class BridgeHub {
   private readonly subscribers = new Set<Subscriber>()
+  private readonly selections = new Map<string, QingSelection>()
 
   constructor(
     private readonly ctx: Context,
@@ -49,10 +51,22 @@ export class BridgeHub {
     this.ctx.effect(() => () => {
       dispose()
       for (const subscriber of this.subscribers) this.removeSubscriber(subscriber)
+      this.selections.clear()
     })
   }
 
   emit(dshSessionId: string, event: BridgeEvent): void {
+    if (event.type === 'doc-committed' && this.selections.delete(dshSessionId)) {
+      this.writeEvent(dshSessionId, { type: 'selection-changed', selection: null })
+    }
+    this.writeEvent(dshSessionId, event)
+  }
+
+  getSelection(dshSessionId: string): QingSelection | undefined {
+    return this.selections.get(dshSessionId)
+  }
+
+  private writeEvent(dshSessionId: string, event: BridgeEvent): void {
     const wire = `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`
     for (const subscriber of this.subscribers) {
       if (subscriber.dshSessionId === dshSessionId && !subscriber.response.destroyed) {
@@ -88,6 +102,28 @@ export class BridgeHub {
       }
       if (request.method === 'GET' && url.pathname === '/qingagent-bridge/stream') {
         this.openStream(requiredQuery(url, 'dshSessionId'), request, response)
+        return
+      }
+      if (request.method === 'GET' && url.pathname === '/qingagent-bridge/selection') {
+        const selection = this.selections.get(requiredQuery(url, 'dshSessionId')) ?? null
+        writeJson(response, 200, { selection })
+        return
+      }
+      if (request.method === 'POST' && url.pathname === '/qingagent-bridge/selection') {
+        const selection = validateSelection(await readJsonBody(request))
+        if (!this.bindings.hasDoc(selection.dshSessionId, selection.engineSessionId)) {
+          throw new HttpNotFoundError('文稿不属于当前 DSH 会话。')
+        }
+        this.selections.set(selection.dshSessionId, selection)
+        this.emit(selection.dshSessionId, { type: 'selection-changed', selection })
+        writeJson(response, 200, { selection })
+        return
+      }
+      if (request.method === 'DELETE' && url.pathname === '/qingagent-bridge/selection') {
+        const dshSessionId = requiredQuery(url, 'dshSessionId')
+        const deleted = this.selections.delete(dshSessionId)
+        if (deleted) this.emit(dshSessionId, { type: 'selection-changed', selection: null })
+        writeJson(response, 200, { ok: true })
         return
       }
       if (request.method === 'POST' && url.pathname === '/qingagent-bridge/focus') {
@@ -218,7 +254,15 @@ export class BridgeHub {
     } else {
       docs.push(...binding.docs.map((doc) => ({ ...doc, state: 'offline' as const, docVersion: null })))
     }
-    return { dshSessionId, binding, docs, ...(activeDoc ? { activeDoc } : {}), engine }
+    const selection = this.selections.get(dshSessionId)
+    return {
+      dshSessionId,
+      binding,
+      docs,
+      ...(activeDoc ? { activeDoc } : {}),
+      ...(selection ? { selection } : {}),
+      engine,
+    }
   }
 
   private readDoc(engineSessionId: string): Promise<ExternalDoc> {
@@ -257,6 +301,34 @@ function requiredQuery(url: URL, name: string): string {
   const value = url.searchParams.get(name)?.trim()
   if (!value) throw new HttpInputError(`缺少查询参数 ${name}。`)
   return value
+}
+
+function validateSelection(value: unknown): QingSelection {
+  if (!value || typeof value !== 'object') throw new HttpInputError('选段请求必须是 JSON 对象。')
+  const body = value as Record<string, unknown>
+  const anchor = body.anchor && typeof body.anchor === 'object'
+    ? body.anchor as Record<string, unknown>
+    : undefined
+  const dshSessionId = typeof body.dshSessionId === 'string' ? body.dshSessionId.trim() : ''
+  const engineSessionId = typeof body.engineSessionId === 'string' ? body.engineSessionId.trim() : ''
+  const quote = typeof body.quote === 'string' ? body.quote.trim() : ''
+  const blockId = typeof anchor?.blockId === 'string' ? anchor.blockId.trim() : ''
+  const from = anchor?.from
+  const to = anchor?.to
+  if (!dshSessionId || !engineSessionId || !quote || !blockId) {
+    throw new HttpInputError('dshSessionId、engineSessionId、quote 与 anchor.blockId 均为必填。')
+  }
+  if (quote.length > 100_000) throw new HttpInputError('选段引文过长。')
+  if (blockId.length > 512) throw new HttpInputError('anchor.blockId 过长。')
+  if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || (from as number) < 0 || (to as number) <= (from as number)) {
+    throw new HttpInputError('anchor.from/to 必须是有效的 PM 选区范围。')
+  }
+  return {
+    dshSessionId,
+    engineSessionId,
+    quote,
+    anchor: { blockId, from: from as number, to: to as number },
+  }
 }
 
 export function isLoopback(address?: string): boolean {

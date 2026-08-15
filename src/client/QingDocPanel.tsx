@@ -339,12 +339,38 @@ export function QingDocPanel(props: QingDocPanelProps) {
     return saveCoordinatorRef.current.enqueue(engineSessionId, doc, baseline)
   }, [])
 
-  const handleAiModify = useCallback(async (_target: AiModifyTarget): Promise<boolean> => {
-    // 青简本尊把选段引用写入左侧 ChatInput；DSH details slot 暂未提供 composer
-    // draft/chip 写入口。保留原按钮与表格工具栏挂载面，但不伪造另一套引用 UI。
-    setToast('宿主输入框暂不支持选段引用')
-    return false
-  }, [])
+  const handleAiModify = useCallback(async (target: AiModifyTarget): Promise<boolean> => {
+    const editor = tiptapEditorRef.current
+    if (
+      !activeEngineSessionId ||
+      !editor ||
+      target.from === undefined ||
+      target.to === undefined ||
+      target.to <= target.from
+    ) {
+      setToast('请先选中要修改的文字')
+      return false
+    }
+    const quote = editor.state.doc.textBetween(target.from, target.to, '\n', '').trim()
+    if (!quote) {
+      setToast('请先选中要修改的文字')
+      return false
+    }
+    try {
+      await flushPendingDocSave()
+      await qingClientStore.setSelection(sessionId, activeEngineSessionId, quote, {
+        blockId: target.blockId,
+        from: target.from,
+        to: target.to,
+      })
+      setToast('选段已加入输入框')
+      return true
+    } catch (error) {
+      console.error('[qingagent-panel] selection bridge failed', error)
+      setToast('选段加入失败 · 请重试')
+      return false
+    }
+  }, [activeEngineSessionId, flushPendingDocSave, sessionId])
 
   const handleFocusDocument = useCallback(async (engineSessionId: string) => {
     try {

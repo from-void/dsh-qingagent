@@ -12,6 +12,8 @@ import type {
   ExternalReviewVerdictRequest,
   ExternalReviewVerdictResponse,
   PmDoc,
+  QingSelection,
+  QingSelectionAnchor,
 } from '../contracts.js'
 import { appliedDocWriteBaseline } from '@qingweb/pages/workspace/data/docWriteBaseline'
 import type { DocumentSaveState } from './documentSaveCoordinator.js'
@@ -33,6 +35,7 @@ export interface QingClientSnapshot {
   reviewModel?: ExternalReviewRenderModelResponse
   panelLoading?: boolean
   saveState?: DocumentSaveState
+  selection?: QingSelection
   error?: string
 }
 
@@ -120,6 +123,29 @@ export class QingClientStore {
       panelLoading: true,
     })
     void this.refreshPanel(sessionId, engineSessionId)
+  }
+
+  async setSelection(
+    sessionId: string,
+    engineSessionId: string,
+    quote: string,
+    anchor: QingSelectionAnchor,
+  ): Promise<QingSelection> {
+    const result = await bridgeJson<{ selection: QingSelection }>('/qingagent-bridge/selection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dshSessionId: sessionId, engineSessionId, quote, anchor }),
+    })
+    const entry = this.entry(sessionId)
+    this.update(entry, { ...entry.snapshot, selection: result.selection })
+    return result.selection
+  }
+
+  async clearSelection(sessionId: string): Promise<void> {
+    const entry = this.entry(sessionId)
+    this.update(entry, { ...entry.snapshot, selection: undefined })
+    const query = new URLSearchParams({ dshSessionId: sessionId })
+    await bridgeJson<{ ok: true }>(`/qingagent-bridge/selection?${query}`, { method: 'DELETE' })
   }
 
   async refreshDoc(sessionId: string, engineSessionId: string): Promise<ExternalDoc> {
@@ -358,6 +384,7 @@ export class QingClientStore {
       'doc-review-pending',
       'binding-changed',
       'focus-changed',
+      'selection-changed',
       'engine-status',
     ]
     for (const name of eventNames) {
@@ -403,6 +430,7 @@ export class QingClientStore {
       return
     }
     if (event.type === 'doc-committed') {
+      const hadSelection = entry.snapshot.selection !== undefined
       const optimisticPanelDoc = committedPanelDoc(entry.snapshot, event.engineSessionId, event.doc)
       this.update(entry, {
         ...entry.snapshot,
@@ -414,8 +442,13 @@ export class QingClientStore {
         words: event.words,
         reviewCount: undefined,
         draftFailure: undefined,
+        selection: undefined,
         error: undefined,
       })
+      if (hadSelection) {
+        const query = new URLSearchParams({ dshSessionId: sessionId })
+        void bridgeJson(`/qingagent-bridge/selection?${query}`, { method: 'DELETE' }).catch(() => undefined)
+      }
       this.open(entry)
       void this.loadState(sessionId, entry)
       // 事件已有完整 QingML/PM 时先推进 panelDoc 版本域，再后台读回 external canonical；
@@ -453,6 +486,10 @@ export class QingClientStore {
       void this.refreshPanel(sessionId, event.engineSessionId).catch(() => undefined)
       return
     }
+    if (event.type === 'selection-changed') {
+      this.update(entry, { ...entry.snapshot, selection: event.selection ?? undefined })
+      return
+    }
     if (event.type === 'binding-changed') {
       this.update(entry, {
         ...entry.snapshot,
@@ -488,6 +525,7 @@ export class QingClientStore {
           bindingCount: state.binding.docs.length,
           activeEngineSessionId,
           activeDoc: state.activeDoc,
+          selection: state.selection,
           qingml: keepDraft ? entry.snapshot.qingml : state.activeDoc?.qingml ?? '',
           streaming: keepStreaming,
           ...(entry.snapshot.panelEngineSessionId === activeEngineSessionId

@@ -7,6 +7,7 @@ import { createQingagentExtensions } from '@qingagent/pm-schema/tiptap'
 import { normalizePmDoc, type PmDoc } from '@qingagent/pm-schema'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DocToolbar } from '@qingweb/pages/workspace/components/DocToolbar'
+import type { AiModifyTarget } from '@qingweb/pages/workspace/data/aiModifyTarget'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -14,6 +15,7 @@ let root: Root
 let host: HTMLDivElement
 let editorHost: HTMLDivElement
 let editor: Editor
+let onAiModify: (target: AiModifyTarget) => Promise<boolean>
 
 beforeEach(() => {
   const rect = () => DOMRect.fromRect({ x: 80, y: 80, width: 160, height: 24 })
@@ -41,6 +43,7 @@ beforeEach(() => {
   })
   vi.spyOn(editor.view as unknown as { scrollToSelection: () => void }, 'scrollToSelection')
     .mockImplementation(() => undefined)
+  onAiModify = vi.fn(async () => true)
   root = createRoot(host)
   act(() => {
     root.render(
@@ -48,7 +51,7 @@ beforeEach(() => {
         active
         editor={editor}
         containerSelector="body"
-        onAiModify={async () => true}
+        onAiModify={onAiModify}
       />,
     )
   })
@@ -63,6 +66,20 @@ afterEach(() => {
 })
 
 describe('青简原生 DocToolbar 关键路径', () => {
+  it('“修改选中文字”传出引文所在 blockId 与 PM range', async () => {
+    await selectText(1, 5)
+
+    await act(async () => findButton('修改选中文字').click())
+
+    expect(onAiModify).toHaveBeenCalledWith({
+      label: '青简工具',
+      suffix: '批注',
+      blockId: 'toolbar-text',
+      from: 1,
+      to: 5,
+    })
+  })
+
   it('选中文字出现浮动工具栏，点击加粗写入 bold mark', async () => {
     await selectText(1, 5)
 
