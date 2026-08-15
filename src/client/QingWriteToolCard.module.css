@@ -1,0 +1,70 @@
+.toolCard {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-family);
+}
+
+.toolTitle {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 24px;
+}
+
+.toolCard[data-state='failed'] .toolTitle {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.separator {
+  flex: none;
+  width: 2px;
+  height: 2px;
+  margin: 0 8px;
+  background: var(--dsw-alias-label-caption);
+}
+
+.toolSummary {
+  flex: auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 14px;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolCard[data-state='failed'] .toolSummary {
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.viewButton {
+  flex: none;
+  height: 24px;
+  margin-left: 8px;
+  padding: 0 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-family);
+  font-size: 13px;
+  line-height: 24px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+}
+
+.viewButton:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.viewButton:focus-visible {
+  outline-color: var(--dsw-alias-border-l3);
+  outline-offset: 0;
+  outline-style: solid;
+  outline-width: 2px;
+}

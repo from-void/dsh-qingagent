@@ -20,8 +20,7 @@
 
 .titleGroup,
 .controls,
-.statusRow,
-.toolCard {
+.statusRow {
   display: flex;
   align-items: center;
 }
@@ -53,8 +52,7 @@
 
 .select,
 .openLink,
-.closeButton,
-.viewButton {
+.closeButton {
   min-height: 26px;
   color: var(--dsw-color-text-muted, #afb1b8);
   font: 500 11px/1.3 var(--dsw-font-sans, system-ui, sans-serif);
@@ -68,8 +66,7 @@
   padding: 0 7px;
 }
 
-.openLink,
-.viewButton {
+.openLink {
   display: inline-flex;
   align-items: center;
   padding: 0 8px;
@@ -86,8 +83,7 @@
 
 .select:hover,
 .openLink:hover,
-.closeButton:hover,
-.viewButton:hover {
+.closeButton:hover {
   color: var(--dsw-color-text, #fff);
   background: var(--dsw-color-hover, rgba(255, 255, 255, 0.08));
 }
@@ -322,23 +318,6 @@
 :global(.qing-paper .qing-footnote-ref) { margin-left: 0.12em; font: 10px/1 var(--qing-font-sans); }
 :global(.qing-paper .qing-footnotes) { margin-top: 2.5em; padding-top: 1em; color: var(--qing-ink-3); border-top: 1px solid var(--qing-line-2); font-size: 0.82em; }
 :global(.qing-paper .qing-footnotes h2) { margin: 0 0 0.6em; font-size: 1em; }
-
-.toolCard {
-  gap: 10px;
-  width: 100%;
-  padding: 9px 10px;
-  color: var(--dsw-color-text, #ececef);
-  border: 1px solid var(--dsw-color-border, rgba(255, 255, 255, 0.1));
-  border-radius: var(--dsw-radius-md, 7px);
-  background: var(--dsw-color-surface-raised, rgba(255, 255, 255, 0.035));
-}
-
-.toolCardError { border-color: var(--dsw-color-danger, #b96666); }
-.toolGlyph { flex: none; color: var(--dsw-color-accent, #a6adff); font: 20px/1 var(--qing-font-zh-serif, serif); }
-.toolCopy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
-.toolCopy strong { font: 600 12px/1.4 var(--dsw-font-sans, system-ui, sans-serif); }
-.toolCopy span { overflow: hidden; color: var(--dsw-color-text-muted, #9699a1); font: 11px/1.4 var(--dsw-font-sans, system-ui, sans-serif); text-overflow: ellipsis; white-space: nowrap; }
-.viewButton { flex: none; }
 
 @keyframes qingBlink { 0%, 45% { opacity: 1; } 46%, 100% { opacity: 0; } }
 @keyframes qingPulse { 0%, 100% { opacity: 0.65; } 50% { opacity: 1; } }
