@@ -24,7 +24,9 @@ export function decodeAssetBridgeContext(value: string | undefined): AssetBridge
   }
 }
 
-/** 只把引擎自己签发的同源资产路径交给带 token 的宿主桥。 */
+const ENGINE_ASSET_REFERENCE = /^\/api\/v1\/files\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\/[A-Za-z0-9._~%!*'()-]+$/
+
+/** 只把 external 上传回执签发的 canonical src 交给带 token 的宿主桥。 */
 export function isEngineAssetReference(value: string): boolean {
   if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return false
   const rawPath = value.split(/[?#]/, 1)[0]!
@@ -35,10 +37,13 @@ export function isEngineAssetReference(value: string): boolean {
   } catch {
     return false
   }
-  if (/^\/api\/v1\/files\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\/[A-Za-z0-9._~%!*'()-]+$/.test(pathname)) return true
-  return pathname.startsWith('/api/v1/assets/') ||
-    pathname.startsWith('/api/v1/external/assets/') ||
-    /^\/api\/v1\/external\/sessions\/[^/]+\/assets(?:\/|$)/.test(pathname)
+  return ENGINE_ASSET_REFERENCE.test(pathname)
+}
+
+export function engineAssetFileId(reference: string): string | null {
+  if (!isEngineAssetReference(reference)) return null
+  const pathname = new URL(reference, 'http://qingagent.local').pathname
+  return pathname.match(ENGINE_ASSET_REFERENCE)?.[1] ?? null
 }
 
 export function assetBridgeUrl(context: AssetBridgeContext, reference: string): string {

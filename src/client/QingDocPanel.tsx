@@ -296,7 +296,10 @@ export function QingDocPanel(props: QingDocPanelProps) {
     ? snapshot.panelDoc
     : undefined
   if (panelDoc && activeEngineSessionId) editorEngineSessionIdRef.current = activeEngineSessionId
-  const pendingReview = panelDoc?.state === 'pendingReview'
+  // 审阅展示只认 PM 面板域；activeDoc/activeBound 是旧状态通道，可能晚于 commit 回执。
+  const pendingReview = Boolean(panelDoc && (
+    panelDoc.state === 'pendingReview' || snapshot.reviewModel !== undefined
+  ))
   const busy = snapshot.streaming || panelDoc?.agentBusy === true || activeBound?.agentBusy === true
   const saveState = snapshot.saveState ?? ({ kind: 'idle' } satisfies DocumentSaveState)
   const saveLocked = saveState.kind === 'conflict' || saveState.kind === 'blocked'
@@ -457,12 +460,24 @@ export function QingDocPanel(props: QingDocPanelProps) {
     }
     reviewSubmittingRef.current = true
     setReviewSubmitting(true)
-    const settleAsSuccess = async (refreshDoc: boolean) => {
-      qingClientStore.clearReviewModel(sessionId, activeEngineSessionId)
+    const settleAsSuccess = async (docVersion: number, refreshDoc: boolean) => {
+      qingClientStore.applyReviewCommit(sessionId, activeEngineSessionId, docVersion)
       reviewSettlementRetryPendingRef.current = false
       setReviewSettlementRetryPending(false)
       setToast(action === 'reject_all' ? '已放弃本轮修改' : '修改已提交')
-      const refreshes = [qingClientStore.refreshPanel(sessionId, activeEngineSessionId)]
+      const refreshPanel = async () => {
+        await qingClientStore.refreshPanel(sessionId, activeEngineSessionId)
+        const refreshed = qingClientStore.getSnapshot(sessionId)
+        if (
+          refreshed.panelEngineSessionId === activeEngineSessionId &&
+          refreshed.panelDoc?.state === 'pendingReview' &&
+          refreshed.reviewModel?.suggestions.length === 0
+        ) {
+          await wait(500)
+          await qingClientStore.refreshPanel(sessionId, activeEngineSessionId)
+        }
+      }
+      const refreshes = [refreshPanel()]
       if (refreshDoc) refreshes.push(qingClientStore.refreshDoc(sessionId, activeEngineSessionId).then(() => undefined))
       const results = await Promise.allSettled(refreshes)
       for (const result of results) {
@@ -472,17 +487,17 @@ export function QingDocPanel(props: QingDocPanelProps) {
       }
     }
     try {
-      await qingClientStore.reviewCommit(sessionId, activeEngineSessionId, {
+      const response = await qingClientStore.reviewCommit(sessionId, activeEngineSessionId, {
         expectedDocVersion: panelDoc.docVersion,
         action,
       })
-      await settleAsSuccess(true)
+      await settleAsSuccess(response.docVersion, true)
     } catch (error) {
       if (error instanceof BridgeHttpError && error.status === 409) {
         try {
           const authoritativeDoc = await qingClientStore.refreshDoc(sessionId, activeEngineSessionId)
           if (authoritativeDoc.state !== 'pendingReview') {
-            await settleAsSuccess(false)
+            await settleAsSuccess(authoritativeDoc.docVersion, false)
             return
           }
         } catch (probeError) {
@@ -530,7 +545,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
     ? remainingReviewCount
     : snapshot.reviewCount ?? 0
   const title = panelDoc?.title || snapshot.activeDoc?.title || activeBound?.title || '未命名文稿'
-  const status = panelStatus({
+  const statusLabel = panelStatus({
     busy,
     blocks: snapshot.blocks,
     words: snapshot.words,
@@ -608,7 +623,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
         <div className="qingdoc-heading">
           <span className="qingdoc-brand">青简</span>
           <strong className="qingdoc-stage-title" title={title}>{title}</strong>
-          <span className="qingdoc-status" data-kind={saveState.kind} role="status">{toast ?? status}</span>
+          <span className="qingdoc-status" data-kind={saveState.kind} role="status">{toast ?? statusLabel}</span>
         </div>
         <div className="qingdoc-host-actions">
           {docs.length > 1 ? (
@@ -716,6 +731,10 @@ function reviewTargetSelector(targetId: string): string {
     ? CSS.escape
     : (value: string) => value.replace(/["\\]/g, '\\$&')
   return `[data-review-target-id="${escape(targetId)}"],[data-patch-id="${escape(targetId)}"]:not(.wf-patch-del)`
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
 function panelStatus(input: {

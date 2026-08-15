@@ -28,7 +28,7 @@ describe('青简图片上传原语桥接', () => {
         filename: '插图.png',
         mimeType: 'image/png',
         size: 3,
-        reference: '/api/v1/files/550e8400-e29b-41d4-a716-446655440000/%E6%8F%92%E5%9B%BE.png',
+        src: '/api/v1/files/550e8400-e29b-41d4-a716-446655440000/%E6%8F%92%E5%9B%BE.png',
       })
       upload: { onprogress: ((event: ProgressEvent) => void) | null } = { onprogress: null }
       onerror: (() => void) | null = null
@@ -65,8 +65,10 @@ describe('青简图片上传原语桥接', () => {
     expect(sent[0]?.url).toContain('/qingagent-bridge/assets?')
     expect(sent[0]?.url).toContain('dshSessionId=dsh-a')
     expect(JSON.parse(sent[0]!.body)).toMatchObject({
-      filename: '插图.png', mimeType: 'image/png', size: 3, dataBase64: 'AQID',
+      filename: '插图.png', mimeType: 'image/png', base64: 'AQID',
     })
+    expect(JSON.parse(sent[0]!.body)).not.toHaveProperty('size')
+    expect(JSON.parse(sent[0]!.body)).not.toHaveProperty('dataBase64')
     expect(source).toBe('/api/v1/files/550e8400-e29b-41d4-a716-446655440000/%E6%8F%92%E5%9B%BE.png')
 
     const image = normalizePmDoc(editor.getJSON()).content.find((node) => node.type === 'image')

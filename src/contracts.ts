@@ -1,5 +1,7 @@
 import type {
   DocSuggestion,
+  ExternalAssetUploadJsonRequest as QingExternalAssetUploadJsonRequest,
+  ExternalAssetUploadResponse as QingExternalAssetUploadResponse,
   ExternalDocReplaceRequest as QingExternalDocReplaceRequest,
   ExternalDocReplaceResponse as QingExternalDocReplaceResponse,
   ExternalPmDocReadResponse as QingExternalPmDocReadResponse,
@@ -47,6 +49,8 @@ export type ExternalPmDocReadResponse = QingExternalPmDocReadResponse
 export type ExternalDocReplaceRequest = QingExternalDocReplaceRequest
 export type ExternalDocReplaceResponse = QingExternalDocReplaceResponse
 export type ExternalReviewRenderModelResponse = QingExternalReviewRenderModelResponse
+export type ExternalAssetUploadJsonRequest = QingExternalAssetUploadJsonRequest
+export type ExternalAssetUploadResponse = QingExternalAssetUploadResponse
 
 export interface ExternalReviewVerdictRequest {
   expectedDocVersion: number

@@ -299,16 +299,35 @@ export class QingClientStore {
     })
   }
 
-  clearReviewModel(
+  applyReviewCommit(
     sessionId: string,
     engineSessionId: string,
+    docVersion: number,
   ): void {
     const entry = this.entry(sessionId)
-    if (entry.snapshot.panelEngineSessionId !== engineSessionId) return
+    if (entry.snapshot.panelEngineSessionId !== engineSessionId || !entry.snapshot.panelDoc) return
+    const activeDoc = entry.snapshot.activeEngineSessionId === engineSessionId && entry.snapshot.activeDoc
+      ? {
+          ...entry.snapshot.activeDoc,
+          docVersion,
+          state: 'editing' as const,
+          agentBusy: false,
+        }
+      : entry.snapshot.activeDoc
     this.update(entry, {
       ...entry.snapshot,
+      activeDoc,
+      panelDoc: {
+        ...entry.snapshot.panelDoc,
+        docVersion,
+        state: 'editing',
+        agentBusy: false,
+      },
+      streaming: false,
       reviewModel: undefined,
       reviewCount: undefined,
+      saveState: refreshSaveState(entry.snapshot.saveState),
+      error: undefined,
     })
   }
 

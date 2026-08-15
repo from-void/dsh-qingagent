@@ -233,6 +233,48 @@ describe('QingDocPanel 保存生命周期', () => {
     expect(reviewCommitCalls(fetchMock)).toBe(1)
   })
 
+  it('commit 回执后不等待权威刷新即可恢复编辑态并清空审阅 UI', async () => {
+    let releaseRefresh!: () => void
+    const postCommitPanelGate = new Promise<void>((resolve) => { releaseRefresh = resolve })
+    const fetchMock = installBridgeFetch('dsh-review-optimistic', ['qing-review'], {
+      pendingReview: true,
+      reviewSuggestionStatus: 'reviewing',
+      postCommitPanelGate,
+    })
+    renderPanel('dsh-review-optimistic')
+    await vi.waitFor(() => expect(patchNavHarness.props).not.toBeNull())
+
+    let commit: Promise<void> | undefined
+    act(() => {
+      commit = (patchNavHarness.props?.onCommit as (() => Promise<void>) | undefined)?.()
+    })
+
+    await vi.waitFor(() => expect(reviewCommitCalls(fetchMock)).toBe(1))
+    await vi.waitFor(() => expect(
+      document.querySelector('[data-qingagent-doc-panel]')?.getAttribute('data-qingdoc-mode'),
+    ).toBe('editable'))
+    expect(document.querySelector('[data-qingagent-doc-panel]')?.getAttribute('data-ws-state')).toBe('idle')
+    expect(document.querySelector('[data-testid="mock-patch-nav"]')).toBeNull()
+    expect(toolbarHarness.props?.active).toBe(true)
+
+    releaseRefresh()
+    await act(async () => { await commit })
+  })
+
+  it('commit 后首次权威读仍是空审阅态时 500ms 后自动重拉', async () => {
+    const fetchMock = installBridgeFetch('dsh-review-stale-read', ['qing-review'], {
+      pendingReview: true,
+      stalePostCommitPanelReads: 1,
+    })
+    renderPanel('dsh-review-stale-read')
+
+    await vi.waitFor(() => expect(reviewCommitCalls(fetchMock)).toBe(1))
+    await vi.waitFor(() => expect(panelReadCalls(fetchMock)).toBeGreaterThanOrEqual(3), { timeout: 1_500 })
+    await vi.waitFor(() => expect(
+      document.querySelector('[data-qingagent-doc-panel]')?.getAttribute('data-qingdoc-mode'),
+    ).toBe('editable'))
+  })
+
   it('桌面入口使用 qingjian 自定义协议', async () => {
     installBridgeFetch('dsh-open-native', ['qing-native'])
     renderPanel('dsh-open-native')
@@ -294,10 +336,14 @@ function installBridgeFetch(
     reviewCommitGate?: Promise<void>
     reviewSuggestionStatus?: 'reviewing' | 'accepted' | 'rejected'
     mismatchVerdict?: boolean
+    postCommitPanelGate?: Promise<void>
+    stalePostCommitPanelReads?: number
   } = {},
 ) {
   vi.stubGlobal('EventSource', FakeEventSource)
   let serverPendingReview = options.pendingReview === true
+  let reviewCommitted = false
+  let stalePostCommitPanelReads = options.stalePostCommitPanelReads ?? 0
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     if (url.startsWith('/qingagent-bridge/state?')) {
@@ -328,11 +374,15 @@ function installBridgeFetch(
       })
     }
     if (url.startsWith('/qingagent-bridge/doc-pm?')) {
+      if (reviewCommitted) await options.postCommitPanelGate
       const engineSessionId = new URL(url, 'http://local').searchParams.get('engineSessionId')!
+      const stalePendingReview = reviewCommitted && stalePostCommitPanelReads > 0
+      if (stalePendingReview) stalePostCommitPanelReads -= 1
+      const pendingReview = serverPendingReview || stalePendingReview
       return Response.json({
-        sessionId: engineSessionId, docVersion: serverPendingReview ? 3 : 4,
-        contentHash: serverPendingReview ? 'hash-3' : 'hash-4',
-        state: serverPendingReview ? 'pendingReview' : 'editing',
+        sessionId: engineSessionId, docVersion: pendingReview ? 3 : 4,
+        contentHash: pendingReview ? 'hash-3' : 'hash-4',
+        state: pendingReview ? 'pendingReview' : 'editing',
         agentBusy: false, title: engineSessionId, ts: 't0', pmDoc: EMPTY_PM,
       })
     }
@@ -348,7 +398,7 @@ function installBridgeFetch(
       return Response.json({
         sessionId: engineSessionIds[0], docVersion: 3, state: 'pendingReview', agentBusy: false,
         baseVersion: 3, previewDoc: EMPTY_PM,
-        suggestions: [{
+        suggestions: reviewCommitted ? [] : [{
           id: 'patch-reviewed', reviewBatchId: 'batch-1', groupMode: 'independent',
           docId: engineSessionIds[0], baseVersion: 3, baseSchemaVersion: 1,
           status: options.reviewSuggestionStatus ?? 'accepted',
@@ -364,6 +414,7 @@ function installBridgeFetch(
         return Response.json({ error: 'commit failed' }, { status: 502 })
       }
       serverPendingReview = false
+      reviewCommitted = true
       if (options.reviewCommitConflictSettled) {
         return Response.json({ error: 'review already settled' }, { status: 409 })
       }

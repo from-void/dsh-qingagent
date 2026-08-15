@@ -76,3 +76,17 @@ export interface ExternalReviewRenderModelResponse {
   previewDoc?: PmDoc
   editedDoc?: PmDoc
 }
+
+export interface ExternalAssetUploadJsonRequest {
+  filename: string
+  mimeType?: string
+  base64: string
+}
+
+export interface ExternalAssetUploadResponse {
+  fileId: string
+  filename: string
+  mimeType: string
+  size: number
+  src: string
+}

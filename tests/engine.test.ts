@@ -95,7 +95,7 @@ describe('EngineConnection', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 
-  it('资产读取访问引擎内部路径并只在宿主侧附加 Bearer', async () => {
+  it('资产读取访问 external 会话端点并只在宿主侧附加 Bearer', async () => {
     const seen: Array<{ url: string; authorization: string | null }> = []
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input)
@@ -115,10 +115,10 @@ describe('EngineConnection', () => {
       }),
     )
 
-    const response = await engine.fetchAsset('/api/v1/files/asset/image.png')
+    const response = await engine.fetchAsset('/sessions/qing-a/assets/550e8400-e29b-41d4-a716-446655440000')
     await expect(response.text()).resolves.toBe('asset-bytes')
     expect(seen).toEqual([{
-      url: 'http://127.0.0.1:8080/api/v1/files/asset/image.png',
+      url: 'http://127.0.0.1:8080/api/v1/external/sessions/qing-a/assets/550e8400-e29b-41d4-a716-446655440000',
       authorization: 'Bearer asset-token',
     }])
   })

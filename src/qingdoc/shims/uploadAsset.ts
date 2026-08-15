@@ -1,6 +1,7 @@
 import {
   assetBridgeUrl,
   decodeAssetBridgeContext,
+  engineAssetFileId,
   isEngineAssetReference,
   type AssetBridgeContext,
 } from '../../assetBridge.js'
@@ -11,9 +12,9 @@ export interface UploadedAsset {
   mimeType: string
   size: number
   /** 引擎 canonical PM 使用的内部引用。 */
-  reference?: string
+  reference: string
   /** 浏览器显示时走的无 token 桥地址。 */
-  bridgeUrl?: string
+  bridgeUrl: string
 }
 
 export interface UploadAssetOptions {
@@ -125,35 +126,32 @@ function uploadBase64(
           : new UploadAssetError('invalid_response', file, '文件已上传，但回执无法确认，请重试', true))
       }
     }
-    // TODO(dsh-bridge): 青简 external assets 契约稳定后与其 multipart/base64 最终形态同步。
     xhr.send(JSON.stringify({
       filename: file.name,
-      mimeType: file.type || 'application/octet-stream',
-      size: file.size,
-      dataBase64,
-      ...(options.purpose ? { purpose: options.purpose } : {}),
+      ...(file.type ? { mimeType: file.type } : {}),
+      base64: dataBase64,
     }))
   })
 }
 
 function normalizeUploadResponse(value: unknown, file: File, context: AssetBridgeContext): UploadedAsset {
-  const envelope = objectRecord(value)
-  const body = objectRecord(envelope?.asset) ?? envelope
-  const responseFileId = stringValue(body?.fileId) ?? stringValue(body?.id)
-  const filename = stringValue(body?.filename) ?? file.name
-  const reference = [body?.reference, body?.src, body?.path, body?.url]
-    .map(stringValue)
-    .find((candidate): candidate is string => Boolean(candidate && isEngineAssetReference(candidate)))
-    ?? (responseFileId ? `/api/v1/files/${encodeURIComponent(responseFileId)}/${encodeURIComponent(filename)}` : undefined)
-  if (!reference) {
+  const body = objectRecord(value)
+  const fileId = stringValue(body?.fileId)
+  const filename = stringValue(body?.filename)
+  const mimeType = stringValue(body?.mimeType)
+  const size = numberValue(body?.size)
+  const reference = stringValue(body?.src)
+  if (
+    !fileId || !filename || !mimeType || size === undefined || !reference ||
+    !isEngineAssetReference(reference) || engineAssetFileId(reference) !== fileId
+  ) {
     throw new UploadAssetError('invalid_response', file, '文件已上传，但回执无法确认，请重试', true)
   }
-  const referenceFileId = reference.match(/^\/api\/v1\/files\/([^/]+)\//)?.[1]
   return {
-    fileId: responseFileId ?? referenceFileId ?? reference,
+    fileId,
     filename,
-    mimeType: stringValue(body?.mimeType) ?? stringValue(body?.mime) ?? (file.type || 'application/octet-stream'),
-    size: numberValue(body?.size) ?? file.size,
+    mimeType,
+    size,
     reference,
     bridgeUrl: assetBridgeUrl(context, reference),
   }

@@ -224,7 +224,7 @@ export class EngineConnection {
   }
 
   async fetchAsset(path: string, init: RequestInit = {}): Promise<Response> {
-    return this.fetchReadyResponse((token) => this.authorizedEngineFetch(path, init, token))
+    return this.fetchReadyResponse((token) => this.authorizedFetch(path, init, token))
   }
 
   private async fetchExternalResponse(path: string, init: RequestInit): Promise<Response> {
@@ -252,11 +252,6 @@ export class EngineConnection {
     return this.dependencies.fetch(`${this.config.engineUrl.replace(/\/$/, '')}/api/v1/external${path}`, { ...init, headers })
   }
 
-  private authorizedEngineFetch(path: string, init: RequestInit, token: string): Promise<Response> {
-    const headers = new Headers(init.headers)
-    headers.set('Authorization', `Bearer ${token}`)
-    return this.dependencies.fetch(`${this.config.engineUrl.replace(/\/$/, '')}${path}`, { ...init, headers })
-  }
 }
 
 export class EngineService extends Service {

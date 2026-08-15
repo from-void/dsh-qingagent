@@ -121,6 +121,48 @@ describe('QingClientStore 生成终态', () => {
     ])
   })
 
+  it('commit 成功回执立即清空审阅域并恢复可编辑终态', async () => {
+    const pmDoc = { type: 'doc', attrs: { schemaVersion: 1 }, content: [] } as PmDoc
+    vi.stubGlobal('EventSource', FakeEventSource)
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/qingagent-bridge/state?')) return Response.json(bridgeState())
+      if (url.startsWith('/qingagent-bridge/doc-pm?')) {
+        return Response.json({
+          sessionId: 'qing-1', docVersion: 3, contentHash: 'hash-3', state: 'pendingReview',
+          agentBusy: true, title: '待审稿', ts: 't3', pmDoc,
+        })
+      }
+      if (url.startsWith('/qingagent-bridge/review-render-model?')) {
+        return Response.json({
+          sessionId: 'qing-1', docVersion: 3, state: 'pendingReview', agentBusy: false,
+          baseVersion: 3, previewDoc: pmDoc, suggestions: [{ id: 'patch-1', status: 'accepted' }],
+        })
+      }
+      throw new Error(`unexpected ${url}`)
+    }))
+    const store = new QingClientStore()
+    const release = store.retain('dsh-commit')
+    await vi.waitFor(() => expect(store.getSnapshot('dsh-commit').state).toBeDefined())
+    await store.refreshPanel('dsh-commit', 'qing-1')
+    FakeEventSource.instances.at(-1)?.emit({
+      type: 'draft-chunk', engineSessionId: 'qing-1', chunkQingml: '<p>在途</p>',
+      accumulatedBlocks: ['<p>在途</p>'], title: '待审稿', blocks: 1, words: 2,
+    })
+    expect(store.getSnapshot('dsh-commit').streaming).toBe(true)
+
+    store.applyReviewCommit('dsh-commit', 'qing-1', 4)
+
+    expect(store.getSnapshot('dsh-commit')).toMatchObject({
+      streaming: false,
+      panelDoc: { docVersion: 4, state: 'editing', agentBusy: false },
+      saveState: { kind: 'idle' },
+    })
+    expect(store.getSnapshot('dsh-commit').reviewModel).toBeUndefined()
+    expect(store.getSnapshot('dsh-commit').reviewCount).toBeUndefined()
+    release()
+  })
+
   it('权威 PM 刷新必须等 dirty guard 放行后才能替换 panelDoc', async () => {
     const oldPm = { type: 'doc', attrs: { schemaVersion: 1 }, content: [] } as PmDoc
     const incomingPm = {

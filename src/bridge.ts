@@ -5,6 +5,8 @@ import type {
   BridgeEvent,
   BridgeState,
   EngineStatusSnapshot,
+  ExternalAssetUploadJsonRequest,
+  ExternalAssetUploadResponse,
   ExternalDoc,
   ExternalDocReplaceRequest,
   ExternalDocReplaceResponse,
@@ -18,7 +20,7 @@ import type {
 } from './contracts.js'
 import { EngineHttpError, type EngineService } from './engine.js'
 import type { BindingStore } from './bindings.js'
-import { isEngineAssetReference } from './assetBridge.js'
+import { engineAssetFileId } from './assetBridge.js'
 
 const MAX_ASSET_BYTES = 50 * 1024 * 1024
 const MAX_ASSET_JSON_BYTES = 70 * 1024 * 1024
@@ -106,8 +108,7 @@ export class BridgeHub {
       if (request.method === 'POST' && url.pathname === '/qingagent-bridge/assets') {
         const engineSessionId = this.authorizedEngineSessionId(url)
         const body = validateAssetUploadBody(await readJsonBody(request, MAX_ASSET_JSON_BYTES))
-        // TODO(dsh-bridge): 青简侧 external assets 端点定稿后同步 multipart/base64 最终契约。
-        writeJson(response, 200, await this.engine.fetchJson<unknown>(
+        writeJson(response, 200, await this.engine.fetchJson<ExternalAssetUploadResponse>(
           `/sessions/${encodeURIComponent(engineSessionId)}/assets`,
           { method: 'POST', body: JSON.stringify(body) },
         ))
@@ -116,8 +117,12 @@ export class BridgeHub {
       if (request.method === 'GET' && url.pathname === '/qingagent-bridge/assets') {
         const engineSessionId = this.authorizedEngineSessionId(url)
         const reference = requiredQuery(url, 'ref')
-        assertAssetReference(reference, engineSessionId)
-        await writeAssetResponse(response, await this.engine.fetchAsset(reference, { method: 'GET' }))
+        const fileId = engineAssetFileId(reference)
+        if (!fileId) throw new HttpInputError('资产引用不是 external 上传回执签发的路径。')
+        await writeAssetResponse(response, await this.engine.fetchAsset(
+          `/sessions/${encodeURIComponent(engineSessionId)}/assets/${encodeURIComponent(fileId)}`,
+          { method: 'GET' },
+        ))
         return
       }
       if (request.method === 'GET' && url.pathname === '/qingagent-bridge/doc-pm') {
@@ -280,46 +285,29 @@ async function writeAssetResponse(response: ServerResponse, upstream: Response):
   response.end(Buffer.from(await upstream.arrayBuffer()))
 }
 
-interface AssetUploadBody {
-  filename: string
-  mimeType: string
-  size: number
-  dataBase64: string
-  purpose?: string
-}
-
-function validateAssetUploadBody(value: unknown): AssetUploadBody {
+function validateAssetUploadBody(value: unknown): ExternalAssetUploadJsonRequest {
   if (!value || typeof value !== 'object') throw new HttpInputError('资产上传请求必须是 JSON 对象。')
   const body = value as Record<string, unknown>
-  const filename = typeof body.filename === 'string' ? body.filename.trim() : ''
-  const mimeType = typeof body.mimeType === 'string' ? body.mimeType.trim() : ''
-  const size = body.size
-  const dataBase64 = body.dataBase64
+  const filename = typeof body.filename === 'string' ? body.filename : ''
+  const mimeType = typeof body.mimeType === 'string' ? body.mimeType.trim() : undefined
+  const base64 = body.base64
   if (!filename || filename.length > 512) throw new HttpInputError('资产 filename 无效。')
-  if (!mimeType || mimeType.length > 255) throw new HttpInputError('资产 mimeType 无效。')
-  if (!Number.isSafeInteger(size) || (size as number) < 0) throw new HttpInputError('资产 size 无效。')
-  if ((size as number) > MAX_ASSET_BYTES) throw new HttpPayloadTooLargeError('资产超过 50 MiB 上传上限。')
-  if (typeof dataBase64 !== 'string' || dataBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(dataBase64)) {
-    throw new HttpInputError('资产 dataBase64 无效。')
+  if (body.mimeType !== undefined && (!mimeType || mimeType.length > 255)) {
+    throw new HttpInputError('资产 mimeType 无效。')
   }
-  const decodedSize = Buffer.from(dataBase64, 'base64').length
-  if (decodedSize !== size) throw new HttpInputError('资产 size 与 dataBase64 长度不一致。')
-  const purpose = typeof body.purpose === 'string' && body.purpose.trim() ? body.purpose.trim() : undefined
-  return { filename, mimeType, size: size as number, dataBase64, ...(purpose ? { purpose } : {}) }
-}
-
-function assertAssetReference(reference: string, engineSessionId: string): void {
-  if (!isEngineAssetReference(reference)) throw new HttpInputError('资产引用不是受支持的引擎路径。')
-  const pathname = new URL(reference, 'http://qingagent.local').pathname
-  const match = pathname.match(/^\/api\/v1\/external\/sessions\/([^/]+)\/assets(?:\/|$)/)
-  if (!match) return
-  let referencedSessionId: string
-  try {
-    referencedSessionId = decodeURIComponent(match[1]!)
-  } catch {
-    throw new HttpInputError('资产引用中的会话 ID 无效。')
+  if (typeof base64 !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64) || base64.length % 4 === 1) {
+    throw new HttpInputError('资产 base64 无效。')
   }
-  if (referencedSessionId !== engineSessionId) throw new HttpNotFoundError('资产不属于当前青简文稿。')
+  const unpadded = base64.replace(/=+$/, '')
+  const normalized = unpadded.padEnd(Math.ceil(unpadded.length / 4) * 4, '=')
+  const decoded = Buffer.from(normalized, 'base64')
+  if (!unpadded || decoded.toString('base64').replace(/=+$/, '') !== unpadded) {
+    throw new HttpInputError('资产 base64 无效。')
+  }
+  const decodedSize = decoded.length
+  if (decodedSize === 0) throw new HttpInputError('资产内容不能为空。')
+  if (decodedSize > MAX_ASSET_BYTES) throw new HttpPayloadTooLargeError('资产超过 50 MiB 上传上限。')
+  return { filename, ...(mimeType ? { mimeType } : {}), base64 }
 }
 
 async function readJsonBody(request: IncomingMessage, maxBytes = 64 * 1024): Promise<unknown> {

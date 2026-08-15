@@ -246,7 +246,7 @@ describe('BridgeHub', () => {
     dispose()
   })
 
-  it('资产上传以 base64 JSON 代理到绑定文稿的 external assets 端点', async () => {
+  it('资产上传按真实 JSON 契约写入 mock 引擎，并经会话资产端点代理读回', async () => {
     const binding = {
       docs: [{ engineSessionId: 'qing-a', title: 'A', createdAt: '2026-08-15T00:00:00.000Z' }],
       activeEngineSessionId: 'qing-a',
@@ -255,12 +255,14 @@ describe('BridgeHub', () => {
     const body = {
       filename: '插图.png',
       mimeType: 'image/png',
-      size: 3,
-      dataBase64: 'aW1n',
+      base64: 'aW1n',
     }
     vi.mocked(engine.fetchJson).mockResolvedValueOnce({
-      fileId: 'asset-1',
-      reference: '/api/v1/files/550e8400-e29b-41d4-a716-446655440000/%E6%8F%92%E5%9B%BE.png',
+      fileId: '550e8400-e29b-41d4-a716-446655440000',
+      filename: '插图.png',
+      mimeType: 'image/png',
+      size: 3,
+      src: '/api/v1/files/550e8400-e29b-41d4-a716-446655440000/%E6%8F%92%E5%9B%BE.png',
     })
     const res = response()
 
@@ -278,7 +280,19 @@ describe('BridgeHub', () => {
     expect(engine.fetchJson).toHaveBeenCalledWith('/sessions/qing-a/assets', {
       method: 'POST', body: JSON.stringify(body),
     })
-    expect(JSON.parse(res.body)).toMatchObject({ fileId: 'asset-1' })
+    const uploaded = JSON.parse(res.body) as { fileId: string; src: string }
+    expect(uploaded).toMatchObject({ fileId: '550e8400-e29b-41d4-a716-446655440000' })
+
+    const image = response()
+    await handler(
+      request('GET', `/qingagent-bridge/assets?dshSessionId=dsh-a&engineSessionId=qing-a&ref=${encodeURIComponent(uploaded.src)}`),
+      image as unknown as ServerResponse,
+    )
+    expect(engine.fetchAsset).toHaveBeenCalledWith(
+      '/sessions/qing-a/assets/550e8400-e29b-41d4-a716-446655440000',
+      { method: 'GET' },
+    )
+    expect(image.body).toBe('image-bytes')
     dispose()
   })
 
@@ -296,7 +310,10 @@ describe('BridgeHub', () => {
       res as unknown as ServerResponse,
     )
 
-    expect(engine.fetchAsset).toHaveBeenCalledWith(reference, { method: 'GET' })
+    expect(engine.fetchAsset).toHaveBeenCalledWith(
+      '/sessions/qing-a/assets/550e8400-e29b-41d4-a716-446655440000',
+      { method: 'GET' },
+    )
     expect(res.status).toBe(200)
     expect(res.headers?.['Content-Type']).toBe('image/png')
     expect(res.body).toBe('image-bytes')
