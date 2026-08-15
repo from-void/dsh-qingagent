@@ -136,18 +136,24 @@ export function QingDocPanel(props: QingDocPanelProps) {
   }, [])
 
   useEffect(() => {
-    measurePaper()
+    // 纸面挂载/换文档/进出审阅都可能改变 .wf-doc 的水平位置而 root 尺寸不变,
+    // 所以除 root 外还要观察纸面本身,并在状态变化后双帧重测(等布局稳定)。
+    const raf1 = requestAnimationFrame(() => requestAnimationFrame(measurePaper))
     const root = rootRef.current
+    const paper = root?.querySelector<HTMLElement>('.wf-doc')
+      ?? root?.querySelector<HTMLElement>('.ws-paper-shell')
     const observer = root && typeof ResizeObserver !== 'undefined'
       ? new ResizeObserver(measurePaper)
       : null
     if (root) observer?.observe(root)
+    if (paper) observer?.observe(paper)
     window.addEventListener('resize', measurePaper)
     return () => {
+      cancelAnimationFrame(raf1)
       observer?.disconnect()
       window.removeEventListener('resize', measurePaper)
     }
-  }, [measurePaper])
+  }, [measurePaper, snapshot.panelDoc, snapshot.reviewModel, snapshot.streaming, activeEngineSessionId])
 
   const panelDoc = snapshot.panelEngineSessionId === activeEngineSessionId
     ? snapshot.panelDoc
