@@ -46,6 +46,13 @@ const RAW_TAG_PATTERN = /<\/?\s*(article|title|h[1-6]|p|ul|ol|li|tasks?|blockquo
 const RAW_TAG_ERROR = '检测到 QingML/HTML 标签:局部操作(strReplace/insertAfterLine/appendSection)只接受纯文本或 Markdown,不支持 <mark>/<color> 等行内标记——直接写入会把标签当普通文字刻进正文。样式类修改请如实告知用户当前局部编辑不支持,如用户明确同意整篇重构可用 qing_write_draft(携 docRef)。'
 
 /** P14(RC13):每个工具返回带当前聚焦文稿,纠偏模型沿用旧 docRef。 */
+/** 【文稿状态】首行:所有 qing 工具返回共用,防单工具离群(P2/P22/P38 三次同类缺口的教训)。 */
+function docStateLine(state: string, docVersion: number, patchCount?: number): string {
+  return state === 'pendingReview'
+    ? `【文稿状态】审阅中·${patchCount !== undefined ? `${patchCount} 处` : ''}待用户裁决(基线 v${docVersion})。`
+    : `【文稿状态】已落库生效 v${docVersion},无待审稿。`
+}
+
 function focusSuffix(services: ToolServices, dshSessionId: string): string {
   const active = services.bindings.getActive(dshSessionId)
   return active ? `\n(当前面板聚焦:《${active.title}》 docRef=${active.engineSessionId};用户未点名文稿时以聚焦稿为准)` : ''
@@ -104,9 +111,9 @@ function writeDraftTool(services: ToolServices) {
         },
       },
       render: (_args, value) => value.status === 'review'
-        ? textBlock(`【文稿状态】审阅中·${value.patchCount ?? '若干'} 处待用户裁决(基线 v${value.docVersion})。\n${REVIEW_END_MESSAGE}`)
+        ? textBlock(`${docStateLine('pendingReview', value.docVersion, value.patchCount)}\n${REVIEW_END_MESSAGE}`)
         : textBlock([
-          `【文稿状态】已落库生效 v${value.docVersion},无待审稿。`,
+          docStateLine('editing', value.docVersion),
           `青简文稿《${value.title}》已提交。`,
           // 反幻觉锚点:committed 必须明确否定审阅态,防模型把审阅纪律泛化脑补(实测幻觉案例)。
           `文稿已直接落库生效,当前不在审阅态,没有任何待审稿,可以立即继续修改。`,
@@ -370,8 +377,8 @@ function editDraftTool(services: ToolServices) {
         return {
           status: proposal.status,
           message: (proposal.status === 'review'
-            ? `【文稿状态】审阅中·${proposal.count} 处待用户裁决(基线 v${official.docVersion})。\n${REVIEW_END_MESSAGE}`
-            : `【文稿状态】已落库生效 v${official.docVersion},无待审稿。\n局部修改已提交到《${outline.title}》。`) + focusSuffix(services, dshSessionId),
+            ? `${docStateLine('pendingReview', official.docVersion, proposal.count)}\n${REVIEW_END_MESSAGE}`
+            : `${docStateLine('editing', official.docVersion)}\n局部修改已提交到《${outline.title}》。`) + focusSuffix(services, dshSessionId),
           engineSessionId,
           title: outline.title,
           blocks: outline.blocks,
@@ -492,9 +499,11 @@ function readDraftTool(services: ToolServices) {
           mode: { type: 'string', enum: ['outline', 'full', 'base', 'lines'], required: true },
           content: { type: 'string', required: true },
           engineSessionId: { type: 'string', required: true },
+          state: { type: 'string', required: true },
+          docVersion: { type: 'integer', required: true },
         },
       },
-      render: (_args, value) => textBlock(`《${value.title}》｜${value.blocks} 块｜约 ${value.words} 字\n${value.content}`),
+      render: (_args, value) => textBlock(`${docStateLine(value.state, value.docVersion)}\n《${value.title}》｜${value.blocks} 块｜约 ${value.words} 字\n${value.content}`),
     },
     presentCall: () => ({ card: 'generic', title: '读取青简文稿', kind: 'read' }),
     presentResult: (_args, result) => ({ card: 'generic', title: result.isError ? '读取青简文稿失败' : '已读取青简文稿' }),
@@ -516,6 +525,8 @@ function readDraftTool(services: ToolServices) {
           mode,
           content: `${notice}${lined.markdownWithLineNumbers ?? lineNumbered(lined.markdown)}`,
           engineSessionId,
+          state: doc.state,
+          docVersion: doc.docVersion,
         }
       }
       const candidate = doc.state === 'pendingReview' && mode !== 'base'
@@ -530,7 +541,7 @@ function readDraftTool(services: ToolServices) {
       const content = mode === 'full' || mode === 'base'
         ? `${notice}${candidate}`
         : `${notice}${outline.headings.map((heading) => `${'#'.repeat(heading.level)} ${heading.text}${heading.firstSentence ? `\n${heading.firstSentence}` : ''}`).join('\n') || '暂无标题层级。'}`
-      return { title: outline.title, words: outline.words, blocks: outline.blocks, mode, content, engineSessionId }
+      return { title: outline.title, words: outline.words, blocks: outline.blocks, mode, content, engineSessionId, state: doc.state, docVersion: doc.docVersion }
     },
   })
 }
@@ -538,8 +549,10 @@ function readDraftTool(services: ToolServices) {
 function listDocsTool(services: ToolServices) {
   return defineTool({
     name: 'qing_list_docs',
-    description: '列出当前 DSH 会话绑定的全部青简文稿、激活状态和引擎状态。',
-    parameters: {},
+    description: '列出青简文稿。默认列当前 DSH 会话绑定的文稿;scope:"library" 列整个青简文库最近更新的文稿(含其他会话的,最多 50 篇),配合 qing_focus_doc 可收养到本会话。',
+    parameters: {
+      scope: { type: 'string', enum: ['session', 'library'], default: 'session', description: 'session=本会话绑定稿;library=全库最近文稿。' },
+    },
     output: {
       schema: {
         type: 'object',
@@ -558,20 +571,39 @@ function listDocsTool(services: ToolServices) {
                 active: { type: 'boolean', required: true },
                 state: { type: 'string', required: true },
                 createdAt: { type: 'string', required: true },
+                bound: { type: 'boolean', description: 'library 模式下:是否已绑定到本会话。' },
               },
             },
           },
         },
       },
-      render: (_args, value) => textBlock(value.docs.length
-        ? `青简引擎：${value.engine}\n${value.docs.map((doc) => `${doc.active ? '→' : ' '} ${doc.title}｜${doc.state}｜${doc.engineSessionId}`).join('\n')}`
-        : `青简引擎：${value.engine}\n当前会话还没有绑定文稿。`),
+      render: (args, value) => textBlock(value.docs.length
+        ? `青简引擎：${value.engine}\n${value.docs.map((doc) => `${doc.active ? '→' : ' '} ${doc.title}｜${doc.state}｜${doc.engineSessionId}${doc.bound === false ? '｜未绑定(可用 qing_focus_doc 收养)' : ''}`).join('\n')}`
+        : `青简引擎：${value.engine}\n${args.scope === 'library' ? '文库暂无文稿。' : '当前会话还没有绑定文稿。'}`),
     },
-    presentCall: () => ({ card: 'generic', title: '查看青简文稿', kind: 'read' }),
-    execute: async (_args, exec) => {
+    presentCall: (args) => ({ card: 'generic', title: args.scope === 'library' ? '查看青简文库' : '查看青简文稿', kind: 'read' }),
+    execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
       const engine = await services.engine.status()
       const binding = services.bindings.getBinding(dshSessionId)
+      if (args.scope === 'library') {
+        // 文库模式:引擎全库最近文稿(含其他会话),供空会话/跨会话收养闭环(P40,K3 定案 B)。
+        const listing = await services.engine.fetchJson<{
+          sessions: Array<{ id: string; title: string | null; state: string; updatedAt: string }>
+        }>('/sessions?limit=50')
+        const boundIds = new Set(binding.docs.map((doc) => doc.engineSessionId))
+        return {
+          engine: engine.state,
+          docs: listing.sessions.map((session) => ({
+            engineSessionId: session.id,
+            title: session.title ?? '未命名文稿',
+            active: session.id === binding.activeEngineSessionId,
+            state: session.state,
+            createdAt: session.updatedAt,
+            bound: boundIds.has(session.id),
+          })),
+        }
+      }
       const docs = await Promise.all(binding.docs.map(async (bound) => {
         let state = 'offline'
         if (engine.state === 'online') {
@@ -587,9 +619,9 @@ function listDocsTool(services: ToolServices) {
 function focusDocTool(services: ToolServices) {
   return defineTool({
     name: 'qing_focus_doc',
-    description: '把右侧青简宣纸预览切换到当前 DSH 会话内的指定文稿。',
+    description: '把右侧青简宣纸预览切换到指定文稿。docRef 未绑定到本会话时,会从青简文库收养该文稿(按 ID 或标题精确匹配且唯一;先用 qing_list_docs scope:"library" 查看文库)。',
     parameters: {
-      docRef: { type: 'string', required: true, description: '要聚焦的青简会话 ID。' },
+      docRef: { type: 'string', required: true, description: '青简会话 ID,或文库中的文稿标题(精确匹配)。' },
     },
     output: {
       schema: {
@@ -599,16 +631,65 @@ function focusDocTool(services: ToolServices) {
           engineSessionId: { type: 'string', required: true },
           title: { type: 'string', required: true },
           focused: { type: 'boolean', const: true, required: true },
+          adopted: { type: 'boolean', description: '本次是否为从文库收养(跨会话)。' },
+          warning: { type: 'string' },
         },
       },
-      render: (_args, value) => textBlock(`右侧预览已切换到《${value.title}》（${value.engineSessionId}）。`),
+      render: (_args, value) => textBlock([
+        value.adopted
+          ? `已从文库收养《${value.title}》(${value.engineSessionId})并切换右侧预览。`
+          : `右侧预览已切换到《${value.title}》（${value.engineSessionId}）。`,
+        ...(value.warning ? [`⚠ ${value.warning}`] : []),
+      ].join('\n')),
+      presentationMeta: (_args, value) => ({ adopted: Boolean(value.adopted), title: value.title }),
     },
     presentCall: () => ({ card: 'generic', title: '切换青简预览', kind: 'read' }),
+    presentResult: (_args, result) => ({
+      card: 'generic',
+      title: result.isError
+        ? '切换青简预览失败'
+        : (result.meta as { adopted?: boolean } | undefined)?.adopted ? '已收养文库文稿' : '已切换青简预览',
+    }),
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
-      const doc = await services.bindings.setActive(dshSessionId, args.docRef)
+      const binding = services.bindings.getBinding(dshSessionId)
+      if (binding.docs.some((item) => item.engineSessionId === args.docRef)) {
+        const doc = await services.bindings.setActive(dshSessionId, args.docRef)
+        services.bridge.emit(dshSessionId, { type: 'focus-changed', engineSessionId: doc.engineSessionId })
+        return { engineSessionId: doc.engineSessionId, title: doc.title, focused: true as const }
+      }
+      // 收养路径(P40,K3 定案):先按 ID 探测引擎确有此稿;未命中再按标题精确匹配,须唯一——
+      // 模糊匹配是误收养的最大事故面,多命中一律报错并列候选让用户选。
+      let target: { id: string; title: string; state: string } | undefined
+      try {
+        const probe = await readDoc(services.engine, args.docRef)
+        target = { id: args.docRef, title: probe.title?.trim() || '未命名文稿', state: probe.state }
+      } catch {
+        const listing = await services.engine.fetchJson<{
+          sessions: Array<{ id: string; title: string | null; state: string; updatedAt: string }>
+        }>('/sessions?limit=50')
+        const matches = listing.sessions.filter((session) => (session.title ?? '').trim() === args.docRef.trim())
+        if (matches.length > 1) {
+          throw new Error(`标题「${args.docRef}」在文库命中 ${matches.length} 篇,请改用文稿 ID:\n${matches.map((m) => `- ${m.title}｜${m.id}`).join('\n')}`)
+        }
+        if (matches.length === 1) {
+          target = { id: matches[0].id, title: matches[0].title ?? '未命名文稿', state: matches[0].state }
+        }
+      }
+      if (!target) {
+        throw new Error('未找到该文稿:既不是本会话绑定稿,ID/标题在文库中也未精确命中。先用 qing_list_docs scope:"library" 查看文库。')
+      }
+      const doc = await services.bindings.adoptDoc(dshSessionId, target.id, target.title)
       services.bridge.emit(dshSessionId, { type: 'focus-changed', engineSessionId: doc.engineSessionId })
-      return { engineSessionId: doc.engineSessionId, title: doc.title, focused: true as const }
+      return {
+        engineSessionId: doc.engineSessionId,
+        title: doc.title,
+        focused: true as const,
+        adopted: true,
+        ...(target.state === 'pendingReview'
+          ? { warning: '该稿有待审内容,可能来自其他会话——不得代为提交/放弃,先向用户说明。' }
+          : {}),
+      }
     },
   })
 }
