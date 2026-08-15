@@ -122,7 +122,7 @@ export class QingClientStore {
     void this.refreshPanel(sessionId, engineSessionId)
   }
 
-  async refreshDoc(sessionId: string, engineSessionId: string): Promise<void> {
+  async refreshDoc(sessionId: string, engineSessionId: string): Promise<ExternalDoc> {
     const entry = this.entry(sessionId)
     const query = new URLSearchParams({ dshSessionId: sessionId, engineSessionId })
     const response = await fetch(`/qingagent-bridge/doc?${query}`)
@@ -138,6 +138,7 @@ export class QingClientStore {
       draftFailure: undefined,
       error: undefined,
     })
+    return doc
   }
 
   async refreshPanel(sessionId: string, engineSessionId: string): Promise<void> {
@@ -295,6 +296,19 @@ export class QingClientStore {
       ...entry.snapshot,
       reviewModel,
       reviewCount: reviewModel.suggestions.filter((suggestion) => suggestion.status === 'reviewing').length,
+    })
+  }
+
+  clearReviewModel(
+    sessionId: string,
+    engineSessionId: string,
+  ): void {
+    const entry = this.entry(sessionId)
+    if (entry.snapshot.panelEngineSessionId !== engineSessionId) return
+    this.update(entry, {
+      ...entry.snapshot,
+      reviewModel: undefined,
+      reviewCount: undefined,
     })
   }
 

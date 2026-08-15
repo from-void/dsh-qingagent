@@ -147,6 +147,50 @@ describe('QingDocPanel 保存生命周期', () => {
     expect(reviewCommitCalls(fetchMock)).toBe(1)
   })
 
+  it('重复提交返回 409 但权威文稿已退出审阅时按成功收口', async () => {
+    const fetchMock = installBridgeFetch('dsh-review-conflict-settled', ['qing-review'], {
+      pendingReview: true,
+      reviewCommitConflictSettled: true,
+    })
+    renderPanel('dsh-review-conflict-settled')
+
+    await vi.waitFor(() => expect(reviewCommitCalls(fetchMock)).toBe(1))
+    await vi.waitFor(() => expect(document.querySelector('.qingdoc-status')?.textContent).toBe('修改已提交'))
+    expect(document.querySelector('.qingdoc-toast')).toBeNull()
+    expect(document.querySelector('[data-testid="mock-patch-nav"]')).toBeNull()
+    expect(authoritativeDocReadCalls(fetchMock)).toBeGreaterThanOrEqual(1)
+  })
+
+  it('auto-commit 与手动提交并发共用同一把闸，只发送一次', async () => {
+    let releaseCommit!: () => void
+    const reviewCommitGate = new Promise<void>((resolve) => { releaseCommit = resolve })
+    const fetchMock = installBridgeFetch('dsh-review-race', ['qing-review'], {
+      pendingReview: true,
+      reviewCommitGate,
+    })
+    renderPanel('dsh-review-race')
+
+    await vi.waitFor(() => expect(reviewCommitCalls(fetchMock)).toBe(1))
+    await act(async () => {
+      const onCommit = patchNavHarness.props?.onCommit as (() => Promise<void>) | undefined
+      await onCommit?.()
+    })
+    expect(reviewCommitCalls(fetchMock)).toBe(1)
+
+    releaseCommit()
+    await vi.waitFor(() => expect(document.querySelector('.qingdoc-status')?.textContent).toBe('修改已提交'))
+    expect(reviewCommitCalls(fetchMock)).toBe(1)
+  })
+
+  it('桌面入口使用 qingjian 自定义协议', async () => {
+    installBridgeFetch('dsh-open-native', ['qing-native'])
+    renderPanel('dsh-open-native')
+
+    await vi.waitFor(() => expect(document.querySelector('.qingdoc-open')).not.toBeNull())
+    expect(document.querySelector('.qingdoc-open')?.getAttribute('href'))
+      .toBe('qingjian://open?engineSessionId=qing-native')
+  })
+
   it('verdict 回执 patchIds/reviewingCount 与本地不符时补拉权威面板', async () => {
     const fetchMock = installBridgeFetch('dsh-verdict-refresh', ['qing-review'], {
       pendingReview: true,
@@ -195,11 +239,14 @@ function installBridgeFetch(
   options: {
     pendingReview?: boolean
     failReviewCommit?: boolean
+    reviewCommitConflictSettled?: boolean
+    reviewCommitGate?: Promise<void>
     reviewSuggestionStatus?: 'reviewing' | 'accepted' | 'rejected'
     mismatchVerdict?: boolean
   } = {},
 ) {
   vi.stubGlobal('EventSource', FakeEventSource)
+  let serverPendingReview = options.pendingReview === true
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     if (url.startsWith('/qingagent-bridge/state?')) {
@@ -213,12 +260,12 @@ function installBridgeFetch(
         },
         docs: engineSessionIds.map((engineSessionId) => ({
           engineSessionId, title: engineSessionId, createdAt: '2026-08-15T00:00:00.000Z',
-          state: options.pendingReview ? 'pendingReview' : 'empty',
-          docVersion: options.pendingReview ? 3 : 0, agentBusy: false,
+          state: serverPendingReview ? 'pendingReview' : 'empty',
+          docVersion: serverPendingReview ? 3 : 0, agentBusy: false,
         })),
         activeDoc: {
-          sessionId: engineSessionIds[0], docVersion: options.pendingReview ? 3 : 0,
-          state: options.pendingReview ? 'pendingReview' : 'empty', agentBusy: false,
+          sessionId: engineSessionIds[0], docVersion: serverPendingReview ? 3 : 0,
+          state: serverPendingReview ? 'pendingReview' : 'empty', agentBusy: false,
           markdown: '', qingml: '', title: engineSessionIds[0],
         },
         engine: { state: 'online', engineUrl: 'http://127.0.0.1:8080' },
@@ -232,10 +279,18 @@ function installBridgeFetch(
     if (url.startsWith('/qingagent-bridge/doc-pm?')) {
       const engineSessionId = new URL(url, 'http://local').searchParams.get('engineSessionId')!
       return Response.json({
-        sessionId: engineSessionId, docVersion: options.pendingReview ? 3 : 0,
-        contentHash: options.pendingReview ? 'hash-3' : 'hash-0',
-        state: options.pendingReview ? 'pendingReview' : 'empty',
+        sessionId: engineSessionId, docVersion: serverPendingReview ? 3 : 4,
+        contentHash: serverPendingReview ? 'hash-3' : 'hash-4',
+        state: serverPendingReview ? 'pendingReview' : 'editing',
         agentBusy: false, title: engineSessionId, ts: 't0', pmDoc: EMPTY_PM,
+      })
+    }
+    if (url.startsWith('/qingagent-bridge/doc?')) {
+      const engineSessionId = new URL(url, 'http://local').searchParams.get('engineSessionId')!
+      return Response.json({
+        sessionId: engineSessionId, docVersion: serverPendingReview ? 3 : 4,
+        state: serverPendingReview ? 'pendingReview' : 'editing', agentBusy: false,
+        markdown: '', qingml: '', title: engineSessionId,
       })
     }
     if (url.startsWith('/qingagent-bridge/review-render-model?')) {
@@ -253,8 +308,13 @@ function installBridgeFetch(
       })
     }
     if (url.startsWith('/qingagent-bridge/review-commit?') && init?.method === 'POST') {
+      await options.reviewCommitGate
       if (options.failReviewCommit) {
         return Response.json({ error: 'commit failed' }, { status: 502 })
+      }
+      serverPendingReview = false
+      if (options.reviewCommitConflictSettled) {
+        return Response.json({ error: 'review already settled' }, { status: 409 })
       }
       return Response.json({
         status: 'reviewed', docVersion: 4, acceptedCount: 1, rejectedCount: 0,
@@ -284,4 +344,9 @@ function reviewCommitCalls(fetchMock: ReturnType<typeof installBridgeFetch>): nu
 function panelReadCalls(fetchMock: ReturnType<typeof installBridgeFetch>): number {
   return fetchMock.mock.calls.filter(([url, init]) =>
     String(url).startsWith('/qingagent-bridge/doc-pm?') && init?.method !== 'PUT').length
+}
+
+function authoritativeDocReadCalls(fetchMock: ReturnType<typeof installBridgeFetch>): number {
+  return fetchMock.mock.calls.filter(([url]) =>
+    String(url).startsWith('/qingagent-bridge/doc?')).length
 }

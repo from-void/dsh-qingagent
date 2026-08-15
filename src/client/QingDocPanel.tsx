@@ -20,7 +20,7 @@ import { createQingmlCompileThrottle, type QingmlCompileThrottle } from './strea
 import { buildReviewPresentationModel } from './reviewPresentation.js'
 import { installDetailsColumnWidth } from './detailsWidth.js'
 import { decideIncomingPanelDocument } from './incomingPanelDocument.js'
-import { qingClientStore } from './store.js'
+import { BridgeHttpError, qingClientStore } from './store.js'
 import '../qingdoc/qingdoc.css'
 
 interface InjectedProps {
@@ -50,6 +50,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const compileThrottleRef = useRef<QingmlCompileThrottle | null>(null)
   const autoCommitKeyRef = useRef<string | null>(null)
   const reviewSubmittingRef = useRef(false)
+  const reviewSettlementRetryPendingRef = useRef(false)
   const snapshotRef = useRef(snapshot)
   snapshotRef.current = snapshot
 
@@ -399,54 +400,85 @@ export function QingDocPanel(props: QingDocPanelProps) {
     }
   }, [activeEngineSessionId, panelDoc, sessionId])
 
+  const reviewStatusKey = snapshot.reviewModel?.suggestions
+    .map((suggestion) => `${suggestion.id}:${suggestion.status}`)
+    .join('|') ?? ''
+  const reviewCommitKey = `${activeEngineSessionId ?? ''}:${panelDoc?.docVersion ?? -1}:${reviewStatusKey}`
+
   const handleReviewCommit = useCallback(async (
     action: 'commit' | 'accept_all' | 'reject_all',
+    source: 'manual' | 'auto' = 'manual',
   ) => {
     if (!activeEngineSessionId || !panelDoc) return
+    if (action === 'commit' && autoCommitKeyRef.current === reviewCommitKey) {
+      if (source === 'auto' || !reviewSettlementRetryPendingRef.current) return
+    }
     if (reviewSubmittingRef.current) {
       setToast('操作处理中 · 请稍候')
       return
     }
+    if (action === 'commit') {
+      autoCommitKeyRef.current = reviewCommitKey
+      reviewSettlementRetryPendingRef.current = false
+      setReviewSettlementRetryPending(false)
+    }
     reviewSubmittingRef.current = true
     setReviewSubmitting(true)
-    if (action === 'commit') setReviewSettlementRetryPending(false)
+    const settleAsSuccess = async (refreshDoc: boolean) => {
+      qingClientStore.clearReviewModel(sessionId, activeEngineSessionId)
+      reviewSettlementRetryPendingRef.current = false
+      setReviewSettlementRetryPending(false)
+      setToast(action === 'reject_all' ? '已放弃本轮修改' : '修改已提交')
+      const refreshes = [qingClientStore.refreshPanel(sessionId, activeEngineSessionId)]
+      if (refreshDoc) refreshes.push(qingClientStore.refreshDoc(sessionId, activeEngineSessionId).then(() => undefined))
+      const results = await Promise.allSettled(refreshes)
+      for (const result of results) {
+        if (result.status === 'rejected') {
+          console.warn('[qingagent-panel] review settlement refresh failed', result.reason)
+        }
+      }
+    }
     try {
       await qingClientStore.reviewCommit(sessionId, activeEngineSessionId, {
         expectedDocVersion: panelDoc.docVersion,
         action,
       })
-      setToast(action === 'reject_all' ? '已放弃本轮修改' : '修改已提交')
-      setReviewSettlementRetryPending(false)
-      await Promise.all([
-        qingClientStore.refreshDoc(sessionId, activeEngineSessionId),
-        qingClientStore.refreshPanel(sessionId, activeEngineSessionId),
-      ])
+      await settleAsSuccess(true)
     } catch (error) {
+      if (error instanceof BridgeHttpError && error.status === 409) {
+        try {
+          const authoritativeDoc = await qingClientStore.refreshDoc(sessionId, activeEngineSessionId)
+          if (authoritativeDoc.state !== 'pendingReview') {
+            await settleAsSuccess(false)
+            return
+          }
+        } catch (probeError) {
+          console.warn('[qingagent-panel] review commit conflict probe failed', probeError)
+        }
+      }
       console.error('[qingagent-panel] review commit failed', error)
-      if (action === 'commit') setReviewSettlementRetryPending(true)
+      if (action === 'commit') {
+        reviewSettlementRetryPendingRef.current = true
+        setReviewSettlementRetryPending(true)
+      }
       setToast('提交失败 · 候选已保留，请重试')
       void qingClientStore.refreshPanel(sessionId, activeEngineSessionId).catch(() => undefined)
     } finally {
       reviewSubmittingRef.current = false
       setReviewSubmitting(false)
     }
-  }, [activeEngineSessionId, panelDoc, sessionId])
+  }, [activeEngineSessionId, panelDoc, reviewCommitKey, sessionId])
 
-  const reviewStatusKey = snapshot.reviewModel?.suggestions
-    .map((suggestion) => `${suggestion.id}:${suggestion.status}`)
-    .join('|') ?? ''
   useEffect(() => {
     const suggestions = snapshot.reviewModel?.suggestions ?? []
-    if (!pendingReview || suggestions.length === 0) {
-      autoCommitKeyRef.current = null
+    if (!pendingReview) {
+      reviewSettlementRetryPendingRef.current = false
       setReviewSettlementRetryPending(false)
       return
     }
+    if (suggestions.length === 0) return
     if (reviewSubmitting || suggestions.some((suggestion) => suggestion.status === 'reviewing')) return
-    const key = `${activeEngineSessionId ?? ''}:${panelDoc?.docVersion ?? -1}:${reviewStatusKey}`
-    if (autoCommitKeyRef.current === key) return
-    autoCommitKeyRef.current = key
-    void handleReviewCommit('commit')
+    void handleReviewCommit('commit', 'auto')
   }, [
     activeEngineSessionId,
     handleReviewCommit,
