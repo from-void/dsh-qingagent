@@ -461,3 +461,29 @@ function deferred<T>() {
     expect(store.getSnapshot('dsh-adopt').qingml).toBe('<p>首块</p>')
     release()
   })
+
+  it('P11:冲突稿快照切换往返保留,重载时清除', async () => {
+    const localPm = {
+      type: 'doc', attrs: { schemaVersion: 1 },
+      content: [{ type: 'paragraph', attrs: { blockId: 'l' }, content: [{ type: 'text', text: '本地未保内容' }] }],
+    } as PmDoc
+    const remotePm = {
+      type: 'doc', attrs: { schemaVersion: 1 },
+      content: [{ type: 'paragraph', attrs: { blockId: 'r' }, content: [{ type: 'text', text: '服务器版' }] }],
+    } as PmDoc
+    const store = new QingClientStore()
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      sessionId: 'qing-c', docVersion: 5, contentHash: 'h5', state: 'editing',
+      agentBusy: false, title: '冲突稿', ts: 't', pmDoc: remotePm,
+    })))
+    store.setSaveState('dsh-stash', {
+      kind: 'conflict', engineSessionId: 'qing-c', expected: 4, actual: 5, message: '冲突',
+    })
+    store.stashConflictDoc('dsh-stash', 'qing-c', localPm)
+    // 切换往返后快照仍在
+    expect(store.getSnapshot('dsh-stash').conflictStash?.['qing-c']).toEqual(localPm)
+    // 重载 = 显式放弃本地内容,快照与冲突一并清除
+    await store.resolveConflictByReload('dsh-stash', 'qing-c')
+    expect(store.getSnapshot('dsh-stash').conflictStash?.['qing-c']).toBeUndefined()
+    expect(store.getSnapshot('dsh-stash').conflicts?.['qing-c']).toBeUndefined()
+  })

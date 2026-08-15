@@ -39,6 +39,8 @@ export interface QingClientSnapshot {
   saveState?: DocumentSaveState
   /** 冲突态按文稿分槽持久保存;saveState 单槽只承载瞬态,避免另一稿保存成功把冲突顶掉(评测 t14)。 */
   conflicts?: Record<string, { expected: number; actual: number; message: string }>
+  /** 冲突稿本地内容快照(切走前抓取,切回恢复;评测 P11「切换往返丢内容落 v0 空白」,K3 定案)。 */
+  conflictStash?: Record<string, PmDoc>
   selection?: QingSelection
   error?: string
 }
@@ -104,6 +106,15 @@ export class QingClientStore {
     const entry = this.entry(sessionId)
     entry.panelClosed = true
     this.update(entry, entry.snapshot)
+  }
+
+  /** P11:切走冲突/脏稿前抓本地内容快照,切回时优先恢复而非重拉。 */
+  stashConflictDoc(sessionId: string, engineSessionId: string, doc: PmDoc): void {
+    const entry = this.entry(sessionId)
+    this.update(entry, {
+      ...entry.snapshot,
+      conflictStash: { ...entry.snapshot.conflictStash, [engineSessionId]: doc },
+    })
   }
 
   /** 「查看」等显式重开入口。 */
@@ -364,10 +375,13 @@ export class QingClientStore {
     const entry = this.entry(sessionId)
     const conflicts = { ...entry.snapshot.conflicts }
     delete conflicts[engineSessionId]
+    const conflictStash = { ...entry.snapshot.conflictStash }
+    delete conflictStash[engineSessionId]
     this.update(entry, {
       ...entry.snapshot,
       saveState: { kind: 'idle' },
       conflicts,
+      conflictStash,
       panelReloadNonce: (entry.snapshot.panelReloadNonce ?? 0) + 1,
     })
     await this.refreshPanel(sessionId, engineSessionId, { bypassGuard: true })

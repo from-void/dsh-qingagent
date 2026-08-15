@@ -62,7 +62,7 @@ const STATUS_MESSAGES: Record<number, string> = {
 }
 
 const CODE_NEXT_STEPS: Record<string, string> = {
-  REVIEW_PENDING: '请先让用户处理待审变更，或在其明确授权后调用 qing_review_commit',
+  REVIEW_PENDING: '待审稿可能来自其他会话或此前轮次,先向用户说明其存在与归属;仅在用户明确授权后才可 qing_review_commit,严禁代为处置他人待审稿',
   AGENT_BUSY: '请稍后重试一次；仍忙则告知用户等待',
   VERSION_CONFLICT: '请重新读取文稿，基于最新版本重做操作，勿原样重发',
   RATE_LIMITED: '请降低请求频率，稍后再试',

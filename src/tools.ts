@@ -38,12 +38,18 @@ const textBlock = (text: string) => [{ type: 'text' as const, text }]
 
 const REVIEW_END_MESSAGE = '改动已提交审阅，右侧面板等待用户逐处裁决。本回合结束——不要重写、不要读稿复核、不要自动裁决'
 const REVIEW_REPEAT_ERROR = '本回合已裁决过一次，禁止连环裁决；等待用户指示'
-const REVIEW_PENDING_ERROR = '文稿正在审阅中。收到新的修改指令时，先用 ask_user 征询用户接受、放弃或继续逐处裁决当前待审稿。'
+const REVIEW_PENDING_ERROR = '文稿正在审阅中。注意:当前待审内容可能来自其他会话或此前轮次的提案,并非你刚才的修改——严禁把它描述成自己的改写,也不得代为提交或放弃他人待审稿。先用 ask_user 向用户说明待审稿的存在与可能来源,经用户明确授权后才可处置。'
 const STR_REPLACE_PLAIN_TEXT_ERROR = 'old 必须是纯文本内容,不要带 ## 等 markdown 标记'
 const STR_REPLACE_LINES_NOTICE = '注意:strReplace 的 old 用纯文本,不要带行首 ## - 等标记。'
 // 局部 op 只接受纯文本/Markdown;QingML/HTML 原始标签会被当普通文字刻进正文(用户实测颜色事故)。
 const RAW_TAG_PATTERN = /<\/?\s*(article|title|h[1-6]|p|ul|ol|li|tasks?|blockquote|hr|pre|table|tr|td|th|callout|columns?|mermaid|drawio|math(?:-block)?|img|file|pennote|b|strong|i|em|u|s|del|code|a|mark|color|footnote|br|span|div)\b[^>]*>/i
 const RAW_TAG_ERROR = '检测到 QingML/HTML 标签:局部操作(strReplace/insertAfterLine/appendSection)只接受纯文本或 Markdown,不支持 <mark>/<color> 等行内标记——直接写入会把标签当普通文字刻进正文。样式类修改请如实告知用户当前局部编辑不支持,如用户明确同意整篇重构可用 qing_write_draft(携 docRef)。'
+
+/** P14(RC13):每个工具返回带当前聚焦文稿,纠偏模型沿用旧 docRef。 */
+function focusSuffix(services: ToolServices, dshSessionId: string): string {
+  const active = services.bindings.getActive(dshSessionId)
+  return active ? `\n(当前面板聚焦:《${active.title}》 docRef=${active.engineSessionId};用户未点名文稿时以聚焦稿为准)` : ''
+}
 
 function assertNoRawTags(ops: ExternalEditProposalOp[]): void {
   for (const op of ops) {
@@ -237,7 +243,7 @@ function writeDraftTool(services: ToolServices) {
 function editDraftTool(services: ToolServices) {
   return defineTool({
     name: 'qing_edit_draft',
-    description: '对已有青简文稿做结构化局部修改。改标题、改一句、插入一段或追加一节必须用本工具，严禁用 qing_write_draft 整篇重写。strReplace 的 old/new 必须是纯文本内容，不含 ##、-、** 等 Markdown 语法标记。多处修改必须放进同一次调用的 ops 数组一次提交；逐条调用会因首条进入审阅态而被 REVIEW_PENDING 拒绝。insertAfterLine 前先调用 qing_read_draft(mode:"lines") 取得当前 Markdown 行号。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
+    description: '对已有青简文稿做结构化局部修改。改标题用 setTitle 操作(标题不在正文,strReplace 打不到);改一句、插入一段或追加一节用相应操作;严禁用 qing_write_draft 整篇重写。strReplace 的 old/new 必须是纯文本内容，不含 ##、-、** 等 Markdown 语法标记。多处修改必须放进同一次调用的 ops 数组一次提交；逐条调用会因首条进入审阅态而被 REVIEW_PENDING 拒绝。insertAfterLine 前先调用 qing_read_draft(mode:"lines") 取得当前 Markdown 行号。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
     parameters: {
       docRef: { type: 'string', description: '要局部修改的青简会话 ID；省略时使用当前激活文稿。' },
       ops: {
@@ -271,6 +277,14 @@ function editDraftTool(services: ToolServices) {
               properties: {
                 kind: { type: 'string', const: 'appendSection', required: true },
                 markdown: { type: 'string', required: true },
+              },
+            },
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                kind: { type: 'string', const: 'setTitle', required: true },
+                title: { type: 'string', required: true, description: '新标题;引擎约束:去空白后 1-48 字,同一批最多一个 setTitle,不与整篇 draft 混用。' },
               },
             },
           ],
@@ -313,8 +327,9 @@ function editDraftTool(services: ToolServices) {
         await services.bindings.setActive(dshSessionId, engineSessionId)
         const before = await readDocWithLines(services.engine, engineSessionId)
         if (before.state === 'pendingReview') throw new Error(REVIEW_PENDING_ERROR)
-        if (before.state === 'empty') throw new Error('文稿尚无正文；请先用 qing_write_draft 起草完整文稿。')
         const ops = args.ops as ExternalEditProposalOp[]
+        const titleOnly = ops.every((op) => op.kind === 'setTitle')
+        if (before.state === 'empty' && !titleOnly) throw new Error('文稿尚无正文；请先用 qing_write_draft 起草完整文稿。改标题可单独用 setTitle。')
         assertNoRawTags(ops)
         const proposal = await proposeEditOpsWithPlainTextRetry(
           services.engine,
@@ -349,9 +364,9 @@ function editDraftTool(services: ToolServices) {
         }
         return {
           status: proposal.status,
-          message: proposal.status === 'review'
+          message: (proposal.status === 'review'
             ? `【文稿状态】审阅中·${proposal.count} 处待用户裁决(基线 v${official.docVersion})。\n${REVIEW_END_MESSAGE}`
-            : `【文稿状态】已落库生效 v${official.docVersion},无待审稿。\n局部修改已提交到《${outline.title}》。`,
+            : `【文稿状态】已落库生效 v${official.docVersion},无待审稿。\n局部修改已提交到《${outline.title}》。`) + focusSuffix(services, dshSessionId),
           engineSessionId,
           title: outline.title,
           blocks: outline.blocks,
@@ -415,7 +430,7 @@ function reviewCommitTool(services: ToolServices, reviewTurns: ReviewTurnTracker
       if (before.state !== 'pendingReview') {
         return {
           status: 'no_pending_review' as const,
-          message: `【文稿状态】已落库 v${before.docVersion},当前无待审稿——此前的审阅已由用户在面板处理完毕。不要再次询问如何处置待审稿,直接按用户最新指令继续。`,
+          message: `【文稿状态】已落库 v${before.docVersion},当前无待审稿——此前的审阅已由用户在面板处理完毕。不要再次询问如何处置待审稿,直接按用户最新指令继续。${focusSuffix(services, dshSessionId)}`,
           engineSessionId,
           title: beforeTitle,
           acceptedCount: 0,
@@ -443,7 +458,7 @@ function reviewCommitTool(services: ToolServices, reviewTurns: ReviewTurnTracker
       })
       return {
         status: 'reviewed' as const,
-        message: `【文稿状态】已落库生效,无待审稿。\n${args.action === 'accept_all' ? '已接受' : '已拒绝'}全部待审变更（接受 ${reviewed.acceptedCount} 处，拒绝 ${reviewed.rejectedCount} 处）。`,
+        message: `【文稿状态】已落库生效,无待审稿。\n${args.action === 'accept_all' ? '已接受' : '已拒绝'}全部待审变更（接受 ${reviewed.acceptedCount} 处，拒绝 ${reviewed.rejectedCount} 处）。${focusSuffix(services, dshSessionId)}`,
         engineSessionId,
         title: outline.title,
         acceptedCount: reviewed.acceptedCount,

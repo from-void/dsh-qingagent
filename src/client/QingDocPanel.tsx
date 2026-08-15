@@ -372,7 +372,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
       : null,
     [panelDoc, snapshot.reviewModel],
   )
-  const surfacePmDoc = streamingPmDoc ?? panelDoc?.pmDoc ?? EMPTY_PM_DOC
+  // P11:冲突稿切回时优先恢复本地内容快照(冲突态本就等用户裁决,呈现本地稿语义正确)。
+  const conflictStashDoc = activeConflict && activeEngineSessionId
+    ? snapshot.conflictStash?.[activeEngineSessionId]
+    : undefined
+  const surfacePmDoc = conflictStashDoc ?? streamingPmDoc ?? panelDoc?.pmDoc ?? EMPTY_PM_DOC
   const surfaceVersion = pendingReview
     ? snapshot.reviewModel?.baseVersion ?? panelDoc?.docVersion ?? 0
     : panelDoc?.docVersion ?? 0
@@ -428,18 +432,36 @@ export function QingDocPanel(props: QingDocPanelProps) {
     }
   }, [activeEngineSessionId, flushPendingDocSave, sessionId])
 
+  const stashIfConflictOrDirty = useCallback(() => {
+    const current = snapshotRef.current
+    const currentDoc = current.activeEngineSessionId
+    if (!currentDoc) return
+    const editor = tiptapEditorRef.current
+    const dirty = (docViewRef.current ?? lastDocViewHandleRef.current)?.hasLocalDocumentChanges() ?? false
+    const inConflict = Boolean(current.conflicts?.[currentDoc])
+    if (editor && (inConflict || dirty)) {
+      try {
+        qingClientStore.stashConflictDoc(sessionId, currentDoc, editor.getJSON() as PmDoc)
+      } catch (error) {
+        console.warn('[qingagent-panel] conflict stash failed', error)
+      }
+    }
+  }, [sessionId])
+
   const handleFocusDocument = useCallback(async (engineSessionId: string) => {
     try {
+      stashIfConflictOrDirty()
       await flushPendingDocSave()
       await qingClientStore.focus(sessionId, engineSessionId)
     } catch (error) {
       console.error('[qingagent-panel] focus flush failed', error)
       setToast('保存失败 · 未切换文稿')
     }
-  }, [flushPendingDocSave, sessionId])
+  }, [flushPendingDocSave, sessionId, stashIfConflictOrDirty])
 
   const handleOpenLibraryDoc = useCallback(async (engineSessionId: string, docTitle: string) => {
     try {
+      stashIfConflictOrDirty()
       await flushPendingDocSave()
       await qingClientStore.focus(sessionId, engineSessionId, { adopt: true, title: docTitle })
     } catch (error) {

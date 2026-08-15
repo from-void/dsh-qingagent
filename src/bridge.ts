@@ -162,6 +162,12 @@ export class BridgeHub {
         if (!['pdf', 'docx', 'html', 'markdown', 'txt'].includes(format)) {
           throw new HttpInputError('不支持的导出格式。')
         }
+        // 空文稿无可导出内容,短路 409(评测 P18;客户端已把 409 映射为「还没有可导出的内容」)。
+        const docState = await this.readDoc(engineSessionId)
+        if (docState.state === 'empty') {
+          writeJson(response, 409, { error: '还没有可导出的内容' })
+          return
+        }
         const upstream = await this.engine.fetchInternal(
           `/export/${encodeURIComponent(engineSessionId)}?format=${encodeURIComponent(format)}`,
         )

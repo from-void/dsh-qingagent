@@ -164,6 +164,7 @@ export type ExternalEditProposalOp =
   | { kind: 'strReplace'; old: string; new: string; nth?: number }
   | { kind: 'insertAfterLine'; line: number; markdown: string }
   | { kind: 'appendSection'; markdown: string }
+  | { kind: 'setTitle'; title: string }
 
 export interface ExternalReviewCommitRequest {
   expectedDocVersion: number
