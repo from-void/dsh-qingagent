@@ -333,6 +333,8 @@ export class QingClientStore {
       })
       this.open(entry)
       void this.loadState(sessionId, entry)
+      // 落稿后 PM 面板必须重拉权威文档,否则编辑器停留在流式残影/空态。
+      void this.refreshPanel(sessionId, event.engineSessionId).catch(() => undefined)
       return
     }
     if (event.type === 'doc-review-pending') {
@@ -349,6 +351,8 @@ export class QingClientStore {
       })
       this.open(entry)
       void this.loadState(sessionId, entry, true)
+      // 进入审阅态同样重拉 PM 面板(含 review render-model),装饰层才有数据。
+      void this.refreshPanel(sessionId, event.engineSessionId).catch(() => undefined)
       return
     }
     if (event.type === 'focus-changed') {
