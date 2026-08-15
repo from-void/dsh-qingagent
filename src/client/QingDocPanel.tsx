@@ -327,12 +327,13 @@ export function QingDocPanel(props: QingDocPanelProps) {
     panelDoc.state === 'pendingReview' || snapshot.reviewModel !== undefined
   ))
   const busy = snapshot.streaming || panelDoc?.agentBusy === true || activeBound?.agentBusy === true
-  // 冲突态按文稿隔离:别的文稿的冲突不影响当前稿的编辑与状态显示。
+  // 冲突态按文稿隔离(权威在 conflicts 分槽映射):当前稿有冲突记录就呈现冲突(含切走再切回),
+  // 别的文稿的冲突不影响当前稿;瞬态保存状态照常走单槽。
   const rawSaveState = snapshot.saveState ?? ({ kind: 'idle' } satisfies DocumentSaveState)
-  const saveState: DocumentSaveState =
-    rawSaveState.kind === 'conflict' && rawSaveState.engineSessionId !== activeEngineSessionId
-      ? { kind: 'idle' }
-      : rawSaveState
+  const activeConflict = activeEngineSessionId ? snapshot.conflicts?.[activeEngineSessionId] : undefined
+  const saveState: DocumentSaveState = activeConflict && activeEngineSessionId
+    ? { kind: 'conflict', engineSessionId: activeEngineSessionId, ...activeConflict }
+    : (rawSaveState.kind === 'conflict' ? { kind: 'idle' } : rawSaveState)
   useEffect(() => {
     if (saveState.kind !== 'saving') {
       setShowSavingStatus(false)

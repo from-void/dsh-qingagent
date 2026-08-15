@@ -407,3 +407,31 @@ function deferred<T>() {
   const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise })
   return { promise, resolve }
 }
+
+  it('t14 回归:另一稿保存成功不得清掉冲突稿的冲突;切回仍受封锁', async () => {
+    const remotePm = {
+      type: 'doc', attrs: { schemaVersion: 1 },
+      content: [{ type: 'paragraph', attrs: { blockId: 'r' }, content: [{ type: 'text', text: '服务器版' }] }],
+    } as PmDoc
+    const store = new QingClientStore()
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      sessionId: 'qing-a', docVersion: 4, contentHash: 'hash-4', state: 'editing',
+      agentBusy: false, title: '甲', ts: 't', pmDoc: remotePm,
+    })))
+    // 甲稿进入冲突
+    store.setSaveState('dsh-t14', {
+      kind: 'conflict', engineSessionId: 'qing-a', expected: 3, actual: 4, message: '文档已被更新',
+    })
+    // 乙稿保存成功发布瞬态 saved——不得抹掉甲稿冲突
+    store.setSaveState('dsh-t14', { kind: 'saved', version: 2 })
+    expect(store.getSnapshot('dsh-t14').conflicts?.['qing-a']).toBeTruthy()
+
+    // 切回甲稿:refreshPanel 仍被冲突封锁,不应用服务器版
+    await store.refreshPanel('dsh-t14', 'qing-a')
+    expect(store.getSnapshot('dsh-t14').panelDoc).toBeUndefined()
+
+    // 重载才解除
+    await store.resolveConflictByReload('dsh-t14', 'qing-a')
+    expect(store.getSnapshot('dsh-t14').conflicts?.['qing-a']).toBeUndefined()
+    expect(store.getSnapshot('dsh-t14').panelDoc?.pmDoc).toEqual(remotePm)
+  })
