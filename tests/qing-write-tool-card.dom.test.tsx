@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { failureSummary } from '../src/client/QingWriteToolCard.js'
 
 const stylesheet = readFileSync(
   resolve('src/client/QingWriteToolCard.module.css'),
@@ -13,6 +14,13 @@ afterEach(() => {
 })
 
 describe('QingWriteToolCard theme styles', () => {
+  it('从失败 result content 首行提取用户可读摘要', () => {
+    expect(failureSummary([{ type: 'text', text: 'Error: 文稿正在审阅中（请先裁决）\n详情' }]))
+      .toBe('文稿审阅中')
+    expect(failureSummary([{ type: 'text', text: 'Error: 青简正在处理其他任务（AGENT_BUSY）' }]))
+      .toBe('引擎忙')
+  })
+
   it('uses only dsh semantic variables instead of literal colors', () => {
     const style = document.createElement('style')
     style.textContent = stylesheet

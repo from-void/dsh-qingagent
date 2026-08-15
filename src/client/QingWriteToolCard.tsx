@@ -26,6 +26,7 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
   const blocks = meta?.blocks ?? snapshot.blocks
   const words = meta?.words ?? snapshot.words
   const title = meta?.title
+  const failure = failed ? failureSummary(settledBlock?.content ?? []) : ''
   const state = failed ? 'failed' : settled ? 'complete' : 'running'
 
   return (
@@ -35,9 +36,13 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
       </strong>
       <span className={styles.separator} aria-hidden="true" />
       <span className={styles.toolSummary}>
-        {title ? `《${title}》 · ` : ''}
-        {settled ? `${blocks} 块 · 约 ${words} 字` : `已写 ${blocks} 块 · ${words} 字`}
-        {meta?.status === 'review' ? ' · 待审阅' : ''}
+        {failed
+          ? `未完成${failure ? ` · ${failure}` : ''}`
+          : <>
+              {title ? `《${title}》 · ` : ''}
+              {settled ? `${blocks} 块 · 约 ${words} 字` : `已写 ${blocks} 块 · ${words} 字`}
+              {meta?.status === 'review' ? ' · 待审阅' : ''}
+            </>}
       </span>
       {!failed ? <button type="button" className={styles.viewButton} onClick={() => props.qingLayout.openDetails()}>查看</button> : null}
     </div>
@@ -53,4 +58,15 @@ interface ToolMeta {
 
 function isMeta(value: unknown): value is ToolMeta {
   return typeof value === 'object' && value !== null
+}
+
+export function failureSummary(content: readonly unknown[]): string {
+  const text = content.flatMap((block) => {
+    if (!block || typeof block !== 'object') return []
+    const value = block as { type?: unknown; text?: unknown }
+    return value.type === 'text' && typeof value.text === 'string' ? [value.text] : []
+  }).join('\n').split(/\r?\n/, 1)[0]?.replace(/^Error:\s*/i, '').trim() ?? ''
+  if (/审阅|REVIEW_PENDING/i.test(text)) return '文稿审阅中'
+  if (/AGENT_BUSY|正在处理其他任务|引擎忙/i.test(text)) return '引擎忙'
+  return text.length > 48 ? `${text.slice(0, 47)}…` : text
 }
