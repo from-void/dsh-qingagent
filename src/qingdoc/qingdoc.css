@@ -149,19 +149,6 @@
   cursor: pointer;
 }
 [data-qingagent-doc-panel] .qingdoc-close { width: 24px; padding: 0; font-size: 16px; }
-[data-qingagent-doc-panel] .qingdoc-toast {
-  position: absolute;
-  z-index: 100210;
-  right: 16px;
-  bottom: 16px;
-  padding: 8px 12px;
-  color: #2f2a22;
-  border: 1px solid rgba(120, 90, 50, .28);
-  border-radius: 0;
-  background: #faf6ec;
-  font: 12px/1.5 var(--font-zh-serif);
-}
-
 /* source: packages/ui-kit/src/tokens.css:4-48 */
 [data-qingagent-doc-panel] {
   /* 中性色板:暖墨纸系(原 slate-blue 冷色 base 已废弃,全站统一暖化)。
@@ -2978,6 +2965,15 @@
   color: var(--ink-1) !important;
   /* 入场同样由 FLIP 从输入框位置滑来接管(内容浮现见上方 .patch-nav > *) */
   animation: none !important;
+}
+/* dsh 的外层可能建立 transform/contain 坐标系。PatchNav 提升为面板根直接子节点后，
+   只把定位参照改为面板可视区；审阅条自身的尺寸与视觉声明仍沿用青简。 */
+[data-qingagent-doc-panel] > .patch-nav {
+  position: absolute !important;
+  left: max(12px, calc(var(--panel-doc-left, 0px) + 64px));
+  right: max(12px, calc(var(--panel-doc-right, 0px) + 64px));
+  top: auto !important;
+  bottom: var(--ws-float-bar-bottom);
 }
 [data-qingagent-doc-panel] .patch-nav .pn-label {
   color: var(--ink-1) !important;

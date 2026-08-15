@@ -234,8 +234,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
       ?? root?.querySelector<HTMLElement>('.ws-paper-shell')
     if (!root || !paper) return
     const rect = paper.getBoundingClientRect()
+    const rootRect = root.getBoundingClientRect()
     root.style.setProperty('--doc-left', `${rect.left}px`)
     root.style.setProperty('--doc-right', `${rect.right}px`)
+    root.style.setProperty('--panel-doc-left', `${Math.max(0, rect.left - rootRect.left)}px`)
+    root.style.setProperty('--panel-doc-right', `${Math.max(0, rootRect.right - rect.right)}px`)
   }, [])
 
   useEffect(() => {
@@ -472,10 +475,9 @@ export function QingDocPanel(props: QingDocPanelProps) {
     version: panelDoc?.docVersion,
     loading: snapshot.panelLoading === true && !panelDoc,
   })
-  const engineUrl = snapshot.state?.engine.engineUrl ?? 'http://127.0.0.1:8080'
   const openUrl = activeEngineSessionId
-    ? `${engineUrl.replace(/\/$/, '')}/#/workspace?session=${encodeURIComponent(activeEngineSessionId)}`
-    : engineUrl
+    ? `qingjian://open?engineSessionId=${encodeURIComponent(activeEngineSessionId)}`
+    : undefined
   const contentKind = pendingReview ? 'pendingReview' : panelDoc?.state === 'empty' ? 'empty' : 'editable'
 
   const rootStyle = {
@@ -515,7 +517,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
         <div className="qingdoc-heading">
           <span className="qingdoc-brand">青简</span>
           <strong className="qingdoc-stage-title" title={title}>{title}</strong>
-          <span className="qingdoc-status" data-kind={saveState.kind}>{status}</span>
+          <span className="qingdoc-status" data-kind={saveState.kind} role="status">{toast ?? status}</span>
         </div>
         <div className="qingdoc-host-actions">
           {docs.length > 1 ? (
@@ -530,7 +532,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
               ))}
             </select>
           ) : null}
-          <a className="qingdoc-open" href={openUrl} target="_blank" rel="noopener noreferrer">在青简中打开 ↗</a>
+          {openUrl ? <a className="qingdoc-open" href={openUrl}>在青简中打开 ↗</a> : null}
           <button
             className="qingdoc-close"
             type="button"
@@ -543,22 +545,6 @@ export function QingDocPanel(props: QingDocPanelProps) {
         <main className="ws-right">
           <div className="ws-paper-shell" data-wf="WorkspacePaperShell" aria-hidden="true" />
           <div className="ws-document-content" data-wf="WorkspaceHydrationDocumentContent">
-            {pendingReview && snapshot.reviewModel?.suggestions.length ? (
-              <PatchNav
-                remainingCount={remainingReviewCount}
-                totalCount={visibleReviewTargets.length}
-                activePatchIndex={activeReviewTargetId
-                  ? visibleReviewTargetIds.indexOf(activeReviewTargetId)
-                  : -1}
-                isSubmitting={reviewSubmitting}
-                retryOnly={reviewSettlementRetryPending}
-                unrenderableOnly={unrenderableReviewOnly}
-                onJumpPrev={() => jumpReview(-1)}
-                onJumpNext={() => jumpReview(1)}
-                onRejectAll={() => { void handleReviewCommit('reject_all') }}
-                onCommit={() => handleReviewCommit('commit')}
-              />
-            ) : null}
             <DocumentSnapshotView
               ref={setDocViewHandle}
               doc={surfaceDoc}
@@ -588,7 +574,22 @@ export function QingDocPanel(props: QingDocPanelProps) {
           </div>
         </main>
       </div>
-      {toast ? <div className="qingdoc-toast" role="status">{toast}</div> : null}
+      {pendingReview && snapshot.reviewModel?.suggestions.length ? (
+        <PatchNav
+          remainingCount={remainingReviewCount}
+          totalCount={visibleReviewTargets.length}
+          activePatchIndex={activeReviewTargetId
+            ? visibleReviewTargetIds.indexOf(activeReviewTargetId)
+            : -1}
+          isSubmitting={reviewSubmitting}
+          retryOnly={reviewSettlementRetryPending}
+          unrenderableOnly={unrenderableReviewOnly}
+          onJumpPrev={() => jumpReview(-1)}
+          onJumpNext={() => jumpReview(1)}
+          onRejectAll={() => { void handleReviewCommit('reject_all') }}
+          onCommit={() => handleReviewCommit('commit')}
+        />
+      ) : null}
     </section>
   )
 }

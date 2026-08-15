@@ -73,18 +73,6 @@ ${panelRoot} .qingdoc-close {
   cursor: pointer;
 }
 ${panelRoot} .qingdoc-close { width: 24px; padding: 0; font-size: 16px; }
-${panelRoot} .qingdoc-toast {
-  position: absolute;
-  z-index: 100210;
-  right: 16px;
-  bottom: 16px;
-  padding: 8px 12px;
-  color: #2f2a22;
-  border: 1px solid rgba(120, 90, 50, .28);
-  border-radius: 0;
-  background: #faf6ec;
-  font: 12px/1.5 var(--font-zh-serif);
-}
 `
 
 function lineRange(source, start, end) {
