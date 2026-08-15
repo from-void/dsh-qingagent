@@ -354,12 +354,26 @@ export function QingDocPanel(props: QingDocPanelProps) {
     reviewSubmittingRef.current = true
     setReviewSubmitting(true)
     try {
-      await qingClientStore.reviewVerdict(sessionId, activeEngineSessionId, {
+      const response = await qingClientStore.reviewVerdict(sessionId, activeEngineSessionId, {
         expectedDocVersion: panelDoc.docVersion,
         patchId,
         verdict,
       })
-      qingClientStore.applyReviewVerdict(sessionId, activeEngineSessionId, patchId, verdict)
+      const suggestions = snapshotRef.current.reviewModel?.suggestions ?? []
+      const expectedReviewingCount = suggestions.filter((suggestion) =>
+        suggestion.status === 'reviewing' && suggestion.id !== patchId).length
+      const responseMatchesLocal = response.patchIds.length === 1 &&
+        response.patchIds[0] === patchId &&
+        response.reviewingCount === expectedReviewingCount
+      qingClientStore.applyReviewVerdict(
+        sessionId,
+        activeEngineSessionId,
+        response.patchIds,
+        verdict,
+      )
+      if (!responseMatchesLocal) {
+        void qingClientStore.refreshPanel(sessionId, activeEngineSessionId).catch(() => undefined)
+      }
       setToast(verdict === 'accepted' ? '已保留这处改动' : '已取消这处改动')
     } catch (error) {
       console.error('[qingagent-panel] review verdict failed', error)
@@ -429,8 +443,12 @@ export function QingDocPanel(props: QingDocPanelProps) {
     snapshot.reviewModel?.suggestions,
   ])
 
+  const remainingReviewCount = snapshot.reviewModel?.suggestions
+    .filter((suggestion) => suggestion.status === 'reviewing').length ?? 0
+  const unrenderableReviewOnly = remainingReviewCount > 0 &&
+    visibleReviewTargets.length === 0
   const reviewCount = reviewPresentation
-    ? visibleReviewTargets.length
+    ? remainingReviewCount
     : snapshot.reviewCount ?? 0
   const title = panelDoc?.title || snapshot.activeDoc?.title || activeBound?.title || '未命名文稿'
   const status = panelStatus({
@@ -514,14 +532,14 @@ export function QingDocPanel(props: QingDocPanelProps) {
           <div className="ws-document-content" data-wf="WorkspaceHydrationDocumentContent">
             {pendingReview && snapshot.reviewModel?.suggestions.length ? (
               <PatchNav
-                remainingCount={visibleReviewTargets.length}
+                remainingCount={remainingReviewCount}
                 totalCount={visibleReviewTargets.length}
                 activePatchIndex={activeReviewTargetId
                   ? visibleReviewTargetIds.indexOf(activeReviewTargetId)
                   : -1}
                 isSubmitting={reviewSubmitting}
                 retryOnly={reviewSettlementRetryPending}
-                unrenderableOnly={visibleReviewTargets.length === 0}
+                unrenderableOnly={unrenderableReviewOnly}
                 onJumpPrev={() => jumpReview(-1)}
                 onJumpNext={() => jumpReview(1)}
                 onRejectAll={() => { void handleReviewCommit('reject_all') }}

@@ -13,7 +13,9 @@ import type {
   ExternalReviewVerdictResponse,
   PmDoc,
 } from '../contracts.js'
+import { appliedDocWriteBaseline } from '@qingweb/pages/workspace/data/docWriteBaseline'
 import type { DocumentSaveState } from './documentSaveCoordinator.js'
+import { compileQingmlDocument } from './streamingDocument.js'
 
 export interface QingClientSnapshot {
   state?: BridgeState
@@ -278,7 +280,7 @@ export class QingClientStore {
   applyReviewVerdict(
     sessionId: string,
     engineSessionId: string,
-    patchId: string,
+    patchIds: readonly string[],
     verdict: 'accepted' | 'rejected',
   ): void {
     const entry = this.entry(sessionId)
@@ -287,7 +289,7 @@ export class QingClientStore {
     const reviewModel: ExternalReviewRenderModelResponse = {
       ...model,
       suggestions: model.suggestions.map((suggestion) =>
-        suggestion.id === patchId ? { ...suggestion, status: verdict } : suggestion),
+        patchIds.includes(suggestion.id) ? { ...suggestion, status: verdict } : suggestion),
     }
     this.update(entry, {
       ...entry.snapshot,
@@ -368,6 +370,7 @@ export class QingClientStore {
       return
     }
     if (event.type === 'doc-committed') {
+      const optimisticPanelDoc = committedPanelDoc(entry.snapshot, event.engineSessionId, event.doc)
       this.update(entry, {
         ...entry.snapshot,
         activeEngineSessionId: event.engineSessionId,
@@ -382,8 +385,14 @@ export class QingClientStore {
       })
       this.open(entry)
       void this.loadState(sessionId, entry)
-      // 落稿后 PM 面板必须重拉权威文档,否则编辑器停留在流式残影/空态。
-      void this.refreshPanel(sessionId, event.engineSessionId).catch(() => undefined)
+      // 事件已有完整 QingML/PM 时先推进 panelDoc 版本域，再后台读回 external canonical；
+      // dirty guard 对乐观帧与随后 refresh 使用同一条保护链。
+      const optimisticApply = optimisticPanelDoc
+        ? this.applyCommittedPanelDoc(entry, event.engineSessionId, optimisticPanelDoc)
+        : Promise.resolve()
+      void optimisticApply.catch(() => undefined).finally(() => {
+        void this.refreshPanel(sessionId, event.engineSessionId).catch(() => undefined)
+      })
       return
     }
     if (event.type === 'doc-review-pending') {
@@ -463,6 +472,32 @@ export class QingClientStore {
     return entry.loading
   }
 
+  private async applyCommittedPanelDoc(
+    entry: SessionEntry,
+    engineSessionId: string,
+    panelDoc: ExternalPmDocReadResponse,
+  ): Promise<void> {
+    if (
+      entry.snapshot.panelEngineSessionId !== engineSessionId ||
+      hasConflictSaveState(entry.snapshot.saveState)
+    ) return
+    const shouldApply = await (entry.panelRefreshGuard?.beforeApply(engineSessionId, panelDoc)
+      ?? Promise.resolve(true))
+    if (
+      !shouldApply ||
+      entry.snapshot.panelEngineSessionId !== engineSessionId ||
+      hasConflictSaveState(entry.snapshot.saveState)
+    ) return
+    this.update(entry, {
+      ...entry.snapshot,
+      panelDoc,
+      reviewModel: undefined,
+      reviewCount: undefined,
+      error: undefined,
+    })
+    entry.panelRefreshGuard?.afterApply?.(engineSessionId, panelDoc)
+  }
+
   private update(entry: SessionEntry, snapshot: QingClientSnapshot): void {
     entry.snapshot = snapshot
     for (const listener of entry.listeners) listener()
@@ -515,6 +550,38 @@ function readableError(error: unknown): string {
 
 function refreshSaveState(state: DocumentSaveState | undefined): DocumentSaveState {
   return state?.kind === 'conflict' ? state : { kind: 'idle' }
+}
+
+function hasConflictSaveState(state: DocumentSaveState | undefined): boolean {
+  return state?.kind === 'conflict'
+}
+
+function committedPanelDoc(
+  snapshot: QingClientSnapshot,
+  engineSessionId: string,
+  doc: ExternalDoc,
+): ExternalPmDocReadResponse | null {
+  const current = snapshot.panelEngineSessionId === engineSessionId ? snapshot.panelDoc : undefined
+  if (!current || doc.docVersion < current.docVersion) return null
+  let pmDoc: PmDoc
+  try {
+    pmDoc = doc.pmDoc ?? compileQingmlDocument(doc.qingml)
+  } catch {
+    return null
+  }
+  return {
+    sessionId: doc.sessionId,
+    docVersion: doc.docVersion,
+    contentHash: doc.contentHash ?? appliedDocWriteBaseline({
+      version: doc.docVersion,
+      pmDoc,
+    }).baseContentHash,
+    state: doc.state,
+    agentBusy: doc.agentBusy,
+    title: doc.title,
+    ts: doc.ts ?? current.ts,
+    pmDoc,
+  }
 }
 
 export const qingClientStore = new QingClientStore()

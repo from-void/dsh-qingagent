@@ -205,6 +205,55 @@ describe('QingClientStore 生成终态', () => {
     expect(store.getSnapshot('dsh-generation').qingml).toContain('新世代')
     release()
   })
+
+  it('doc-committed 携带 QingML 时先乐观推进 panelDoc，再等待权威 PM 读回', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const authoritativePanel = deferred<Response>()
+    let panelReads = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/qingagent-bridge/state?')) return Response.json(bridgeState())
+      if (url.startsWith('/qingagent-bridge/doc-pm?')) {
+        panelReads += 1
+        if (panelReads === 1) {
+          return Response.json({
+            sessionId: 'qing-1', docVersion: 0, contentHash: 'hash-0', state: 'empty',
+            agentBusy: false, title: '旧稿', ts: 't0', pmDoc: { type: 'doc', attrs: { schemaVersion: 1 }, content: [] },
+          })
+        }
+        return authoritativePanel.promise
+      }
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const store = new QingClientStore()
+    const release = store.retain('dsh-optimistic')
+    await vi.waitFor(() => expect(store.getSnapshot('dsh-optimistic').state).toBeDefined())
+    await store.refreshPanel('dsh-optimistic', 'qing-1')
+    const beforeApply = vi.fn(async () => true)
+    store.registerPanelRefreshGuard('dsh-optimistic', { beforeApply })
+
+    FakeEventSource.instances.at(-1)?.emit({
+      type: 'doc-committed', engineSessionId: 'qing-1',
+      doc: {
+        sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+        markdown: '乐观正文', qingml: '<p>乐观正文</p>', title: '新稿',
+      },
+      blocks: 1, words: 4,
+    })
+
+    await vi.waitFor(() => expect(store.getSnapshot('dsh-optimistic').panelDoc?.docVersion).toBe(2))
+    expect(JSON.stringify(store.getSnapshot('dsh-optimistic').panelDoc?.pmDoc)).toContain('乐观正文')
+    expect(beforeApply).toHaveBeenCalledWith('qing-1', expect.objectContaining({ docVersion: 2 }))
+    expect(panelReads).toBe(2)
+
+    authoritativePanel.resolve(Response.json({
+      sessionId: 'qing-1', docVersion: 2, contentHash: 'hash-2', state: 'editing',
+      agentBusy: false, title: '新稿', ts: 't2', pmDoc: store.getSnapshot('dsh-optimistic').panelDoc?.pmDoc,
+    }))
+    await vi.waitFor(() => expect(store.getSnapshot('dsh-optimistic').panelLoading).toBe(false))
+    release()
+  })
 })
 
 function deferred<T>() {

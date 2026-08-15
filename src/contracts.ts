@@ -36,6 +36,10 @@ export interface ExternalDoc {
   markdown: string
   qingml: string
   title: string | null
+  /** 新版桥事件可直接携带 canonical PM；旧版仅有 qingml 时客户端会本地编译。 */
+  pmDoc?: PmDoc
+  contentHash?: string
+  ts?: string
 }
 
 /** external PM / 直写 / 审阅模型直接复用青简公开 wire 类型。 */

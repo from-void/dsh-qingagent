@@ -95,12 +95,7 @@ export class BridgeHub {
         return
       }
       if (request.method === 'GET' && url.pathname === '/qingagent-bridge/doc') {
-        const dshSessionId = requiredQuery(url, 'dshSessionId')
-        const engineSessionId = requiredQuery(url, 'engineSessionId')
-        if (!this.bindings.hasDoc(dshSessionId, engineSessionId)) {
-          writeJson(response, 404, { error: '文稿不属于当前 DSH 会话。' })
-          return
-        }
+        const engineSessionId = this.authorizedEngineSessionId(url)
         writeJson(response, 200, await this.readDoc(engineSessionId))
         return
       }

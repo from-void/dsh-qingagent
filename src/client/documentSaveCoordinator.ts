@@ -288,11 +288,11 @@ export class DocumentSaveCoordinator {
   }
 
   private resolveWrite(write: PendingWrite | null): void {
-    for (const waiter of write?.waiters ?? []) waiter.resolve()
+    for (const waiter of write?.waiters.splice(0) ?? []) waiter.resolve()
   }
 
   private rejectWrite(write: PendingWrite | null, error: Error): void {
-    for (const waiter of write?.waiters ?? []) waiter.reject(error)
+    for (const waiter of write?.waiters.splice(0) ?? []) waiter.reject(error)
   }
 }
 

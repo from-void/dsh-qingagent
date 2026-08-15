@@ -7,7 +7,10 @@ import type { DocWriteBaseline } from '@qingweb/pages/workspace/data/docWriteBas
 import type { PmDoc } from '../src/contracts.js'
 import { QingDocPanel, type QingDocPanelProps } from '../src/client/QingDocPanel.js'
 
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
 const viewHarness = vi.hoisted(() => ({
+  props: null as Record<string, unknown> | null,
   pending: null as { doc: PmDoc; baseline: {
     expectedDocumentSnapshot: number
     baseContentHash: string
@@ -20,9 +23,13 @@ vi.mock('@qingweb/pages/workspace/components/DocumentSnapshotView', async () => 
   const React = await import('react')
   return {
     DocumentSnapshotView: React.forwardRef(function MockDocumentSnapshotView(
-      props: { onEditorChange?: (doc: PmDoc, baseline?: DocWriteBaseline) => Promise<void> },
+      props: {
+        onEditorChange?: (doc: PmDoc, baseline?: DocWriteBaseline) => Promise<void>
+        onPatchVerdict?: (patchId: string, verdict: 'accepted' | 'rejected') => void
+      },
       ref: React.ForwardedRef<unknown>,
     ) {
+      viewHarness.props = props as unknown as Record<string, unknown>
       React.useImperativeHandle(ref, () => ({
         getInnerHtml: () => '',
         getLastPresentationRun: () => null,
@@ -75,6 +82,7 @@ afterEach(() => {
   host?.remove()
   host = null
   viewHarness.pending = null
+  viewHarness.props = null
   patchNavHarness.props = null
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
@@ -138,6 +146,36 @@ describe('QingDocPanel 保存生命周期', () => {
     await new Promise((resolve) => setTimeout(resolve, 60))
     expect(reviewCommitCalls(fetchMock)).toBe(1)
   })
+
+  it('verdict 回执 patchIds/reviewingCount 与本地不符时补拉权威面板', async () => {
+    const fetchMock = installBridgeFetch('dsh-verdict-refresh', ['qing-review'], {
+      pendingReview: true,
+      reviewSuggestionStatus: 'reviewing',
+      mismatchVerdict: true,
+    })
+    renderPanel('dsh-verdict-refresh')
+    await vi.waitFor(() => expect(patchNavHarness.props).not.toBeNull())
+    expect(viewHarness.props?.onPatchVerdict).toBeTypeOf('function')
+    expect(patchNavHarness.props).toMatchObject({
+      remainingCount: 1,
+      totalCount: 0,
+      unrenderableOnly: true,
+    })
+    const before = panelReadCalls(fetchMock)
+
+    await act(async () => {
+      const onPatchVerdict = viewHarness.props?.onPatchVerdict as
+        | ((patchId: string, verdict: 'accepted' | 'rejected') => void)
+        | undefined
+      onPatchVerdict?.('patch-reviewed', 'accepted')
+      for (let index = 0; index < 6; index += 1) {
+        await Promise.resolve()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
+    })
+
+    await vi.waitFor(() => expect(panelReadCalls(fetchMock)).toBeGreaterThan(before))
+  })
 })
 
 function renderPanel(sessionId: string): void {
@@ -154,7 +192,12 @@ function renderPanel(sessionId: string): void {
 function installBridgeFetch(
   dshSessionId: string,
   engineSessionIds: string[],
-  options: { pendingReview?: boolean; failReviewCommit?: boolean } = {},
+  options: {
+    pendingReview?: boolean
+    failReviewCommit?: boolean
+    reviewSuggestionStatus?: 'reviewing' | 'accepted' | 'rejected'
+    mismatchVerdict?: boolean
+  } = {},
 ) {
   vi.stubGlobal('EventSource', FakeEventSource)
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -201,7 +244,8 @@ function installBridgeFetch(
         baseVersion: 3, previewDoc: EMPTY_PM,
         suggestions: [{
           id: 'patch-reviewed', reviewBatchId: 'batch-1', groupMode: 'independent',
-          docId: engineSessionIds[0], baseVersion: 3, baseSchemaVersion: 1, status: 'accepted',
+          docId: engineSessionIds[0], baseVersion: 3, baseSchemaVersion: 1,
+          status: options.reviewSuggestionStatus ?? 'accepted',
           anchor: { blockId: 'missing', pmFrom: 1, pmTo: 1, quote: '', textHash: 'hash' },
           patch: { kind: 'prosemirror_steps', steps: [] },
           preview: { insertText: '落稿' }, summary: '测试候选',
@@ -218,6 +262,13 @@ function installBridgeFetch(
         outcome: { acceptedCount: 1, rejectedCount: 0, hunks: [] }, seq: null,
       })
     }
+    if (url.startsWith('/qingagent-bridge/review-verdicts?') && init?.method === 'POST') {
+      return Response.json({
+        status: 'marked', docVersion: 3,
+        patchIds: options.mismatchVerdict ? ['server-patch'] : ['patch-reviewed'],
+        verdict: 'accepted', reviewingCount: options.mismatchVerdict ? 7 : 0, seq: null,
+      })
+    }
     if (url === '/qingagent-bridge/focus' && init?.method === 'POST') return Response.json({ ok: true })
     throw new Error(`unexpected fetch ${url}`)
   })
@@ -228,4 +279,9 @@ function installBridgeFetch(
 function reviewCommitCalls(fetchMock: ReturnType<typeof installBridgeFetch>): number {
   return fetchMock.mock.calls.filter(([url, init]) =>
     String(url).startsWith('/qingagent-bridge/review-commit?') && init?.method === 'POST').length
+}
+
+function panelReadCalls(fetchMock: ReturnType<typeof installBridgeFetch>): number {
+  return fetchMock.mock.calls.filter(([url, init]) =>
+    String(url).startsWith('/qingagent-bridge/doc-pm?') && init?.method !== 'PUT').length
 }

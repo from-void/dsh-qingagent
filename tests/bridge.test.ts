@@ -127,6 +127,24 @@ describe('BridgeHub', () => {
     dispose()
   })
 
+  it('/doc 与 PM 路由共用 authorizedEngineSessionId 授权并代理活跃绑定稿', async () => {
+    const binding = {
+      docs: [{ engineSessionId: 'qing-a', title: 'A', createdAt: '2026-08-15T00:00:00.000Z' }],
+      activeEngineSessionId: 'qing-a',
+    }
+    const { handler, engine, dispose } = fixture({ 'dsh-a': binding })
+    const res = response()
+
+    await handler(
+      request('GET', '/qingagent-bridge/doc?dshSessionId=dsh-a&engineSessionId=qing-a'),
+      res as unknown as ServerResponse,
+    )
+
+    expect(res.status).toBe(200)
+    expect(engine.fetchJson).toHaveBeenCalledWith('/sessions/qing-a/doc?format=qingml')
+    dispose()
+  })
+
   it('PM 文档、审阅渲染模型与 verdict/commit 均按绑定会话代理到 external API', async () => {
     const binding = {
       docs: [{ engineSessionId: 'qing-a', title: 'A', createdAt: '2026-08-15T00:00:00.000Z' }],
