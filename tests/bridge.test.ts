@@ -101,7 +101,7 @@ describe('BridgeHub', () => {
     await handler(reqA, resA as unknown as ServerResponse)
     await handler(reqB, resB as unknown as ServerResponse)
 
-    hub.emit('dsh-a', { type: 'draft-failed', engineSessionId: 'qing-a', message: '已中止' })
+    hub.emit('dsh-a', { type: 'draft-failed', engineSessionId: 'qing-a', generation: 'draft-a', message: '已中止' })
 
     expect(resA.writes.join('')).toContain('event: draft-failed')
     expect(resB.writes.join('')).not.toContain('event: draft-failed')
@@ -190,6 +190,18 @@ describe('BridgeHub', () => {
       request('POST', '/qingagent-bridge/selection', '127.0.0.1', selection),
       response() as unknown as ServerResponse,
     )
+    const streamRequest = request('GET', '/qingagent-bridge/stream?dshSessionId=dsh-a')
+    const streamResponse = response()
+    await handler(streamRequest, streamResponse as unknown as ServerResponse)
+    hub.clearSelection('dsh-a')
+    expect(hub.getSelection('dsh-a')).toBeUndefined()
+    expect(streamResponse.writes.join('')).toContain('event: selection-changed')
+    expect(streamResponse.writes.join('')).toContain('"selection":null')
+
+    await handler(
+      request('POST', '/qingagent-bridge/selection', '127.0.0.1', selection),
+      response() as unknown as ServerResponse,
+    )
     hub.emit('dsh-a', {
       type: 'doc-committed',
       engineSessionId: 'qing-a',
@@ -201,6 +213,7 @@ describe('BridgeHub', () => {
       words: 2,
     })
     expect(hub.getSelection('dsh-a')).toBeUndefined()
+    streamRequest.emit('close')
     dispose()
   })
 

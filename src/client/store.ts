@@ -48,7 +48,7 @@ interface SessionEntry {
   loading?: Promise<void>
   panelLoadToken: number
   panelRefreshGuard?: PanelRefreshGuard
-  draftGeneration: number
+  activeDraftGeneration?: string
 }
 
 export interface PanelRefreshGuard {
@@ -154,12 +154,15 @@ export class QingClientStore {
     const response = await fetch(`/qingagent-bridge/doc?${query}`)
     if (!response.ok) throw new Error(await responseError(response))
     const doc = await response.json() as ExternalDoc
+    const keepStreaming = entry.snapshot.streaming &&
+      entry.snapshot.activeEngineSessionId === engineSessionId &&
+      entry.activeDraftGeneration !== undefined
     this.update(entry, {
       ...entry.snapshot,
       activeEngineSessionId: engineSessionId,
       activeDoc: doc,
       qingml: doc.qingml,
-      streaming: false,
+      streaming: keepStreaming,
       reviewCount: doc.state === 'pendingReview' ? entry.snapshot.reviewCount : undefined,
       draftFailure: undefined,
       error: undefined,
@@ -170,7 +173,6 @@ export class QingClientStore {
   async refreshPanel(sessionId: string, engineSessionId: string): Promise<void> {
     const entry = this.entry(sessionId)
     const token = ++entry.panelLoadToken
-    const draftGeneration = entry.draftGeneration
     const switching = entry.snapshot.panelEngineSessionId !== engineSessionId
     this.update(entry, {
       ...entry.snapshot,
@@ -208,8 +210,8 @@ export class QingClientStore {
         })
         return
       }
-      const keepStreaming = entry.draftGeneration > draftGeneration &&
-        entry.snapshot.streaming &&
+      const keepStreaming = entry.snapshot.streaming &&
+        entry.activeDraftGeneration !== undefined &&
         entry.snapshot.activeEngineSessionId === engineSessionId
       this.update(entry, {
         ...entry.snapshot,
@@ -218,7 +220,7 @@ export class QingClientStore {
         panelDoc,
         reviewModel,
         panelLoading: false,
-        // 仅当刷新期间没有更新的 draft-chunk 才退出写作态；较新的流世代优先。
+        // 面板读回不能解除生成锁；只有当前 generation 的终态事件可以结束写作态。
         streaming: keepStreaming,
         reviewCount: reviewModel
           ? reviewModel.suggestions.filter((suggestion) => suggestion.status === 'reviewing').length
@@ -332,6 +334,7 @@ export class QingClientStore {
   ): void {
     const entry = this.entry(sessionId)
     if (entry.snapshot.panelEngineSessionId !== engineSessionId || !entry.snapshot.panelDoc) return
+    entry.activeDraftGeneration = undefined
     const activeDoc = entry.snapshot.activeEngineSessionId === engineSessionId && entry.snapshot.activeDoc
       ? {
           ...entry.snapshot.activeDoc,
@@ -366,7 +369,6 @@ export class QingClientStore {
         refs: 0,
         openers: new Set(),
         panelLoadToken: 0,
-        draftGeneration: 0,
       }
       this.entries.set(sessionId, entry)
     }
@@ -378,6 +380,7 @@ export class QingClientStore {
     const source = new EventSource(`/qingagent-bridge/stream?${query}`)
     entry.source = source
     const eventNames: BridgeEvent['type'][] = [
+      'draft-started',
       'draft-chunk',
       'draft-failed',
       'doc-committed',
@@ -402,8 +405,23 @@ export class QingClientStore {
   }
 
   private handleEvent(sessionId: string, entry: SessionEntry, event: BridgeEvent): void {
+    if (event.type === 'draft-started') {
+      entry.activeDraftGeneration = event.generation
+      this.update(entry, {
+        ...entry.snapshot,
+        activeEngineSessionId: event.engineSessionId,
+        streaming: true,
+        blocks: 0,
+        words: 0,
+        reviewCount: undefined,
+        draftFailure: undefined,
+        error: undefined,
+      })
+      this.open(entry)
+      return
+    }
     if (event.type === 'draft-chunk') {
-      entry.draftGeneration += 1
+      if (entry.activeDraftGeneration !== event.generation) return
       this.update(entry, {
         ...entry.snapshot,
         activeEngineSessionId: event.engineSessionId,
@@ -419,6 +437,8 @@ export class QingClientStore {
       return
     }
     if (event.type === 'draft-failed') {
+      if (entry.activeDraftGeneration !== event.generation) return
+      entry.activeDraftGeneration = undefined
       this.update(entry, {
         ...entry.snapshot,
         activeEngineSessionId: event.engineSessionId,
@@ -430,6 +450,8 @@ export class QingClientStore {
       return
     }
     if (event.type === 'doc-committed') {
+      if (event.generation !== undefined && entry.activeDraftGeneration !== event.generation) return
+      entry.activeDraftGeneration = undefined
       const hadSelection = entry.snapshot.selection !== undefined
       const optimisticPanelDoc = committedPanelDoc(entry.snapshot, event.engineSessionId, event.doc)
       this.update(entry, {
@@ -462,6 +484,8 @@ export class QingClientStore {
       return
     }
     if (event.type === 'doc-review-pending') {
+      if (event.generation !== undefined && entry.activeDraftGeneration !== event.generation) return
+      entry.activeDraftGeneration = undefined
       this.update(entry, {
         ...entry.snapshot,
         activeEngineSessionId: event.engineSessionId,

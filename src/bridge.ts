@@ -56,10 +56,13 @@ export class BridgeHub {
   }
 
   emit(dshSessionId: string, event: BridgeEvent): void {
-    if (event.type === 'doc-committed' && this.selections.delete(dshSessionId)) {
-      this.writeEvent(dshSessionId, { type: 'selection-changed', selection: null })
-    }
+    if (event.type === 'doc-committed') this.clearSelection(dshSessionId)
     this.writeEvent(dshSessionId, event)
+  }
+
+  clearSelection(dshSessionId: string): void {
+    if (!this.selections.delete(dshSessionId)) return
+    this.writeEvent(dshSessionId, { type: 'selection-changed', selection: null })
   }
 
   getSelection(dshSessionId: string): QingSelection | undefined {
@@ -121,8 +124,7 @@ export class BridgeHub {
       }
       if (request.method === 'DELETE' && url.pathname === '/qingagent-bridge/selection') {
         const dshSessionId = requiredQuery(url, 'dshSessionId')
-        const deleted = this.selections.delete(dshSessionId)
-        if (deleted) this.emit(dshSessionId, { type: 'selection-changed', selection: null })
+        this.clearSelection(dshSessionId)
         writeJson(response, 200, { ok: true })
         return
       }

@@ -58,6 +58,63 @@ afterEach(() => {
 })
 
 describe('QingClientStore 生成终态', () => {
+  it('draft-started 在首块前立即锁定写作态', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(bridgeState())))
+    const store = new QingClientStore()
+    const release = store.retain('dsh-started')
+    await vi.waitFor(() => expect(store.getSnapshot('dsh-started').state).toBeDefined())
+
+    FakeEventSource.instances.at(-1)?.emit({
+      type: 'draft-started', engineSessionId: 'qing-1', generation: 'draft-before-first-chunk',
+    })
+
+    expect(store.getSnapshot('dsh-started')).toMatchObject({
+      activeEngineSessionId: 'qing-1', streaming: true, blocks: 0, words: 0,
+    })
+    release()
+  })
+
+  it('只接受当前 draft generation 的 chunk 与终态，忽略旧世代迟到事件', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(bridgeState())))
+    const store = new QingClientStore()
+    const release = store.retain('dsh-generation-order')
+    await vi.waitFor(() => expect(store.getSnapshot('dsh-generation-order').state).toBeDefined())
+    const source = FakeEventSource.instances.at(-1)!
+
+    source.emit({ type: 'draft-started', engineSessionId: 'qing-1', generation: 'draft-old' })
+    source.emit({
+      type: 'draft-chunk', engineSessionId: 'qing-1', generation: 'draft-old',
+      chunkQingml: '<p>旧世代</p>', accumulatedBlocks: ['<p>旧世代</p>'], title: '旧', blocks: 1, words: 3,
+    })
+    source.emit({ type: 'draft-started', engineSessionId: 'qing-1', generation: 'draft-new' })
+    source.emit({ type: 'draft-failed', engineSessionId: 'qing-1', generation: 'draft-old', message: '旧世代迟到失败' })
+    source.emit({
+      type: 'draft-chunk', engineSessionId: 'qing-1', generation: 'draft-old',
+      chunkQingml: '<p>污染</p>', accumulatedBlocks: ['<p>污染</p>'], title: '污染', blocks: 1, words: 2,
+    })
+
+    expect(store.getSnapshot('dsh-generation-order')).toMatchObject({
+      streaming: true, qingml: '<p>旧世代</p>', draftFailure: undefined,
+    })
+
+    source.emit({
+      type: 'draft-chunk', engineSessionId: 'qing-1', generation: 'draft-new',
+      chunkQingml: '<p>新世代</p>', accumulatedBlocks: ['<p>新世代</p>'], title: '新', blocks: 1, words: 3,
+    })
+    source.emit({ type: 'draft-failed', engineSessionId: 'qing-1', generation: 'draft-new', message: '新世代失败' })
+    source.emit({
+      type: 'draft-chunk', engineSessionId: 'qing-1', generation: 'draft-new',
+      chunkQingml: '<p>终态后污染</p>', accumulatedBlocks: ['<p>终态后污染</p>'], title: '污染', blocks: 1, words: 5,
+    })
+
+    expect(store.getSnapshot('dsh-generation-order')).toMatchObject({
+      streaming: false, qingml: '<p>新世代</p>', draftFailure: '新世代失败',
+    })
+    release()
+  })
+
   it('abort/failure 后退出 streaming，后续 loadState 不复活僵死流并保留失败注记', async () => {
     vi.stubGlobal('EventSource', FakeEventSource)
     const fetchMock = vi.fn(async () => Response.json(bridgeState()))
@@ -68,14 +125,15 @@ describe('QingClientStore 生成终态', () => {
     await vi.waitFor(() => expect(store.getSnapshot('dsh-1').state).toBeDefined())
     expect(store.hasPanelContent('dsh-1')).toBe(true)
     const source = FakeEventSource.instances[0]!
+    source.emit({ type: 'draft-started', engineSessionId: 'qing-1', generation: 'draft-abort' })
     source.emit({
-      type: 'draft-chunk', engineSessionId: 'qing-1', chunkQingml: '<p>半篇',
+      type: 'draft-chunk', engineSessionId: 'qing-1', generation: 'draft-abort', chunkQingml: '<p>半篇',
       accumulatedBlocks: ['<p>半篇</p>'], title: '测试稿', blocks: 1, words: 2,
     })
     expect(store.getSnapshot('dsh-1').streaming).toBe(true)
 
     source.emit({ type: 'binding-changed', binding: bridgeState().binding })
-    source.emit({ type: 'draft-failed', engineSessionId: 'qing-1', message: 'QingML 生成失败：用户已中止' })
+    source.emit({ type: 'draft-failed', engineSessionId: 'qing-1', generation: 'draft-abort', message: 'QingML 生成失败：用户已中止' })
 
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     await vi.waitFor(() => expect(store.getSnapshot('dsh-1').streaming).toBe(false))
@@ -145,8 +203,9 @@ describe('QingClientStore 生成终态', () => {
     const release = store.retain('dsh-commit')
     await vi.waitFor(() => expect(store.getSnapshot('dsh-commit').state).toBeDefined())
     await store.refreshPanel('dsh-commit', 'qing-1')
+    FakeEventSource.instances.at(-1)?.emit({ type: 'draft-started', engineSessionId: 'qing-1', generation: 'draft-commit' })
     FakeEventSource.instances.at(-1)?.emit({
-      type: 'draft-chunk', engineSessionId: 'qing-1', chunkQingml: '<p>在途</p>',
+      type: 'draft-chunk', engineSessionId: 'qing-1', generation: 'draft-commit', chunkQingml: '<p>在途</p>',
       accumulatedBlocks: ['<p>在途</p>'], title: '待审稿', blocks: 1, words: 2,
     })
     expect(store.getSnapshot('dsh-commit').streaming).toBe(true)
@@ -233,8 +292,9 @@ describe('QingClientStore 生成终态', () => {
     await vi.waitFor(() => expect(store.getSnapshot('dsh-generation').state).toBeDefined())
 
     const refresh = store.refreshPanel('dsh-generation', 'qing-1')
+    FakeEventSource.instances.at(-1)?.emit({ type: 'draft-started', engineSessionId: 'qing-1', generation: 'draft-new' })
     FakeEventSource.instances.at(-1)?.emit({
-      type: 'draft-chunk', engineSessionId: 'qing-1', chunkQingml: '<p>新世代</p>',
+      type: 'draft-chunk', engineSessionId: 'qing-1', generation: 'draft-new', chunkQingml: '<p>新世代</p>',
       accumulatedBlocks: ['<p>新世代</p>'], title: '测试稿', blocks: 1, words: 3,
     })
     panelResponse.resolve(Response.json({

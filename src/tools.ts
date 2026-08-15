@@ -2,13 +2,17 @@ import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage, type FinishReason } from '@deepseek-ai/dsh-llm'
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { aiBlocksToQingml, pmToAiIr, type PmDoc } from '@qingagent/pm-schema'
 import type { BindingStore } from './bindings.js'
 import type { BridgeHub } from './bridge.js'
 import type {
   ExternalDoc,
+  ExternalDocReadResponse,
+  ExternalEditProposalOp,
   ExternalProposalResponse,
   ExternalReviewCommitRequest,
   ExternalReviewCommitResponse,
+  ExternalReviewRenderModelResponse,
   SideModelConfig,
 } from './contracts.js'
 import { EngineHttpError, type EngineService } from './engine.js'
@@ -32,6 +36,10 @@ interface ToolServices {
 
 const textBlock = (text: string) => [{ type: 'text' as const, text }]
 
+const REVIEW_END_MESSAGE = '改动已提交审阅，右侧面板等待用户逐处裁决。本回合结束——不要重写、不要读稿复核、不要自动裁决'
+const REVIEW_REPEAT_ERROR = '本回合已裁决过一次，禁止连环裁决；等待用户指示'
+const REVIEW_PENDING_ERROR = '文稿正在审阅中。收到新的修改指令时，先用 ask_user 征询用户接受、放弃或继续逐处裁决当前待审稿。'
+
 const outlineSchema = {
   type: 'array' as const,
   items: { type: 'string' as const },
@@ -39,8 +47,11 @@ const outlineSchema = {
 
 export function registerTools(services: ToolServices): void {
   const { ctx } = services
+  const reviewTurns = new ReviewTurnTracker()
+  installReviewTurnTracking(ctx, reviewTurns)
   ctx.effect(() => ctx.tools.register(writeDraftTool(services)))
-  ctx.effect(() => ctx.tools.register(reviewCommitTool(services)))
+  ctx.effect(() => ctx.tools.register(editDraftTool(services)))
+  ctx.effect(() => ctx.tools.register(reviewCommitTool(services, reviewTurns)))
   ctx.effect(() => ctx.tools.register(readDraftTool(services)))
   ctx.effect(() => ctx.tools.register(listDocsTool(services)))
   ctx.effect(() => ctx.tools.register(focusDocTool(services)))
@@ -70,13 +81,15 @@ function writeDraftTool(services: ToolServices) {
           warning: { type: 'string', description: '落库块数与提交块数不符时的缺损警告。' },
         },
       },
-      render: (_args, value) => textBlock([
-        `青简文稿《${value.title}》已${value.status === 'committed' ? '提交' : '进入审阅'}。`,
-        `文稿引用：${value.engineSessionId}`,
-        `共 ${value.blocks} 个块，约 ${value.words} 字。`,
-        ...(typeof value.warning === 'string' ? [`⚠ ${value.warning}`] : []),
-        value.outline.length ? `提纲：\n${value.outline.map((line) => `- ${line}`).join('\n')}` : '提纲：暂无标题层级。',
-      ].join('\n')),
+      render: (_args, value) => value.status === 'review'
+        ? textBlock(REVIEW_END_MESSAGE)
+        : textBlock([
+          `青简文稿《${value.title}》已提交。`,
+          `文稿引用：${value.engineSessionId}`,
+          `共 ${value.blocks} 个块，约 ${value.words} 字。`,
+          ...(typeof value.warning === 'string' ? [`⚠ ${value.warning}`] : []),
+          value.outline.length ? `提纲：\n${value.outline.map((line) => `- ${line}`).join('\n')}` : '提纲：暂无标题层级。',
+        ].join('\n')),
       presentationMeta: (_args, value) => ({
         title: value.title,
         blocks: value.blocks,
@@ -92,69 +105,215 @@ function writeDraftTool(services: ToolServices) {
       kind: 'edit',
       rawInput: { brief: args.brief, ...(args.title ? { title: args.title } : {}), ...(args.style ? { style: args.style } : {}) },
     }),
-    presentResult: (_args, result) => ({
-      card: 'generic',
-      title: result.isError ? '青简写作未完成' : '青简文稿已生成',
-    }),
+    presentResult: (_args, result) => result.isError
+      ? failedResultPresentation('青简写作未完成', result.content)
+      : { card: 'generic', title: '青简文稿已生成' },
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
-      await assertEngineOnline(services.engine)
-      let bound
-      if (args.docRef) {
-        if (!services.bindings.hasDoc(dshSessionId, args.docRef)) {
-          throw new Error('docRef 不属于当前 DSH 会话。请先调用 qing_list_docs 获取可用文稿。')
-        }
-        bound = services.bindings.listDocs(dshSessionId).find((doc) => doc.engineSessionId === args.docRef)!
-        await services.bindings.setActive(dshSessionId, args.docRef)
-      } else {
-        bound = await services.bindings.createDoc(dshSessionId, args.title?.trim() || '未命名文稿')
-      }
-
-      const docBefore = await readDoc(services.engine, bound.engineSessionId)
-      if (docBefore.state === 'pendingReview') {
-        throw new Error('文稿正在审阅中（可先 qing_review_commit 全收/全弃后重写，或请用户处理）。')
-      }
-      const initialPrompt = makeDraftPrompt({ brief: args.brief, title: args.title, style: args.style })
-      let qingml: string
-      let proposal: ExternalProposalResponse
+      let generation = randomUUID()
       try {
-        qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, initialPrompt)
+        await assertEngineOnline(services.engine)
+        let bound
+        if (args.docRef) {
+          if (!services.bindings.hasDoc(dshSessionId, args.docRef)) {
+            throw new Error('docRef 不属于当前 DSH 会话。请先调用 qing_list_docs 获取可用文稿。')
+          }
+          bound = services.bindings.listDocs(dshSessionId).find((doc) => doc.engineSessionId === args.docRef)!
+          await services.bindings.setActive(dshSessionId, args.docRef)
+        } else {
+          bound = await services.bindings.createDoc(dshSessionId, args.title?.trim() || '未命名文稿')
+        }
+
+        const docBefore = await readDoc(services.engine, bound.engineSessionId)
+        if (docBefore.state === 'pendingReview') {
+          throw new Error(REVIEW_PENDING_ERROR)
+        }
+        const initialPrompt = makeDraftPrompt({ brief: args.brief, title: args.title, style: args.style })
+        let qingml: string
+        let proposal: ExternalProposalResponse
         try {
-          proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
+          qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, initialPrompt)
+          try {
+            proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
+          } catch (error) {
+            if (!(error instanceof EngineHttpError) || error.status !== 400 || !hasDiagnostic(error.body)) throw error
+            const retryPrompt = makeDraftPrompt({
+              brief: args.brief,
+              title: args.title,
+              style: args.style,
+              correction: correctionPrompt(qingml, error.body.diagnostic),
+            })
+            generation = randomUUID()
+            qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, retryPrompt)
+            proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
+          }
         } catch (error) {
-          if (!(error instanceof EngineHttpError) || error.status !== 400 || !hasDiagnostic(error.body)) throw error
-          const retryPrompt = makeDraftPrompt({
-            brief: args.brief,
-            title: args.title,
-            style: args.style,
-            correction: correctionPrompt(qingml, error.body.diagnostic),
+          services.bridge.emit(dshSessionId, {
+            type: 'draft-failed',
+            engineSessionId: bound.engineSessionId,
+            generation,
+            message: readableError(error),
           })
-          qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, retryPrompt)
-          proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
+          throw error
         }
-      } catch (error) {
-        services.bridge.emit(dshSessionId, {
-          type: 'draft-failed',
-          engineSessionId: bound.engineSessionId,
-          message: readableError(error),
-        })
-        throw error
-      }
 
+        try {
+          const official = await readDoc(services.engine, bound.engineSessionId)
+          const renderedQingml = proposal.status === 'review'
+            ? await readReviewCandidateQingml(services.engine, bound.engineSessionId)
+            : official.qingml ?? qingml
+          const title = official.title?.trim() || extractTitle(renderedQingml, args.title?.trim() || bound.title)
+          await services.bindings.updateTitle(dshSessionId, bound.engineSessionId, title)
+          // committed 用权威落库稿，review 用 render-model 候选稿；两者都避开本地生成文本与
+          // 引擎实际接受结构不一致时的误报。
+          const outline = outlineOf(renderedQingml, title)
+          const submittedBlocks = completeTopLevelBlocks(qingml).blocks
+            .filter((block) => !/^<title(?:\s|>)/i.test(block)).length
+          const lostBlocks = Math.max(0, submittedBlocks - outline.blocks)
+          if (proposal.status === 'committed') {
+            services.bridge.emit(dshSessionId, {
+              type: 'doc-committed',
+              engineSessionId: bound.engineSessionId,
+              generation,
+              doc: official,
+              blocks: outline.blocks,
+              words: outline.words,
+            })
+          } else {
+            services.bridge.emit(dshSessionId, {
+              type: 'doc-review-pending',
+              engineSessionId: bound.engineSessionId,
+              generation,
+              doc: official,
+              count: proposal.count,
+              blocks: outline.blocks,
+              words: outline.words,
+            })
+          }
+          if (proposal.status === 'review') exec.concludeTurn()
+          return {
+            title,
+            blocks: outline.blocks,
+            words: outline.words,
+            ...(lostBlocks > 0
+              ? { warning: `注意:提交了 ${submittedBlocks} 个块,落库仅 ${outline.blocks} 个——有 ${lostBlocks} 个块因 QingML 结构不合规被引擎剥除。请用 qing_read_draft 核对落库内容,缺失的部分需修正格式后重写。` }
+              : {}),
+            status: proposal.status,
+            engineSessionId: bound.engineSessionId,
+            outline: outline.headings.map((heading) => `${'  '.repeat(Math.max(0, heading.level - 1))}${heading.text}`),
+          }
+        } catch (error) {
+          services.bridge.emit(dshSessionId, {
+            type: 'draft-failed',
+            engineSessionId: bound.engineSessionId,
+            generation,
+            message: readableError(error),
+          })
+          throw error
+        }
+      } finally {
+        services.bridge.clearSelection(dshSessionId)
+      }
+    },
+  })
+}
+
+function editDraftTool(services: ToolServices) {
+  return defineTool({
+    name: 'qing_edit_draft',
+    description: '对已有青简文稿做结构化局部修改。改标题、改一句、插入一段或追加一节必须用本工具，严禁用 qing_write_draft 整篇重写。insertAfterLine 前先调用 qing_read_draft(mode:"lines") 取得当前 Markdown 行号。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
+    parameters: {
+      docRef: { type: 'string', description: '要局部修改的青简会话 ID；省略时使用当前激活文稿。' },
+      ops: {
+        type: 'array',
+        required: true,
+        description: '按顺序执行的局部操作；strReplace 的 nth 为从 1 开始的命中序号。',
+        items: {
+          oneOf: [
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                kind: { type: 'string', const: 'strReplace', required: true },
+                old: { type: 'string', required: true },
+                new: { type: 'string', required: true },
+                nth: { type: 'integer' },
+              },
+            },
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                kind: { type: 'string', const: 'insertAfterLine', required: true },
+                line: { type: 'integer', required: true },
+                markdown: { type: 'string', required: true },
+              },
+            },
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                kind: { type: 'string', const: 'appendSection', required: true },
+                markdown: { type: 'string', required: true },
+              },
+            },
+          ],
+        },
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          status: { type: 'string', enum: ['committed', 'review'], required: true },
+          message: { type: 'string', required: true },
+          engineSessionId: { type: 'string', required: true },
+          title: { type: 'string', required: true },
+          blocks: { type: 'integer', required: true },
+          words: { type: 'integer', required: true },
+          reviewCount: { type: 'integer', required: true },
+        },
+      },
+      render: (_args, value) => textBlock(value.message),
+      presentationMeta: (_args, value) => ({
+        status: value.status,
+        engineSessionId: value.engineSessionId,
+        title: value.title,
+        blocks: value.blocks,
+        words: value.words,
+        reviewCount: value.reviewCount,
+      }),
+    },
+    presentCall: () => ({ card: 'generic', title: '正在局部修改青简文稿', kind: 'edit' }),
+    presentResult: (_args, result) => result.isError
+      ? failedResultPresentation('青简局部修改未完成', result.content)
+      : { card: 'generic', title: '青简局部修改已提交' },
+    execute: async (args, exec) => {
+      const dshSessionId = sessionIdOf(exec)
       try {
-        const official = await readDoc(services.engine, bound.engineSessionId)
-        const title = official.title?.trim() || extractTitle(qingml, args.title?.trim() || bound.title)
-        await services.bindings.updateTitle(dshSessionId, bound.engineSessionId, title)
-        // 大纲/计数以引擎落库读回的权威 QingML 为准:生成文本中不合规的块会被引擎 fail-open
-        // 剥除,若仍按本地文本汇报,模型与用户都无从察觉落库结构缺损。
-        const outline = outlineOf(official.qingml ?? qingml, title)
-        const submittedBlocks = completeTopLevelBlocks(qingml).blocks
-          .filter((block) => !/^<title(?:\s|>)/i.test(block)).length
-        const lostBlocks = Math.max(0, submittedBlocks - outline.blocks)
+        await assertEngineOnline(services.engine)
+        const engineSessionId = resolveDocRef(services.bindings, dshSessionId, args.docRef)
+        await services.bindings.setActive(dshSessionId, engineSessionId)
+        const before = await readDocWithLines(services.engine, engineSessionId)
+        if (before.state === 'pendingReview') throw new Error(REVIEW_PENDING_ERROR)
+        if (before.state === 'empty') throw new Error('文稿尚无正文；请先用 qing_write_draft 起草完整文稿。')
+        const proposal = await proposeOps(
+          services.engine,
+          engineSessionId,
+          before.docVersion,
+          args.ops as ExternalEditProposalOp[],
+        )
+        const official = await readDoc(services.engine, engineSessionId)
+        const renderedQingml = proposal.status === 'review'
+          ? await readReviewCandidateQingml(services.engine, engineSessionId)
+          : official.qingml
+        const outline = outlineOf(renderedQingml, official.title)
+        await services.bindings.updateTitle(dshSessionId, engineSessionId, outline.title)
         if (proposal.status === 'committed') {
           services.bridge.emit(dshSessionId, {
             type: 'doc-committed',
-            engineSessionId: bound.engineSessionId,
+            engineSessionId,
             doc: official,
             blocks: outline.blocks,
             words: outline.words,
@@ -162,40 +321,36 @@ function writeDraftTool(services: ToolServices) {
         } else {
           services.bridge.emit(dshSessionId, {
             type: 'doc-review-pending',
-            engineSessionId: bound.engineSessionId,
+            engineSessionId,
             doc: official,
             count: proposal.count,
             blocks: outline.blocks,
             words: outline.words,
           })
+          exec.concludeTurn()
         }
         return {
-          title,
+          status: proposal.status,
+          message: proposal.status === 'review'
+            ? REVIEW_END_MESSAGE
+            : `局部修改已提交到《${outline.title}》。`,
+          engineSessionId,
+          title: outline.title,
           blocks: outline.blocks,
           words: outline.words,
-          ...(lostBlocks > 0
-            ? { warning: `注意:提交了 ${submittedBlocks} 个块,落库仅 ${outline.blocks} 个——有 ${lostBlocks} 个块因 QingML 结构不合规被引擎剥除。请用 qing_read_draft 核对落库内容,缺失的部分需修正格式后重写。` }
-            : {}),
-          status: proposal.status,
-          engineSessionId: bound.engineSessionId,
-          outline: outline.headings.map((heading) => `${'  '.repeat(Math.max(0, heading.level - 1))}${heading.text}`),
+          reviewCount: proposal.status === 'review' ? proposal.count : 0,
         }
-      } catch (error) {
-        services.bridge.emit(dshSessionId, {
-          type: 'draft-failed',
-          engineSessionId: bound.engineSessionId,
-          message: readableError(error),
-        })
-        throw error
+      } finally {
+        services.bridge.clearSelection(dshSessionId)
       }
     },
   })
 }
 
-function reviewCommitTool(services: ToolServices) {
+function reviewCommitTool(services: ToolServices, reviewTurns: ReviewTurnTracker) {
   return defineTool({
     name: 'qing_review_commit',
-    description: '全量接受或拒绝青简文稿的待审变更。仅当用户明确表达过覆盖/接受意图时才可调用；默认应让用户裁决。docRef 省略时使用活跃文稿。',
+    description: '全量接受或拒绝青简文稿的待审变更。仅当用户在原话中明确授权（如“直接改不用问”“全部接受”“全部放弃”）才可调用；默认必须让用户逐处裁决。审阅中收到新的修改指令时，先用 ask_user 征询用户如何处理当前待审稿，禁止擅自 accept_all/reject_all。同一 DSH 会话回合最多调用一次。docRef 省略时使用活跃文稿。',
     parameters: {
       docRef: { type: 'string', description: '青简会话 ID；省略时处理当前激活文稿。' },
       action: { type: 'string', enum: ['accept_all', 'reject_all'], required: true, description: 'accept_all 全部接受；reject_all 全部拒绝。' },
@@ -233,6 +388,7 @@ function reviewCommitTool(services: ToolServices) {
     }),
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
+      reviewTurns.assertFirstAdjudication(exec)
       await assertEngineOnline(services.engine)
       const engineSessionId = resolveDocRef(services.bindings, dshSessionId, args.docRef)
       const before = await readDoc(services.engine, engineSessionId)
@@ -282,10 +438,10 @@ function reviewCommitTool(services: ToolServices) {
 function readDraftTool(services: ToolServices) {
   return defineTool({
     name: 'qing_read_draft',
-    description: '读取当前会话绑定的青简文稿。默认只返回提纲和首句；只有确需全文时才用 full。',
+    description: '读取当前会话绑定的青简文稿。审阅态下 outline/full 默认读取尚未生效的待审候选；mode:"base" 才读取已提交基线。局部插入前用 mode:"lines" 取得已提交 Markdown 行号。',
     parameters: {
       docRef: { type: 'string', description: '青简会话 ID；省略时读取当前激活文稿。' },
-      mode: { type: 'string', enum: ['outline', 'full'], default: 'outline', description: 'outline 返回紧凑提纲，full 返回完整 QingML。' },
+      mode: { type: 'string', enum: ['outline', 'full', 'base', 'lines'], default: 'outline', description: 'outline 返回提纲；full 返回完整候选；base 返回已提交基线 QingML；lines 返回带行号的已提交 Markdown。' },
     },
     output: {
       schema: {
@@ -295,7 +451,7 @@ function readDraftTool(services: ToolServices) {
           title: { type: 'string', required: true },
           words: { type: 'integer', required: true },
           blocks: { type: 'integer', required: true },
-          mode: { type: 'string', enum: ['outline', 'full'], required: true },
+          mode: { type: 'string', enum: ['outline', 'full', 'base', 'lines'], required: true },
           content: { type: 'string', required: true },
           engineSessionId: { type: 'string', required: true },
         },
@@ -308,11 +464,34 @@ function readDraftTool(services: ToolServices) {
       const dshSessionId = sessionIdOf(exec)
       const engineSessionId = resolveDocRef(services.bindings, dshSessionId, args.docRef)
       const doc = await readDoc(services.engine, engineSessionId)
-      const outline = outlineOf(doc.qingml, doc.title)
       const mode = args.mode ?? 'outline'
-      const content = mode === 'full'
-        ? doc.qingml
-        : outline.headings.map((heading) => `${'#'.repeat(heading.level)} ${heading.text}${heading.firstSentence ? `\n${heading.firstSentence}` : ''}`).join('\n') || '暂无标题层级。'
+      if (mode === 'lines') {
+        const lined = await readDocWithLines(services.engine, engineSessionId)
+        const outline = outlineOf(doc.qingml, doc.title)
+        const notice = doc.state === 'pendingReview'
+          ? '以下行号对应已提交基线（不含待审候选）。\n'
+          : ''
+        return {
+          title: outline.title,
+          words: outline.words,
+          blocks: outline.blocks,
+          mode,
+          content: `${notice}${lined.markdownWithLineNumbers ?? lineNumbered(lined.markdown)}`,
+          engineSessionId,
+        }
+      }
+      const candidate = doc.state === 'pendingReview' && mode !== 'base'
+        ? await readReviewCandidateQingml(services.engine, engineSessionId)
+        : doc.qingml
+      const outline = outlineOf(candidate, doc.title)
+      const notice = doc.state === 'pendingReview' && mode !== 'base'
+        ? '以下为待审候选（尚未生效）；已提交基线请传 mode:"base"。\n'
+        : mode === 'base' && doc.state === 'pendingReview'
+          ? '以下为已提交基线（不含待审候选）。\n'
+          : ''
+      const content = mode === 'full' || mode === 'base'
+        ? `${notice}${candidate}`
+        : `${notice}${outline.headings.map((heading) => `${'#'.repeat(heading.level)} ${heading.text}${heading.firstSentence ? `\n${heading.firstSentence}` : ''}`).join('\n') || '暂无标题层级。'}`
       return { title: outline.title, words: outline.words, blocks: outline.blocks, mode, content, engineSessionId }
     },
   })
@@ -340,6 +519,7 @@ function listDocsTool(services: ToolServices) {
                 title: { type: 'string', required: true },
                 active: { type: 'boolean', required: true },
                 state: { type: 'string', required: true },
+                createdAt: { type: 'string', required: true },
               },
             },
           },
@@ -400,8 +580,10 @@ async function streamQingml(
   exec: ToolRunContext,
   dshSessionId: string,
   engineSessionId: string,
+  generation: string,
   prompt: string,
 ): Promise<string> {
+  services.bridge.emit(dshSessionId, { type: 'draft-started', engineSessionId, generation })
   const provider = exec.agent?.options.provider ?? services.sideModel?.provider
   const model = exec.agent?.options.model ?? services.sideModel?.model
   if (!provider || !model) {
@@ -432,6 +614,7 @@ async function streamQingml(
         services.bridge.emit(dshSessionId, {
           type: 'draft-chunk',
           engineSessionId,
+          generation,
           chunkQingml: completed.slice(emitted).join(''),
           accumulatedBlocks: completed,
           title: extractTitle(accumulated),
@@ -454,18 +637,48 @@ async function streamQingml(
 }
 
 async function propose(engine: EngineService, engineSessionId: string, expectedDocVersion: number, qingml: string): Promise<ExternalProposalResponse> {
+  return proposeOps(engine, engineSessionId, expectedDocVersion, [{ kind: 'qingmlDraft', qingml }])
+}
+
+function proposeOps(
+  engine: EngineService,
+  engineSessionId: string,
+  expectedDocVersion: number,
+  ops: ExternalEditProposalOp[] | Array<{ kind: 'qingmlDraft'; qingml: string }>,
+): Promise<ExternalProposalResponse> {
   return engine.fetchJson<ExternalProposalResponse>(`/sessions/${encodeURIComponent(engineSessionId)}/proposals`, {
     method: 'POST',
     body: JSON.stringify({
       expectedDocVersion,
       clientMutationId: `dsh-${randomUUID()}`,
-      ops: [{ kind: 'qingmlDraft', qingml }],
+      ops,
     }),
   })
 }
 
 function readDoc(engine: EngineService, engineSessionId: string): Promise<ExternalDoc> {
   return engine.fetchJson<ExternalDoc>(`/sessions/${encodeURIComponent(engineSessionId)}/doc?format=qingml`)
+}
+
+function readDocWithLines(engine: EngineService, engineSessionId: string): Promise<ExternalDocReadResponse> {
+  return engine.fetchJson<ExternalDocReadResponse>(`/sessions/${encodeURIComponent(engineSessionId)}/doc?lines=1`)
+}
+
+async function readReviewCandidateQingml(engine: EngineService, engineSessionId: string): Promise<string> {
+  const review = await engine.fetchJson<ExternalReviewRenderModelResponse>(
+    `/sessions/${encodeURIComponent(engineSessionId)}/review?format=render-model`,
+  )
+  const candidate = review.editedDoc ?? review.previewDoc
+  if (!candidate) throw new Error('青简待审候选缺少可读取的完整文档。请在右侧面板裁决当前变更。')
+  return serializePmQingml(candidate)
+}
+
+function serializePmQingml(doc: PmDoc): string {
+  return aiBlocksToQingml(pmToAiIr(doc).blocks)
+}
+
+function lineNumbered(markdown: string): string {
+  return markdown.split('\n').map((line, index) => `${String(index + 1).padStart(4)} | ${line}`).join('\n')
 }
 
 function sessionIdOf(exec: ToolRunContext): string {
@@ -496,4 +709,56 @@ function hasDiagnostic(body: unknown): body is { diagnostic: unknown } {
 
 function readableError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function failedResultPresentation(title: string, content: readonly unknown[]) {
+  const summary = failureSummary(content)
+  return {
+    card: 'generic' as const,
+    title,
+    ...(summary ? { content: textBlock(`未完成 · ${summary}`) } : {}),
+  }
+}
+
+function failureSummary(content: readonly unknown[]): string {
+  const text = content.flatMap((block) => {
+    if (!block || typeof block !== 'object') return []
+    const value = block as { type?: unknown; text?: unknown }
+    return value.type === 'text' && typeof value.text === 'string' ? [value.text] : []
+  }).join('\n').split(/\r?\n/, 1)[0]?.replace(/^Error:\s*/i, '').trim() ?? ''
+  if (/审阅|REVIEW_PENDING/i.test(text)) return '文稿审阅中'
+  if (/AGENT_BUSY|正在处理其他任务|引擎忙/i.test(text)) return '引擎忙'
+  return text.length > 48 ? `${text.slice(0, 47)}…` : text
+}
+
+class ReviewTurnTracker {
+  private readonly turns = new Map<string, number>()
+  private readonly adjudicated = new Map<string, string>()
+
+  begin(agentId: string, turn: number): void {
+    if (this.turns.get(agentId) === turn) return
+    this.turns.set(agentId, turn)
+    this.adjudicated.delete(agentId)
+  }
+
+  dispose(agentId: string): void {
+    this.turns.delete(agentId)
+    this.adjudicated.delete(agentId)
+  }
+
+  assertFirstAdjudication(exec: ToolRunContext): void {
+    const agentId = sessionIdOf(exec)
+    const turn = this.turns.get(agentId)
+    const key = turn === undefined ? `root:${String(exec.rootCallId)}` : `turn:${turn}`
+    if (this.adjudicated.get(agentId) === key) throw new Error(REVIEW_REPEAT_ERROR)
+    this.adjudicated.set(agentId, key)
+  }
+}
+
+function installReviewTurnTracking(ctx: Context, tracker: ReviewTurnTracker): void {
+  ctx.effect(() => ctx.on('agent/pre-step', async (payload, next) => {
+    tracker.begin(String(payload.agent.id), payload.turn)
+    return next()
+  }))
+  ctx.effect(() => ctx.on('agent/disposed', ({ agent }) => tracker.dispose(String(agent.id))))
 }

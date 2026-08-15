@@ -10,6 +10,8 @@ export function qingmlParse(text: string): {
   warnings: Array<Record<string, unknown>>
 }
 export function aiIrToPm(input: { blocks: Array<Record<string, unknown>> }): PmDoc
+export function pmToAiIr(doc: PmDoc): { blocks: Array<Record<string, unknown>> }
+export function aiBlocksToQingml(blocks: ReadonlyArray<Record<string, unknown>>): string
 
 export interface DocSuggestion {
   id: string
