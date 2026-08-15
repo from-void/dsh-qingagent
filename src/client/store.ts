@@ -34,6 +34,8 @@ export interface QingClientSnapshot {
   panelDoc?: ExternalPmDocReadResponse
   reviewModel?: ExternalReviewRenderModelResponse
   panelLoading?: boolean
+  /** 「重载」等显式放弃本地内容的操作递增它,面板据此强制重挂编辑器。 */
+  panelReloadNonce?: number
   saveState?: DocumentSaveState
   selection?: QingSelection
   error?: string
@@ -170,7 +172,11 @@ export class QingClientStore {
     return doc
   }
 
-  async refreshPanel(sessionId: string, engineSessionId: string): Promise<void> {
+  async refreshPanel(
+    sessionId: string,
+    engineSessionId: string,
+    options?: { bypassGuard?: boolean },
+  ): Promise<void> {
     const entry = this.entry(sessionId)
     const token = ++entry.panelLoadToken
     const switching = entry.snapshot.panelEngineSessionId !== engineSessionId
@@ -191,7 +197,11 @@ export class QingClientStore {
           )
         : undefined
       if (entry.panelLoadToken !== token) return
-      if (entry.snapshot.saveState?.kind === 'conflict') {
+      // 冲突封锁按文稿隔离:只有当前刷新的正是冲突稿才跳过应用,换稿刷新照常。
+      if (
+        entry.snapshot.saveState?.kind === 'conflict'
+        && entry.snapshot.saveState.engineSessionId === engineSessionId
+      ) {
         this.update(entry, {
           ...entry.snapshot,
           panelLoading: false,
@@ -199,8 +209,10 @@ export class QingClientStore {
         })
         return
       }
-      const shouldApply = await (entry.panelRefreshGuard?.beforeApply(engineSessionId, panelDoc)
-        ?? Promise.resolve(true))
+      const shouldApply = options?.bypassGuard
+        ? true
+        : await (entry.panelRefreshGuard?.beforeApply(engineSessionId, panelDoc)
+          ?? Promise.resolve(true))
       if (entry.panelLoadToken !== token) return
       if (!shouldApply) {
         this.update(entry, {
@@ -279,6 +291,19 @@ export class QingClientStore {
   setSaveState(sessionId: string, state: DocumentSaveState): void {
     const entry = this.entry(sessionId)
     this.update(entry, { ...entry.snapshot, saveState: state })
+  }
+
+  /** 青简同款「重载」出路:用户明确同意放弃本地未保存内容,拉服务器权威版本继续编辑。
+   *  绕过刷新守卫(守卫的职责是保护本地未保存内容,重载正是对它的显式放弃),
+   *  并递增 reloadNonce 强制编辑器重挂,确保纸面内容切到服务器版本。 */
+  async resolveConflictByReload(sessionId: string, engineSessionId: string): Promise<void> {
+    const entry = this.entry(sessionId)
+    this.update(entry, {
+      ...entry.snapshot,
+      saveState: { kind: 'idle' },
+      panelReloadNonce: (entry.snapshot.panelReloadNonce ?? 0) + 1,
+    })
+    await this.refreshPanel(sessionId, engineSessionId, { bypassGuard: true })
   }
 
   applySavedDocument(
@@ -574,14 +599,14 @@ export class QingClientStore {
   ): Promise<void> {
     if (
       entry.snapshot.panelEngineSessionId !== engineSessionId ||
-      hasConflictSaveState(entry.snapshot.saveState)
+      hasConflictSaveState(entry.snapshot.saveState, engineSessionId)
     ) return
     const shouldApply = await (entry.panelRefreshGuard?.beforeApply(engineSessionId, panelDoc)
       ?? Promise.resolve(true))
     if (
       !shouldApply ||
       entry.snapshot.panelEngineSessionId !== engineSessionId ||
-      hasConflictSaveState(entry.snapshot.saveState)
+      hasConflictSaveState(entry.snapshot.saveState, engineSessionId)
     ) return
     this.update(entry, {
       ...entry.snapshot,
@@ -647,8 +672,9 @@ function refreshSaveState(state: DocumentSaveState | undefined): DocumentSaveSta
   return state?.kind === 'conflict' ? state : { kind: 'idle' }
 }
 
-function hasConflictSaveState(state: DocumentSaveState | undefined): boolean {
-  return state?.kind === 'conflict'
+function hasConflictSaveState(state: DocumentSaveState | undefined, engineSessionId?: string): boolean {
+  if (state?.kind !== 'conflict') return false
+  return engineSessionId === undefined || state.engineSessionId === engineSessionId
 }
 
 function committedPanelDoc(

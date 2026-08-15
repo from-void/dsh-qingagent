@@ -267,7 +267,7 @@ describe('QingClientStore 生成终态', () => {
     })))
     await store.refreshPanel('dsh-conflict', 'qing-conflict')
     store.setSaveState('dsh-conflict', {
-      kind: 'conflict', expected: 1, actual: 2, message: '文档已被更新',
+      kind: 'conflict', engineSessionId: 'qing-conflict', expected: 1, actual: 2, message: '文档已被更新',
     })
     responsePm = remotePm
 
@@ -275,6 +275,50 @@ describe('QingClientStore 生成终态', () => {
 
     expect(store.getSnapshot('dsh-conflict').panelDoc?.pmDoc).toEqual(localPm)
     expect(store.getSnapshot('dsh-conflict').saveState).toMatchObject({ kind: 'conflict' })
+  })
+
+  it('冲突封锁按文稿隔离:切到别的文稿照常刷新,不跨稿传染', async () => {
+    const otherPm = {
+      type: 'doc', attrs: { schemaVersion: 1 },
+      content: [{ type: 'paragraph', attrs: { blockId: 'other' }, content: [{ type: 'text', text: '另一篇正文' }] }],
+    } as PmDoc
+    const store = new QingClientStore()
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => Response.json({
+      sessionId: String(input).includes('qing-other') ? 'qing-other' : 'qing-conflict',
+      docVersion: 1, contentHash: 'hash-other', state: 'editing',
+      agentBusy: false, title: '另一篇', ts: 't', pmDoc: otherPm,
+    })))
+    store.setSaveState('dsh-conflict-iso', {
+      kind: 'conflict', engineSessionId: 'qing-conflict', expected: 1, actual: 2, message: '文档已被更新',
+    })
+
+    await store.refreshPanel('dsh-conflict-iso', 'qing-other')
+
+    // 换稿刷新必须应用内容(不得白纸),另一篇的冲突态保留在原稿名下。
+    expect(store.getSnapshot('dsh-conflict-iso').panelDoc?.pmDoc).toEqual(otherPm)
+    expect(store.getSnapshot('dsh-conflict-iso').saveState).toMatchObject({
+      kind: 'conflict', engineSessionId: 'qing-conflict',
+    })
+  })
+
+  it('resolveConflictByReload 清除冲突并拉回服务器权威版本', async () => {
+    const remotePm = {
+      type: 'doc', attrs: { schemaVersion: 1 },
+      content: [{ type: 'paragraph', attrs: { blockId: 'remote' }, content: [{ type: 'text', text: '远端正文' }] }],
+    } as PmDoc
+    const store = new QingClientStore()
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      sessionId: 'qing-conflict', docVersion: 2, contentHash: 'hash-2', state: 'editing',
+      agentBusy: false, title: '冲突稿', ts: 't', pmDoc: remotePm,
+    })))
+    store.setSaveState('dsh-reload', {
+      kind: 'conflict', engineSessionId: 'qing-conflict', expected: 1, actual: 2, message: '文档已被更新',
+    })
+
+    await store.resolveConflictByReload('dsh-reload', 'qing-conflict')
+
+    expect(store.getSnapshot('dsh-reload').saveState).toMatchObject({ kind: 'idle' })
+    expect(store.getSnapshot('dsh-reload').panelDoc?.pmDoc).toEqual(remotePm)
   })
 
   it('refreshPanel 在途若收到更新 draft-chunk，保留 streaming 世代', async () => {

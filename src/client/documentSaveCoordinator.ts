@@ -13,7 +13,7 @@ export type DocumentSaveState =
   | { kind: 'idle' }
   | { kind: 'saving' }
   | { kind: 'saved'; version: number }
-  | { kind: 'conflict'; expected: number; actual: number; message: string }
+  | { kind: 'conflict'; engineSessionId: string; expected: number; actual: number; message: string }
   | { kind: 'blocked'; code: 'AGENT_BUSY' | 'REVIEW_PENDING'; message: string }
   | { kind: 'error'; message: string; transient: boolean }
 
@@ -261,7 +261,13 @@ export class DocumentSaveCoordinator {
       return
     }
     const message = `保存冲突：文稿已从 v${expected} 更新到 v${actual}，已暂停编辑以保护两边内容。`
-    this.failCurrent(new Error(message), { kind: 'conflict', expected, actual, message })
+    this.failCurrent(new Error(message), {
+      kind: 'conflict',
+      engineSessionId: write.engineSessionId,
+      expected,
+      actual,
+      message,
+    })
   }
 
   private failCurrent(error: Error, state: DocumentSaveState): void {

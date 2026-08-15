@@ -397,7 +397,7 @@ describe('QingDocPanel 顶栏状态', () => {
   it('只报告写作、审阅和保存异常', () => {
     expect(panelStatus({ ...base, busy: true, saveState: { kind: 'idle' } })).toBe('写作中 · 约128字')
     expect(panelStatus({ ...base, pendingReview: true, saveState: { kind: 'idle' } })).toBe('审阅中·2处')
-    expect(panelStatus({ ...base, saveState: { kind: 'conflict', expected: 1, actual: 2, message: '' } }))
+    expect(panelStatus({ ...base, saveState: { kind: 'conflict', engineSessionId: 'qing-1', expected: 1, actual: 2, message: '' } }))
       .toBe('保存冲突·已暂停编辑')
     expect(panelStatus({ ...base, saveState: { kind: 'blocked', code: 'AGENT_BUSY', message: '' } }))
       .toBe('青简处理中')

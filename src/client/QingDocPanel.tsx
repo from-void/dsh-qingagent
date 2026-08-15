@@ -178,7 +178,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
   useEffect(() => qingClientStore.registerPanelRefreshGuard(sessionId, {
     beforeApply: async (engineSessionId, incomingPanelDoc) => {
       const currentSnapshot = snapshotRef.current
-      if (currentSnapshot.saveState?.kind === 'conflict') return false
+      // 冲突态只封锁冲突那一篇;切到别的文稿必须照常刷新,否则跨稿传染成白纸。
+      if (
+        currentSnapshot.saveState?.kind === 'conflict'
+        && currentSnapshot.saveState.engineSessionId === engineSessionId
+      ) return false
       const mountedEngineSessionId = editorEngineSessionIdRef.current
       if (!mountedEngineSessionId || mountedEngineSessionId !== engineSessionId) {
         await flushPendingDocSave()
@@ -218,7 +222,13 @@ export function QingDocPanel(props: QingDocPanelProps) {
           }),
           'streamConflict',
         )
-        qingClientStore.setSaveState(sessionId, { kind: 'conflict', expected, actual, message })
+        qingClientStore.setSaveState(sessionId, {
+          kind: 'conflict',
+          engineSessionId,
+          expected,
+          actual,
+          message,
+        })
         return false
       }
       return false
@@ -316,7 +326,12 @@ export function QingDocPanel(props: QingDocPanelProps) {
     panelDoc.state === 'pendingReview' || snapshot.reviewModel !== undefined
   ))
   const busy = snapshot.streaming || panelDoc?.agentBusy === true || activeBound?.agentBusy === true
-  const saveState = snapshot.saveState ?? ({ kind: 'idle' } satisfies DocumentSaveState)
+  // 冲突态按文稿隔离:别的文稿的冲突不影响当前稿的编辑与状态显示。
+  const rawSaveState = snapshot.saveState ?? ({ kind: 'idle' } satisfies DocumentSaveState)
+  const saveState: DocumentSaveState =
+    rawSaveState.kind === 'conflict' && rawSaveState.engineSessionId !== activeEngineSessionId
+      ? { kind: 'idle' }
+      : rawSaveState
   useEffect(() => {
     if (saveState.kind !== 'saving') {
       setShowSavingStatus(false)
@@ -679,6 +694,14 @@ export function QingDocPanel(props: QingDocPanelProps) {
             onSelect={handleFocusDocument}
           />
           <span className="qingdoc-status" data-kind={saveState.kind} role="status">{toast ?? statusLabel}</span>
+          {saveState.kind === 'conflict' && activeEngineSessionId ? (
+            <button
+              type="button"
+              className="qingdoc-conflict-reload"
+              title="文档已被更新，重载服务器版本后继续编辑"
+              onClick={() => { void qingClientStore.resolveConflictByReload(sessionId, activeEngineSessionId) }}
+            >重载</button>
+          ) : null}
         </div>
         <div className="qingdoc-host-actions">
           {activeEngineSessionId ? (
@@ -701,6 +724,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
           <div className="ws-document-content" data-wf="WorkspaceHydrationDocumentContent">
             <AssetBridgeProvider context={assetContext}>
               <DocumentSnapshotView
+                key={`${assetSessionId ?? 'empty'}:${snapshot.panelReloadNonce ?? 0}`}
                 ref={setDocViewHandle}
                 doc={surfaceDoc}
                 docId={assetSessionId ?? `dsh:${sessionId}:empty`}
@@ -874,9 +898,19 @@ function QingDocSwitcher(props: QingDocSwitcherProps) {
                 onMouseEnter={() => setFocusedIndex(index)}
                 onClick={() => selectAt(index)}
               >
-                <span className="qingdoc-doc-mark" aria-hidden="true">{current ? '✓' : ''}</span>
+                <span className="qingdoc-doc-mark" aria-hidden="true">
+                  {current ? (
+                    <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
+                      <path d="M2.5 6.5 L5 9 L9.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : null}
+                </span>
                 <span className="qingdoc-doc-option-title">{doc.title}</span>
-                <span className="qingdoc-doc-state" data-active={status !== 'idle' ? 'true' : undefined} aria-hidden="true" />
+                {status !== 'idle' ? (
+                  <span className="qingdoc-doc-state-label" aria-hidden="true">
+                    {status === 'writing' ? '写作中' : '审阅中'}
+                  </span>
+                ) : null}
               </button>
             )
           })}

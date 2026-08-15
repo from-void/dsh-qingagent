@@ -164,7 +164,7 @@
   width: 100%;
   min-height: 34px;
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 8px;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px;
   padding: 6px 8px;
@@ -185,25 +185,21 @@
   color: var(--dsw-alias-brand-primary);
 }
 [data-qingagent-doc-panel] .qingdoc-doc-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--dsw-alias-brand-primary);
-  text-align: center;
 }
 [data-qingagent-doc-panel] .qingdoc-doc-option-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-[data-qingagent-doc-panel] .qingdoc-doc-state {
-  width: 6px;
-  height: 6px;
-  box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-border-l3);
-  border-radius: 50%;
-  background: transparent;
-}
-[data-qingagent-doc-panel] .qingdoc-doc-state[data-active="true"] {
-  border-color: var(--dsw-alias-brand-primary);
-  background: var(--dsw-alias-brand-primary);
+[data-qingagent-doc-panel] .qingdoc-doc-state-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--dsw-alias-label-caption);
+  white-space: nowrap;
 }
 [data-qingagent-doc-panel] .qingdoc-status {
   min-width: 0;
@@ -230,6 +226,21 @@
   padding: 0 8px;
   text-decoration: none;
   white-space: nowrap;
+}
+[data-qingagent-doc-panel] .qingdoc-conflict-reload {
+  min-height: 24px;
+  margin-left: 8px;
+  padding: 0 10px;
+  color: #e6bd86;
+  border: 1px solid rgba(230, 189, 134, .45);
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+[data-qingagent-doc-panel] .qingdoc-conflict-reload:hover {
+  background: rgba(230, 189, 134, .12);
 }
 [data-qingagent-doc-panel] .qingdoc-open-icon {
   width: 18px;
