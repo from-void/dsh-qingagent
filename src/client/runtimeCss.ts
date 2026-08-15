@@ -24,6 +24,11 @@ const RUNTIME_CSS = `
   background-clip: padding-box;
 }
 [data-qingagent-doc-panel] .ws-right::-webkit-scrollbar-track { background: transparent; }
+/* P20:超长标题(百字级)与长英文串强制可折行,防纸面横向溢出裁切正文。 */
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) :is(h1, h2, h3) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 `
 
 export function ensureQingdocRuntimeCss(): void {

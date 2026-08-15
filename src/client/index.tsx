@@ -11,6 +11,26 @@ import { qingClientStore } from './store.js'
 export const name = 'dsh-qingagent-client'
 export const inject = ['slots', 'layout', 'sessions', 'conversation']
 
+// P26:会话名条件跟随纸面标题。记录插件上次写入的会话名;一旦用户手动改名(当前名≠上次
+// 写入值)即永久脱离跟随,绝不覆盖用户命名。localStorage 持久化,跨 tab/重载一致。
+const SYNCED_TITLE_PREFIX = 'qingagent.syncedSessionTitle.'
+
+function readSyncedTitle(sessionId: string): string | undefined {
+  try {
+    return window.localStorage.getItem(SYNCED_TITLE_PREFIX + sessionId) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+function writeSyncedTitle(sessionId: string, title: string): void {
+  try {
+    window.localStorage.setItem(SYNCED_TITLE_PREFIX + sessionId, title)
+  } catch {
+    // 存储不可用时本次会话内仍靠内存值跟随。
+  }
+}
+
 export function apply(ctx: ClientContext): void {
   // Cordis 的 get() 在类型上允许服务未就绪；本插件的 inject 已把三者声明为启动前置。
   const slots = ctx.get('slots')!
@@ -55,6 +75,32 @@ export function apply(ctx: ClientContext): void {
       }
     }
 
+    let renameInFlight = false
+    const syncSessionTitle = () => {
+      const sessionId = currentSessionId
+      if (!sessionId || renameInFlight) return
+      const docTitle = qingClientStore.getSnapshot(sessionId).activeDoc?.title?.trim()
+      if (!docTitle) return
+      const list = sessions.list.getSnapshot()
+      const row = list.byId[sessionId as keyof typeof list.byId]
+      if (!row || row.displayTitle === docTitle) return
+      const lastSynced = readSyncedTitle(sessionId)
+      // 跟随条件:此前一直由插件跟随(当前名===上次写入),或从未同步过(首稿即接管自动名)。
+      // 用户手动改过名(当前名≠上次写入)则永久脱离,不覆盖。
+      if (lastSynced !== undefined && row.displayTitle !== lastSynced) return
+      const binding = sessions.binding(sessionId as Parameters<typeof sessions.binding>[0]) as
+        | { session?: { rename(title: string): Promise<unknown> } }
+        | undefined
+      if (!binding?.session) return
+      renameInFlight = true
+      void binding.session.rename(docTitle)
+        .then(() => writeSyncedTitle(sessionId, docTitle))
+        .catch((error) => console.warn('[qingagent] 会话名跟随失败', error))
+        .finally(() => {
+          renameInFlight = false
+        })
+    }
+
     const syncCurrentSession = () => {
       const nextSessionId = sessions.list.getSnapshot().current
       if (nextSessionId === currentSessionId) return
@@ -66,7 +112,10 @@ export function apply(ctx: ClientContext): void {
       disposePanel = undefined
       currentSessionId = nextSessionId === undefined ? undefined : String(nextSessionId)
       if (currentSessionId) {
-        unsubscribeStore = qingClientStore.subscribe(currentSessionId, syncPanelRegistration)
+        unsubscribeStore = qingClientStore.subscribe(currentSessionId, () => {
+          syncPanelRegistration()
+          syncSessionTitle()
+        })
         releaseSession = qingClientStore.retain(currentSessionId)
       }
       syncPanelRegistration()

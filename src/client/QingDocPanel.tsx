@@ -63,6 +63,10 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const sessionId = String(props.useSession((session) => session.sessionId))
   // 用户拍板:agent 回合进行中(含思考与工具调用间隙)禁止用户在纸面输入,防并发覆盖。
   const turnRunning = Boolean(props.useSession((session) => session.running))
+  // P24:活动问答卡(AskUser)期间回流消息由 dsh 排队不丢,但观感是「推不进」;据此提示。
+  const hasPendingInteraction = Boolean(props.useSession((session) => (session.pending?.length ?? 0) > 0))
+  const hasPendingInteractionRef = useRef(hasPendingInteraction)
+  hasPendingInteractionRef.current = hasPendingInteraction
   const snapshot = useSyncExternalStore(
     (listener) => qingClientStore.subscribe(sessionId, listener),
     () => qingClientStore.getSnapshot(sessionId),
@@ -358,14 +362,30 @@ export function QingDocPanel(props: QingDocPanelProps) {
     return () => window.clearTimeout(timer)
   }, [saveState.kind])
   const saveLocked = saveState.kind === 'conflict' || saveState.kind === 'blocked'
+  // P19:释放迟滞——running 契约上覆盖整个回合,但实测(r15a/r12b/r14b)在「工具结果返回→
+  // 模型续思」窗口会瞬时翻 false 开闸;翻 false 后压 1.5s 再释放,兜住状态机瞬跳与事件乱序。
+  const [lockHysteresis, setLockHysteresis] = useState(false)
+  useEffect(() => {
+    if (turnRunning) {
+      setLockHysteresis(true)
+      return
+    }
+    if (!lockHysteresis) return
+    const timer = window.setTimeout(() => setLockHysteresis(false), 1500)
+    return () => window.clearTimeout(timer)
+  }, [turnRunning, lockHysteresis])
+  const turnRunningEffective = turnRunning || lockHysteresis
   const interactiveEditable = Boolean(
     panelDoc &&
     !busy &&
-    !turnRunning &&
+    !turnRunningEffective &&
     !pendingReview &&
     !saveLocked &&
     (panelDoc.state === 'editing' || panelDoc.state === 'empty'),
   )
+  // P27:供 handleEditorChange 等稳定回调实时判交互态,拦下程序化触发的保存。
+  const interactiveEditableRef = useRef(interactiveEditable)
+  interactiveEditableRef.current = interactiveEditable
   const reviewPresentation = useMemo(
     () => panelDoc && snapshot.reviewModel
       ? buildReviewPresentationModel(panelDoc, snapshot.reviewModel)
@@ -396,6 +416,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const handleEditorChange = useCallback((doc: PmDoc, baseline?: DocWriteBaseline) => {
     const engineSessionId = editorEngineSessionIdRef.current
     if (!baseline || !engineSessionId || !saveCoordinatorRef.current) return Promise.resolve()
+    // P27 纵深防御:prop 门(onEditorChange 仅交互态传入)拦不住 blockId 自愈 effect 与
+    // flushPendingDocSave 的直呼——非交互可编辑状态(审阅/回合中/冲突)下的保存一律丢弃。
+    // 注意:不按「基线落后于最新版本」丢弃——用户输入后卸载/切稿的合法 flush 也可能带旧
+    // 基线,追尾由保存协调器的静默重放消化;自愈回声写入的根治在 qingweb 侧(自愈用新基线)。
+    if (!interactiveEditableRef.current) return Promise.resolve()
     return saveCoordinatorRef.current.enqueue(engineSessionId, doc, baseline)
   }, [])
 
@@ -594,7 +619,10 @@ export function QingDocPanel(props: QingDocPanelProps) {
         rejectedCount: hunks.filter((hunk) => hunk.verdict === 'rejected').length,
         hunks,
       }
-      void props.qingSendMessage(sessionId, serializeReviewOutcome(outcome)).catch((error) => {
+      void props.qingSendMessage(sessionId, serializeReviewOutcome(outcome)).then(() => {
+        // 消息已 durable 入队;有未裁决问答卡时对话流暂不显示,说明去向以免误判丢失。
+        if (hasPendingInteractionRef.current) setToast('审核结果已排队,回答当前问题卡后会送达对话')
+      }).catch((error) => {
         console.error('[qingagent-panel] review outcome push failed', error)
         setToast('审阅结果回流对话失败')
       })

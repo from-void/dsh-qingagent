@@ -46,11 +46,12 @@ export interface QingClientSnapshot {
 }
 
 interface SessionEntry {
+  sessionId: string
   snapshot: QingClientSnapshot
   listeners: Set<() => void>
   source?: EventSource
   refs: number
-  /** 用户点 × 显式关闭面板;新内容事件或「查看」重开时清除。 */
+  /** 用户点 × 显式关闭面板;新内容事件或「查看」重开时清除。关闭位跟随会话(localStorage 持久化+跨 tab 同步)。 */
   panelClosed?: boolean
   openers: Set<() => void>
   loading?: Promise<void>
@@ -81,8 +82,43 @@ const EMPTY: QingClientSnapshot = {
   bindingCount: 0,
 }
 
+const PANEL_CLOSED_KEY_PREFIX = 'qingagent.panelClosed.'
+
+function readStoredPanelClosed(sessionId: string): boolean {
+  try {
+    return window.localStorage.getItem(PANEL_CLOSED_KEY_PREFIX + sessionId) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeStoredPanelClosed(sessionId: string, closed: boolean): void {
+  try {
+    if (closed) window.localStorage.setItem(PANEL_CLOSED_KEY_PREFIX + sessionId, '1')
+    else window.localStorage.removeItem(PANEL_CLOSED_KEY_PREFIX + sessionId)
+  } catch {
+    // 存储不可用时退化为纯内存关闭位。
+  }
+}
+
 export class QingClientStore {
   private readonly entries = new Map<string, SessionEntry>()
+
+  constructor() {
+    // P21:关闭位跟随会话——别的 tab 关/开面板经 storage 事件同步过来,防跨 tab 自动重开。
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', (event) => {
+        if (!event.key?.startsWith(PANEL_CLOSED_KEY_PREFIX)) return
+        const sessionId = event.key.slice(PANEL_CLOSED_KEY_PREFIX.length)
+        const entry = this.entries.get(sessionId)
+        if (!entry) return
+        const closed = event.newValue === '1'
+        if (Boolean(entry.panelClosed) === closed) return
+        entry.panelClosed = closed || undefined
+        this.update(entry, entry.snapshot)
+      })
+    }
+  }
 
   getSnapshot(sessionId: string): QingClientSnapshot {
     return this.entries.get(sessionId)?.snapshot ?? EMPTY
@@ -105,6 +141,7 @@ export class QingClientStore {
   closePanel(sessionId: string): void {
     const entry = this.entry(sessionId)
     entry.panelClosed = true
+    writeStoredPanelClosed(sessionId, true)
     this.update(entry, entry.snapshot)
   }
 
@@ -122,6 +159,7 @@ export class QingClientStore {
     const entry = this.entry(sessionId)
     if (!entry.panelClosed) return
     entry.panelClosed = false
+    writeStoredPanelClosed(sessionId, false)
     this.update(entry, entry.snapshot)
   }
 
@@ -473,11 +511,13 @@ export class QingClientStore {
     let entry = this.entries.get(sessionId)
     if (!entry) {
       entry = {
+        sessionId,
         snapshot: EMPTY,
         listeners: new Set(),
         refs: 0,
         openers: new Set(),
         panelLoadToken: 0,
+        panelClosed: readStoredPanelClosed(sessionId) || undefined,
       }
       this.entries.set(sessionId, entry)
     }
@@ -643,13 +683,15 @@ export class QingClientStore {
       return
     }
     if (event.type === 'binding-changed') {
+      // 绑定文档数增加=有新稿加入,可唤回关闭的面板;数量不变的绑定重放属被动事件。
+      const bindingGrew = event.binding.docs.length > entry.snapshot.bindingCount
       this.update(entry, {
         ...entry.snapshot,
         state: entry.snapshot.state ? { ...entry.snapshot.state, binding: event.binding } : undefined,
         bindingCount: event.binding.docs.length,
         activeEngineSessionId: event.binding.activeEngineSessionId,
       })
-      if (event.binding.docs.length) this.open(entry)
+      if (event.binding.docs.length) this.open(entry, bindingGrew)
       void this.loadState(sessionId, entry, entry.snapshot.streaming)
       return
     }
@@ -685,7 +727,7 @@ export class QingClientStore {
             : { panelEngineSessionId: undefined, panelDoc: undefined, reviewModel: undefined }),
           error: undefined,
         })
-        if (state.binding.docs.length) this.open(entry)
+        if (state.binding.docs.length) this.open(entry, false)
       } catch (error) {
         this.update(entry, { ...entry.snapshot, error: readableError(error) })
       } finally {
@@ -726,10 +768,13 @@ export class QingClientStore {
     for (const listener of entry.listeners) listener()
   }
 
-  private open(entry: SessionEntry): void {
-    // 新内容(写作开始等)自动重开被 × 关闭的面板。
+  private open(entry: SessionEntry, reclaim = true): void {
+    // 只有真·新内容事件(写作流/落库/进审)允许唤回被 × 关闭的面板;
+    // 被动加载(loadState 重放/绑定快照)不清关闭位,否则 tab 切换重连即自动重开(P21)。
     if (entry.panelClosed) {
+      if (!reclaim) return
       entry.panelClosed = false
+      writeStoredPanelClosed(entry.sessionId, false)
       this.update(entry, entry.snapshot)
     }
     for (const opener of entry.openers) opener()

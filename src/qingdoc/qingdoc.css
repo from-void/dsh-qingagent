@@ -3523,7 +3523,7 @@
   --bg-canvas: var(--bg-paper-deep);
 }
 
-/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:3178-3493 */
+/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:3193-3508 */
 /* 审阅态 diff 当前定位只保留 workspace.css 的绿色加深;不再加赭金描边 / 外发光。 */
 
 /* —— 文末落款:正文末尾续奶白纸,竖排两列「作于{干支年月初几} | 成文{中文数字}字+印章」——

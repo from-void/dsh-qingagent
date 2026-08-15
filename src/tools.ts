@@ -97,13 +97,16 @@ function writeDraftTool(services: ToolServices) {
           words: { type: 'integer', required: true },
           status: { type: 'string', enum: ['committed', 'review'], required: true },
           engineSessionId: { type: 'string', required: true },
+          docVersion: { type: 'integer', required: true },
+          patchCount: { type: 'integer', description: 'review 态的待裁决处数。' },
           outline: { ...outlineSchema, required: true },
           warning: { type: 'string', description: '落库块数与提交块数不符时的缺损警告。' },
         },
       },
       render: (_args, value) => value.status === 'review'
-        ? textBlock(REVIEW_END_MESSAGE)
+        ? textBlock(`【文稿状态】审阅中·${value.patchCount ?? '若干'} 处待用户裁决(基线 v${value.docVersion})。\n${REVIEW_END_MESSAGE}`)
         : textBlock([
+          `【文稿状态】已落库生效 v${value.docVersion},无待审稿。`,
           `青简文稿《${value.title}》已提交。`,
           // 反幻觉锚点:committed 必须明确否定审阅态,防模型把审阅纪律泛化脑补(实测幻觉案例)。
           `文稿已直接落库生效,当前不在审阅态,没有任何待审稿,可以立即继续修改。`,
@@ -222,6 +225,8 @@ function writeDraftTool(services: ToolServices) {
               : {}),
             status: proposal.status,
             engineSessionId: bound.engineSessionId,
+            docVersion: official.docVersion,
+            ...(proposal.status === 'review' ? { patchCount: proposal.count } : {}),
             outline: outline.headings.map((heading) => `${'  '.repeat(Math.max(0, heading.level - 1))}${heading.text}`),
           }
         } catch (error) {

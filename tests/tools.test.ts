@@ -222,7 +222,7 @@ describe('qing_write_draft', () => {
     expect(new Set(generationEvents.map(({ event }) => 'generation' in event ? event.generation : undefined)).size).toBe(1)
     expect(fixture.tools.get('qing_write_draft')!.output?.render({}, result as never)).toEqual([{
       type: 'text',
-      text: '改动已提交审阅，右侧面板等待用户逐处裁决。本回合结束——不要重写、不要读稿复核、不要自动裁决',
+      text: '【文稿状态】审阅中·1 处待用户裁决(基线 v1)。\n改动已提交审阅，右侧面板等待用户逐处裁决。本回合结束——不要重写、不要读稿复核、不要自动裁决',
     }])
   })
 
