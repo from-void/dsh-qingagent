@@ -21,7 +21,7 @@ const NODE_BUILTINS = new Set([...builtinModules, ...builtinModules.map((id) => 
 const INLINE_SAFE = /^@deepseek-ai\/dsh-(session|llm|tools|brand)(\/|$)/
 const CSS_PREFIX = '\0dsh-qing-css:'
 const CSS_SUFFIX = '.mjs'
-const QING_ROOT = '/home/jimmy/proj/qingagent/main'
+const QING_ROOT = '/home/jimmy/proj/qingagent/wt/dsh-bridge'
 const QING_WEB_SOURCE = `${QING_ROOT}/apps/web/src`
 const QING_SYSTEM_SOURCE = `${QING_WEB_SOURCE}/system`
 const QING_PANEL_SELECTOR = '[data-qingagent-doc-panel]'

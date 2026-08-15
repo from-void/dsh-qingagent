@@ -1,11 +1,13 @@
 import { EventEmitter } from 'node:events'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { Readable } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import type { BindingStore } from '../src/bindings.js'
 import { BridgeHub } from '../src/bridge.js'
 import type { ExternalDoc, SessionBinding } from '../src/contracts.js'
 import type { EngineService } from '../src/engine.js'
+import { EngineHttpError } from '../src/engine.js'
 
 interface CapturedResponse {
   status?: number
@@ -32,8 +34,13 @@ function response(): CapturedResponse {
   }
 }
 
-function request(method: string, url: string, remoteAddress = '127.0.0.1'): IncomingMessage & EventEmitter {
-  const req = new EventEmitter() as IncomingMessage & EventEmitter
+function request(
+  method: string,
+  url: string,
+  remoteAddress = '127.0.0.1',
+  body?: unknown,
+): IncomingMessage & EventEmitter {
+  const req = (body === undefined ? new EventEmitter() : Readable.from([JSON.stringify(body)])) as IncomingMessage & EventEmitter
   Object.assign(req, { method, url, socket: { remoteAddress } })
   return req
 }
@@ -117,6 +124,102 @@ describe('BridgeHub', () => {
     expect(res.status).toBe(404)
     expect(JSON.parse(res.body)).toEqual({ error: '文稿不属于当前 DSH 会话。' })
     expect(engine.fetchJson).not.toHaveBeenCalled()
+    dispose()
+  })
+
+  it('PM 文档、审阅渲染模型与 verdict/commit 均按绑定会话代理到 external API', async () => {
+    const binding = {
+      docs: [{ engineSessionId: 'qing-a', title: 'A', createdAt: '2026-08-15T00:00:00.000Z' }],
+      activeEngineSessionId: 'qing-a',
+    }
+    const { handler, engine, dispose } = fixture({ 'dsh-a': binding })
+    const fetchJson = vi.mocked(engine.fetchJson)
+    fetchJson.mockImplementation(async (path) => ({ path }))
+
+    const pm = response()
+    await handler(
+      request('GET', '/qingagent-bridge/doc-pm?dshSessionId=dsh-a&engineSessionId=qing-a'),
+      pm as unknown as ServerResponse,
+    )
+    expect(pm.status).toBe(200)
+    expect(fetchJson).toHaveBeenCalledWith('/sessions/qing-a/doc?format=pm')
+
+    const review = response()
+    await handler(
+      request('GET', '/qingagent-bridge/review-render-model?dshSessionId=dsh-a&engineSessionId=qing-a'),
+      review as unknown as ServerResponse,
+    )
+    expect(fetchJson).toHaveBeenCalledWith('/sessions/qing-a/review?format=render-model')
+
+    const verdictBody = { expectedDocVersion: 3, patchId: 'p-1', verdict: 'rejected' }
+    const verdict = response()
+    await handler(
+      request(
+        'POST',
+        '/qingagent-bridge/review-verdicts?dshSessionId=dsh-a&engineSessionId=qing-a',
+        '127.0.0.1',
+        verdictBody,
+      ),
+      verdict as unknown as ServerResponse,
+    )
+    expect(fetchJson).toHaveBeenCalledWith('/sessions/qing-a/review/verdicts', {
+      method: 'POST', body: JSON.stringify(verdictBody),
+    })
+
+    const commitBody = { expectedDocVersion: 3, action: 'commit' }
+    const commit = response()
+    await handler(
+      request(
+        'POST',
+        '/qingagent-bridge/review-commit?dshSessionId=dsh-a&engineSessionId=qing-a',
+        '127.0.0.1',
+        commitBody,
+      ),
+      commit as unknown as ServerResponse,
+    )
+    expect(fetchJson).toHaveBeenCalledWith('/sessions/qing-a/review/commit', {
+      method: 'POST', body: JSON.stringify(commitBody),
+    })
+    dispose()
+  })
+
+  it('直写完整透传 frozen baseline，并保留引擎 409 冲突响应', async () => {
+    const binding = {
+      docs: [{ engineSessionId: 'qing-a', title: 'A', createdAt: '2026-08-15T00:00:00.000Z' }],
+      activeEngineSessionId: 'qing-a',
+    }
+    const { handler, engine, dispose } = fixture({ 'dsh-a': binding })
+    const write = {
+      expectedDocumentSnapshot: 7,
+      baseContentHash: 'hash-7',
+      clientMutationId: 'mutation-1',
+      doc: { type: 'doc', attrs: { schemaVersion: 1 }, content: [] },
+    }
+    vi.mocked(engine.fetchJson).mockRejectedValueOnce(new EngineHttpError(409, {
+      ok: false,
+      clientMutationId: 'mutation-1',
+      code: 'VERSION_CONFLICT',
+      conflict: { expected: 7, actual: 8 },
+      actualContentHash: 'hash-8',
+    }))
+    const res = response()
+    await handler(
+      request(
+        'PUT',
+        '/qingagent-bridge/doc-pm?dshSessionId=dsh-a&engineSessionId=qing-a',
+        '127.0.0.1',
+        write,
+      ),
+      res as unknown as ServerResponse,
+    )
+
+    expect(engine.fetchJson).toHaveBeenCalledWith('/sessions/qing-a/doc', {
+      method: 'PUT', body: JSON.stringify(write),
+    })
+    expect(res.status).toBe(409)
+    expect(JSON.parse(res.body)).toMatchObject({
+      ok: false, code: 'VERSION_CONFLICT', conflict: { expected: 7, actual: 8 },
+    })
     dispose()
   })
 })

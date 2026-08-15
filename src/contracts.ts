@@ -1,3 +1,12 @@
+import type {
+  DocSuggestion,
+  ExternalDocReplaceRequest as QingExternalDocReplaceRequest,
+  ExternalDocReplaceResponse as QingExternalDocReplaceResponse,
+  ExternalPmDocReadResponse as QingExternalPmDocReadResponse,
+  ExternalReviewRenderModelResponse as QingExternalReviewRenderModelResponse,
+  PmDoc,
+} from '@qingagent/contract-ts'
+
 export type EngineState = 'online' | 'offline' | 'starting'
 export type QingDocumentState = 'empty' | 'editing' | 'pendingReview'
 
@@ -28,6 +37,44 @@ export interface ExternalDoc {
   qingml: string
   title: string | null
 }
+
+/** external PM / 直写 / 审阅模型直接复用青简公开 wire 类型。 */
+export type ExternalPmDocReadResponse = QingExternalPmDocReadResponse
+export type ExternalDocReplaceRequest = QingExternalDocReplaceRequest
+export type ExternalDocReplaceResponse = QingExternalDocReplaceResponse
+export type ExternalReviewRenderModelResponse = QingExternalReviewRenderModelResponse
+
+export interface ExternalReviewVerdictRequest {
+  expectedDocVersion: number
+  patchId: string
+  verdict: 'accepted' | 'rejected'
+}
+
+export interface ExternalReviewVerdictResponse {
+  status: 'marked'
+  docVersion: number
+  patchIds: string[]
+  verdict: 'accepted' | 'rejected'
+  reviewingCount: number
+  seq: number | null
+}
+
+export interface ExternalReviewCommitPanelRequest {
+  expectedDocVersion: number
+  action: 'commit' | 'accept_all' | 'reject_all'
+}
+
+export interface ExternalErrorResponse {
+  error: string
+  code?: string
+  nextStep?: string
+  expected?: number
+  actual?: number
+  seq?: number
+}
+
+/** 让客户端窄层不必重新声明青简 wire 节点。 */
+export type { DocSuggestion, PmDoc }
 
 export interface BridgeDocument extends BoundDocument {
   state: QingDocumentState | 'offline'

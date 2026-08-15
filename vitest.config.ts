@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const qingRoot = '/home/jimmy/proj/qingagent/main'
+const qingRoot = '/home/jimmy/proj/qingagent/wt/dsh-bridge'
 const qingWebSource = `${qingRoot}/apps/web/src`
 const systemSource = `${qingWebSource}/system`
 const systemShim = resolve('src/qingdoc/shims/system.tsx')

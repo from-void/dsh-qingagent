@@ -6,9 +6,17 @@ import type {
   BridgeState,
   EngineStatusSnapshot,
   ExternalDoc,
+  ExternalDocReplaceRequest,
+  ExternalDocReplaceResponse,
+  ExternalPmDocReadResponse,
+  ExternalReviewCommitPanelRequest,
+  ExternalReviewCommitResponse,
+  ExternalReviewRenderModelResponse,
+  ExternalReviewVerdictRequest,
+  ExternalReviewVerdictResponse,
   SessionBinding,
 } from './contracts.js'
-import type { EngineService } from './engine.js'
+import { EngineHttpError, type EngineService } from './engine.js'
 import type { BindingStore } from './bindings.js'
 
 interface Subscriber {
@@ -96,11 +104,65 @@ export class BridgeHub {
         writeJson(response, 200, await this.readDoc(engineSessionId))
         return
       }
+      if (request.method === 'GET' && url.pathname === '/qingagent-bridge/doc-pm') {
+        const engineSessionId = this.authorizedEngineSessionId(url)
+        writeJson(response, 200, await this.engine.fetchJson<ExternalPmDocReadResponse>(
+          `/sessions/${encodeURIComponent(engineSessionId)}/doc?format=pm`,
+        ))
+        return
+      }
+      if (request.method === 'PUT' && url.pathname === '/qingagent-bridge/doc-pm') {
+        const engineSessionId = this.authorizedEngineSessionId(url)
+        const body = await readJsonBody(request, 8 * 1024 * 1024) as ExternalDocReplaceRequest
+        writeJson(response, 200, await this.engine.fetchJson<ExternalDocReplaceResponse>(
+          `/sessions/${encodeURIComponent(engineSessionId)}/doc`,
+          { method: 'PUT', body: JSON.stringify(body) },
+        ))
+        return
+      }
+      if (request.method === 'GET' && url.pathname === '/qingagent-bridge/review-render-model') {
+        const engineSessionId = this.authorizedEngineSessionId(url)
+        writeJson(response, 200, await this.engine.fetchJson<ExternalReviewRenderModelResponse>(
+          `/sessions/${encodeURIComponent(engineSessionId)}/review?format=render-model`,
+        ))
+        return
+      }
+      if (request.method === 'POST' && url.pathname === '/qingagent-bridge/review-verdicts') {
+        const engineSessionId = this.authorizedEngineSessionId(url)
+        const body = await readJsonBody(request) as ExternalReviewVerdictRequest
+        writeJson(response, 200, await this.engine.fetchJson<ExternalReviewVerdictResponse>(
+          `/sessions/${encodeURIComponent(engineSessionId)}/review/verdicts`,
+          { method: 'POST', body: JSON.stringify(body) },
+        ))
+        return
+      }
+      if (request.method === 'POST' && url.pathname === '/qingagent-bridge/review-commit') {
+        const engineSessionId = this.authorizedEngineSessionId(url)
+        const body = await readJsonBody(request) as ExternalReviewCommitPanelRequest
+        writeJson(response, 200, await this.engine.fetchJson<ExternalReviewCommitResponse>(
+          `/sessions/${encodeURIComponent(engineSessionId)}/review/commit`,
+          { method: 'POST', body: JSON.stringify(body) },
+        ))
+        return
+      }
       writeJson(response, 404, { error: 'bridge route not found' })
     } catch (error) {
-      const status = error instanceof HttpInputError ? 400 : 502
+      if (error instanceof EngineHttpError) {
+        writeJson(response, error.status, error.body ?? { error: error.message })
+        return
+      }
+      const status = error instanceof HttpInputError ? 400 : error instanceof HttpNotFoundError ? 404 : 502
       writeJson(response, status, { error: error instanceof Error ? error.message : String(error) })
     }
+  }
+
+  private authorizedEngineSessionId(url: URL): string {
+    const dshSessionId = requiredQuery(url, 'dshSessionId')
+    const engineSessionId = requiredQuery(url, 'engineSessionId')
+    if (!this.bindings.hasDoc(dshSessionId, engineSessionId)) {
+      throw new HttpNotFoundError('文稿不属于当前 DSH 会话。')
+    }
+    return engineSessionId
   }
 
   private async state(dshSessionId: string): Promise<BridgeState> {
@@ -161,6 +223,7 @@ export class BridgeHub {
 }
 
 class HttpInputError extends Error {}
+class HttpNotFoundError extends Error {}
 
 function requiredQuery(url: URL, name: string): string {
   const value = url.searchParams.get(name)?.trim()
@@ -181,13 +244,13 @@ function writeJson(response: ServerResponse, status: number, value: unknown): vo
   response.end(JSON.stringify(value))
 }
 
-async function readJsonBody(request: IncomingMessage): Promise<unknown> {
+async function readJsonBody(request: IncomingMessage, maxBytes = 64 * 1024): Promise<unknown> {
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
     size += buffer.length
-    if (size > 64 * 1024) throw new HttpInputError('请求体超过 64 KiB。')
+    if (size > maxBytes) throw new HttpInputError(`请求体超过 ${Math.ceil(maxBytes / 1024)} KiB。`)
     chunks.push(buffer)
   }
   try {
