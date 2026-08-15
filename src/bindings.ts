@@ -69,6 +69,18 @@ export class BindingStore {
     return doc
   }
 
+  /** 收养一篇既有引擎文稿(青简文库打开):已绑定则仅切换,未绑定则登记并设为活跃。 */
+  async adoptDoc(dshSessionId: string, engineSessionId: string, title: string): Promise<BoundDocument> {
+    const current = this.getBinding(dshSessionId)
+    const existing = current.docs.find((item) => item.engineSessionId === engineSessionId)
+    if (existing) return this.setActive(dshSessionId, engineSessionId)
+    const doc = { engineSessionId, title: title || '未命名文稿', createdAt: new Date().toISOString() }
+    const next: SessionBinding = { docs: [...current.docs, doc], activeEngineSessionId: engineSessionId }
+    await this.table.put(dshSessionId, next)
+    this.changed(dshSessionId, next)
+    return doc
+  }
+
   async setActive(dshSessionId: string, engineSessionId: string): Promise<BoundDocument> {
     const current = this.getBinding(dshSessionId)
     const doc = current.docs.find((item) => item.engineSessionId === engineSessionId)

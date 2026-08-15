@@ -129,13 +129,48 @@ export class BridgeHub {
         return
       }
       if (request.method === 'POST' && url.pathname === '/qingagent-bridge/focus') {
-        const body = await readJsonBody(request) as { dshSessionId?: unknown; engineSessionId?: unknown }
+        const body = await readJsonBody(request) as {
+          dshSessionId?: unknown
+          engineSessionId?: unknown
+          adopt?: unknown
+          title?: unknown
+        }
         if (typeof body.dshSessionId !== 'string' || typeof body.engineSessionId !== 'string') {
           throw new HttpInputError('dshSessionId 与 engineSessionId 均为必填字符串。')
         }
-        await this.bindings.setActive(body.dshSessionId, body.engineSessionId)
+        if (body.adopt === true && !this.bindings.hasDoc(body.dshSessionId, body.engineSessionId)) {
+          // 收养前确认引擎里确有这篇文稿,避免把不存在的 id 写进绑定表。
+          await this.engine.fetchJson(
+            `/sessions/${encodeURIComponent(body.engineSessionId)}/doc?lines=1`,
+          )
+          await this.bindings.adoptDoc(
+            body.dshSessionId,
+            body.engineSessionId,
+            typeof body.title === 'string' ? body.title : '未命名文稿',
+          )
+        } else {
+          await this.bindings.setActive(body.dshSessionId, body.engineSessionId)
+        }
         this.emit(body.dshSessionId, { type: 'focus-changed', engineSessionId: body.engineSessionId })
         writeJson(response, 200, { ok: true })
+        return
+      }
+      if (request.method === 'GET' && url.pathname === '/qingagent-bridge/library') {
+        // 青简文库:引擎最近更新的文稿(含其他会话的),供下拉「最近文稿」分组;token 不出主机端。
+        requiredQuery(url, 'dshSessionId')
+        const limitRaw = Number.parseInt(url.searchParams.get('limit') ?? '25', 10)
+        const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 50) : 25
+        const listing = await this.engine.fetchJson<{
+          sessions: Array<{ id: string; title: string | null; state: string; updatedAt: string }>
+        }>(`/sessions?limit=${limit}`)
+        writeJson(response, 200, {
+          library: listing.sessions.map((session) => ({
+            engineSessionId: session.id,
+            title: session.title ?? '未命名文稿',
+            state: session.state,
+            updatedAt: session.updatedAt,
+          })),
+        })
         return
       }
       if (request.method === 'GET' && url.pathname === '/qingagent-bridge/doc') {

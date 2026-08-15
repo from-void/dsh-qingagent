@@ -71,12 +71,14 @@ function fixture(bindingsBySession: Record<string, SessionBinding>) {
     hasDoc: (sessionId: string, engineSessionId: string) =>
       (bindingsBySession[sessionId]?.docs ?? []).some((doc) => doc.engineSessionId === engineSessionId),
     setActive: vi.fn(),
+    adoptDoc: vi.fn(),
   } as unknown as BindingStore
   const hub = new BridgeHub(ctx, engine, bindings)
   hub.mount()
   return {
     hub,
     engine,
+    bindings,
     handler: handler!,
     dispose: () => { for (const cleanup of lifecycle.reverse()) cleanup() },
   }
@@ -392,6 +394,68 @@ describe('BridgeHub', () => {
     )
     expect(rejected.status).toBe(400)
     expect(engine.fetchAsset).toHaveBeenCalledOnce()
+    dispose()
+  })
+})
+
+describe('青简文库', () => {
+  it('/library 返回引擎最近文稿并映射字段', async () => {
+    const { handler, engine, dispose } = fixture({})
+    ;(engine.fetchJson as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      sessions: [
+        { id: 'qing-lib-1', title: '山顶邮局', state: 'editing', updatedAt: '2026-08-15T12:00:00.000Z' },
+        { id: 'qing-lib-2', title: null, state: 'pendingReview', updatedAt: '2026-08-15T11:00:00.000Z' },
+      ],
+      total: 2, hasMore: false,
+    })
+    const res = response()
+    await handler(
+      request('GET', '/qingagent-bridge/library?dshSessionId=dsh-a&limit=10'),
+      res as unknown as ServerResponse,
+    )
+    expect(res.status).toBe(200)
+    expect((engine.fetchJson as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toBe('/sessions?limit=10')
+    expect(JSON.parse(res.body)).toEqual({
+      library: [
+        { engineSessionId: 'qing-lib-1', title: '山顶邮局', state: 'editing', updatedAt: '2026-08-15T12:00:00.000Z' },
+        { engineSessionId: 'qing-lib-2', title: '未命名文稿', state: 'pendingReview', updatedAt: '2026-08-15T11:00:00.000Z' },
+      ],
+    })
+    dispose()
+  })
+
+  it('/focus adopt 未绑定文稿:先探引擎存在再收养;已绑定走 setActive', async () => {
+    const binding = {
+      docs: [{ engineSessionId: 'qing-a', title: 'A', createdAt: '2026-08-15T00:00:00.000Z' }],
+      activeEngineSessionId: 'qing-a',
+    }
+    const { handler, engine, bindings, dispose } = fixture({ 'dsh-a': binding })
+    const res = response()
+    await handler(
+      request('POST', '/qingagent-bridge/focus', '127.0.0.1', {
+        dshSessionId: 'dsh-a', engineSessionId: 'qing-new', adopt: true, title: '外部文稿',
+      }),
+      res as unknown as ServerResponse,
+    )
+    expect(res.status).toBe(200)
+    expect((engine.fetchJson as ReturnType<typeof vi.fn>).mock.calls[0]?.[0])
+      .toBe('/sessions/qing-new/doc?lines=1')
+    expect((bindings as unknown as { adoptDoc: ReturnType<typeof vi.fn> }).adoptDoc)
+      .toHaveBeenCalledWith('dsh-a', 'qing-new', '外部文稿')
+
+    // 已绑定 + adopt → 只切换,不重复收养、不探引擎
+    ;(engine.fetchJson as ReturnType<typeof vi.fn>).mockClear()
+    const res2 = response()
+    await handler(
+      request('POST', '/qingagent-bridge/focus', '127.0.0.1', {
+        dshSessionId: 'dsh-a', engineSessionId: 'qing-a', adopt: true, title: 'A',
+      }),
+      res2 as unknown as ServerResponse,
+    )
+    expect(res2.status).toBe(200)
+    expect((engine.fetchJson as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled()
+    expect((bindings as unknown as { setActive: ReturnType<typeof vi.fn> }).setActive)
+      .toHaveBeenCalledWith('dsh-a', 'qing-a')
     dispose()
   })
 })

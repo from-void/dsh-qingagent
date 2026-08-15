@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties } from 'react'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
@@ -35,6 +35,7 @@ import { installDetailsColumnWidth } from './detailsWidth.js'
 import { decideIncomingPanelDocument } from './incomingPanelDocument.js'
 import { QINGJIAN_ICON_DATA_URI } from './qingjianIcon.js'
 import { BridgeHttpError, qingClientStore } from './store.js'
+import type { QingLibraryDoc } from './store.js'
 import '../qingdoc/qingdoc.css'
 
 interface InjectedProps {
@@ -420,6 +421,16 @@ export function QingDocPanel(props: QingDocPanelProps) {
     }
   }, [flushPendingDocSave, sessionId])
 
+  const handleOpenLibraryDoc = useCallback(async (engineSessionId: string, docTitle: string) => {
+    try {
+      await flushPendingDocSave()
+      await qingClientStore.focus(sessionId, engineSessionId, { adopt: true, title: docTitle })
+    } catch (error) {
+      console.error('[qingagent-panel] open library doc failed', error)
+      setToast('打开文稿失败')
+    }
+  }, [flushPendingDocSave, sessionId])
+
   const handleClose = useCallback(async () => {
     try {
       await flushPendingDocSave()
@@ -686,12 +697,14 @@ export function QingDocPanel(props: QingDocPanelProps) {
         <div className="qingdoc-heading">
           <span className="qingdoc-brand">青简</span>
           <QingDocSwitcher
+            sessionId={sessionId}
             docs={docs}
             activeEngineSessionId={activeEngineSessionId}
             title={title}
             activeBusy={busy}
             activePendingReview={pendingReview}
             onSelect={handleFocusDocument}
+            onOpenLibrary={handleOpenLibraryDoc}
           />
           <span className="qingdoc-status" data-kind={saveState.kind} role="status">{toast ?? statusLabel}</span>
           {saveState.kind === 'conflict' && activeEngineSessionId ? (
@@ -803,22 +816,56 @@ export function QingDocPanel(props: QingDocPanelProps) {
 }
 
 interface QingDocSwitcherProps {
+  sessionId: string
   docs: BridgeDocument[]
   activeEngineSessionId?: string
   title: string
   activeBusy: boolean
   activePendingReview: boolean
   onSelect: (engineSessionId: string) => Promise<void>
+  onOpenLibrary: (engineSessionId: string, title: string) => Promise<void>
 }
+
+type SwitcherEntry =
+  | { kind: 'bound'; engineSessionId: string; title: string; doc: BridgeDocument }
+  | { kind: 'library'; engineSessionId: string; title: string; state: string }
+
+const RECENT_LIBRARY_LIMIT = 12
 
 function QingDocSwitcher(props: QingDocSwitcherProps) {
   const [open, setOpen] = useState(false)
   const [focusedIndex, setFocusedIndex] = useState(0)
+  const [library, setLibrary] = useState<QingLibraryDoc[] | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const listboxId = useId()
-  const activeIndex = Math.max(0, props.docs.findIndex(
-    (doc) => doc.engineSessionId === props.activeEngineSessionId,
+
+  // 打开时拉一次青简文库(引擎最近更新的文稿,含其他会话的)。
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    qingClientStore.loadLibrary(props.sessionId)
+      .then((docs) => { if (!cancelled) setLibrary(docs) })
+      .catch(() => { if (!cancelled) setLibrary([]) })
+    return () => { cancelled = true }
+  }, [open, props.sessionId])
+
+  // 排序:本对话按最近更新倒序(文库里查得到就用引擎的 updatedAt,查不到退回绑定时间);
+  // 最近文稿=文库减去已绑定的,同样倒序,封顶 12 条。
+  const updatedAt = new Map((library ?? []).map((doc) => [doc.engineSessionId, doc.updatedAt]))
+  const boundSorted = [...props.docs].sort((a, b) =>
+    (updatedAt.get(b.engineSessionId) ?? b.createdAt).localeCompare(updatedAt.get(a.engineSessionId) ?? a.createdAt))
+  const boundIds = new Set(props.docs.map((doc) => doc.engineSessionId))
+  const recentDocs = (library ?? [])
+    // 空文稿(只建了会话没写过内容)没有打开价值,不进「最近文稿」。
+    .filter((doc) => !boundIds.has(doc.engineSessionId) && doc.state !== 'empty')
+    .slice(0, RECENT_LIBRARY_LIMIT)
+  const entries: SwitcherEntry[] = [
+    ...boundSorted.map((doc) => ({ kind: 'bound' as const, engineSessionId: doc.engineSessionId, title: doc.title, doc })),
+    ...recentDocs.map((doc) => ({ kind: 'library' as const, engineSessionId: doc.engineSessionId, title: doc.title, state: doc.state })),
+  ]
+  const activeIndex = Math.max(0, entries.findIndex(
+    (entry) => entry.engineSessionId === props.activeEngineSessionId,
   ))
 
   const close = useCallback((restoreFocus = false) => {
@@ -840,11 +887,13 @@ function QingDocSwitcher(props: QingDocSwitcherProps) {
   }, [activeIndex, open])
 
   const selectAt = useCallback((index: number) => {
-    const doc = props.docs[index]
-    if (!doc) return
+    const entry = entries[index]
+    if (!entry) return
     close(true)
-    if (doc.engineSessionId !== props.activeEngineSessionId) void props.onSelect(doc.engineSessionId)
-  }, [close, props])
+    if (entry.engineSessionId === props.activeEngineSessionId) return
+    if (entry.kind === 'bound') void props.onSelect(entry.engineSessionId)
+    else void props.onOpenLibrary(entry.engineSessionId, entry.title)
+  }, [close, entries, props])
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Escape' && open) {
@@ -854,14 +903,14 @@ function QingDocSwitcher(props: QingDocSwitcherProps) {
     }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
-      if (!props.docs.length) return
+      if (!entries.length) return
       if (!open) {
         setOpen(true)
         setFocusedIndex(activeIndex)
         return
       }
       const delta = event.key === 'ArrowDown' ? 1 : -1
-      setFocusedIndex((index) => (index + delta + props.docs.length) % props.docs.length)
+      setFocusedIndex((index) => (index + delta + entries.length) % entries.length)
       return
     }
     if (event.key === 'Enter' && open) {
@@ -886,38 +935,50 @@ function QingDocSwitcher(props: QingDocSwitcherProps) {
         <span className="qingdoc-doc-chevron" aria-hidden="true">▾</span>
       </button>
       {open ? (
-        <div id={listboxId} className="qingdoc-doc-menu" role="listbox" aria-label="本会话文稿">
-          {props.docs.map((doc, index) => {
-            const current = doc.engineSessionId === props.activeEngineSessionId
-            const status = documentActivity(doc, current, props.activeBusy, props.activePendingReview)
+        <div id={listboxId} className="qingdoc-doc-menu" role="listbox" aria-label="青简文稿">
+          {entries.map((entry, index) => {
+            const current = entry.engineSessionId === props.activeEngineSessionId
+            const status = entry.kind === 'bound'
+              ? documentActivity(entry.doc, current, props.activeBusy, props.activePendingReview)
+              : (entry.state === 'pendingReview' ? 'reviewing' as const : 'idle' as const)
+            const firstOfGroup = index === 0 || entries[index - 1]?.kind !== entry.kind
             return (
-              <button
-                key={doc.engineSessionId}
-                className="qingdoc-doc-option"
-                type="button"
-                role="option"
-                aria-selected={current}
-                aria-label={`${doc.title}${status === 'writing' ? '，写作中' : status === 'reviewing' ? '，审阅中' : ''}`}
-                data-focused={focusedIndex === index ? 'true' : undefined}
-                onMouseEnter={() => setFocusedIndex(index)}
-                onClick={() => selectAt(index)}
-              >
-                <span className="qingdoc-doc-mark" aria-hidden="true">
-                  {current ? (
-                    <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
-                      <path d="M2.5 6.5 L5 9 L9.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  ) : null}
-                </span>
-                <span className="qingdoc-doc-option-title">{doc.title}</span>
-                {status !== 'idle' ? (
-                  <span className="qingdoc-doc-state-label" aria-hidden="true">
-                    {status === 'writing' ? '写作中' : '审阅中'}
-                  </span>
+              <Fragment key={entry.engineSessionId}>
+                {firstOfGroup ? (
+                  <div className="qingdoc-doc-group-label" role="presentation">
+                    {entry.kind === 'bound' ? '本对话' : '最近文稿'}
+                  </div>
                 ) : null}
-              </button>
+                <button
+                  className="qingdoc-doc-option"
+                  type="button"
+                  role="option"
+                  aria-selected={current}
+                  aria-label={`${entry.title}${status === 'writing' ? '，写作中' : status === 'reviewing' ? '，审阅中' : ''}`}
+                  data-focused={focusedIndex === index ? 'true' : undefined}
+                  onMouseEnter={() => setFocusedIndex(index)}
+                  onClick={() => selectAt(index)}
+                >
+                  <span className="qingdoc-doc-mark" aria-hidden="true">
+                    {current ? (
+                      <svg viewBox="0 0 12 12" width="12" height="12" fill="none" aria-hidden="true">
+                        <path d="M2.5 6.5 L5 9 L9.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ) : null}
+                  </span>
+                  <span className="qingdoc-doc-option-title">{entry.title}</span>
+                  {status !== 'idle' ? (
+                    <span className="qingdoc-doc-state-label" aria-hidden="true">
+                      {status === 'writing' ? '写作中' : '审阅中'}
+                    </span>
+                  ) : null}
+                </button>
+              </Fragment>
             )
           })}
+          {library === null ? (
+            <div className="qingdoc-doc-group-label" role="presentation">最近文稿加载中…</div>
+          ) : null}
         </div>
       ) : null}
     </div>

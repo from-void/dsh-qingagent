@@ -406,6 +406,18 @@ ${panelRoot} .qingdoc-doc-state-label {
   color: var(--dsw-alias-label-caption);
   white-space: nowrap;
 }
+${panelRoot} .qingdoc-doc-group-label {
+  padding: 6px 8px 3px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-caption);
+  white-space: nowrap;
+  user-select: none;
+}
+${panelRoot} .qingdoc-doc-group-label:not(:first-child) {
+  margin-top: 3px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  padding-top: 8px;
+}
 ${panelRoot} .qingdoc-status {
   min-width: 0;
   color: rgba(236, 227, 208, .58);

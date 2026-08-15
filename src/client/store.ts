@@ -53,6 +53,13 @@ interface SessionEntry {
   activeDraftGeneration?: string
 }
 
+export interface QingLibraryDoc {
+  engineSessionId: string
+  title: string
+  state: string
+  updatedAt: string
+}
+
 export interface PanelRefreshGuard {
   beforeApply(engineSessionId: string, panelDoc: ExternalPmDocReadResponse): Promise<boolean>
   afterApply?(engineSessionId: string, panelDoc: ExternalPmDocReadResponse): void
@@ -108,11 +115,19 @@ export class QingClientStore {
     }
   }
 
-  async focus(sessionId: string, engineSessionId: string): Promise<void> {
+  async focus(
+    sessionId: string,
+    engineSessionId: string,
+    options?: { adopt?: boolean; title?: string },
+  ): Promise<void> {
     const response = await fetch('/qingagent-bridge/focus', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dshSessionId: sessionId, engineSessionId }),
+      body: JSON.stringify({
+        dshSessionId: sessionId,
+        engineSessionId,
+        ...(options?.adopt ? { adopt: true, title: options.title } : {}),
+      }),
     })
     if (!response.ok) throw new Error(await responseError(response))
     const entry = this.entry(sessionId)
@@ -125,6 +140,13 @@ export class QingClientStore {
       panelLoading: true,
     })
     void this.refreshPanel(sessionId, engineSessionId)
+  }
+
+  /** 青简文库:引擎最近更新的文稿列表(含其他会话的),下拉「最近文稿」分组用。 */
+  async loadLibrary(sessionId: string, limit = 25): Promise<QingLibraryDoc[]> {
+    const query = new URLSearchParams({ dshSessionId: sessionId, limit: String(limit) })
+    const result = await bridgeJson<{ library: QingLibraryDoc[] }>(`/qingagent-bridge/library?${query}`)
+    return result.library
   }
 
   async setSelection(
