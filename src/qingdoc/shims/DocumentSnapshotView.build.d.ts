@@ -1,5 +1,6 @@
-import type { ComponentType, ForwardRefExoticComponent, RefAttributes } from 'react'
+import type { ComponentType, ForwardRefExoticComponent, RefAttributes, RefObject } from 'react'
 import type { DocSuggestion, PmDoc } from '@qingagent/contract-ts'
+import type { Editor } from '@tiptap/react'
 
 /** declaration-only facade；运行时由 tsdown alias 直连青简源码。 */
 export interface DocumentSnapshotViewHandle {
@@ -26,6 +27,56 @@ export interface PatchNavProps {
   onCommit: () => void | Promise<void>
 }
 export const PatchNav: ComponentType<PatchNavProps>
+export interface AiModifyTarget {
+  label: string
+  suffix: string
+  blockId: string
+  from?: number
+  to?: number
+  selectionRefs?: string[]
+  tableSelection?: unknown
+}
+export interface DocDimensions {
+  content: { kind: 'empty' | 'editing' | 'pendingReview' }
+  agentBusy: boolean
+  overlay: 'askUser' | 'confirm' | 'imageProgress' | null
+  editor: 'empty' | 'editable' | 'locked' | 'pendingReview'
+}
+export type FindBarMode = 'full' | 'find-only' | 'hidden'
+export const DocFindBar: ComponentType<{
+  editor: Editor | null
+  mode: FindBarMode
+  docVersion: number
+  initialQuery?: string
+  scrollContainerSelector?: string
+  onClose: () => void
+  onToast: (message: string) => void
+}>
+export const DocToolbar: ComponentType<{
+  active: boolean
+  editor: Editor | null
+  containerSelector: string
+  onAiModify: (target: AiModifyTarget) => Promise<boolean>
+  onToast?: (message: string) => void
+  sessionId?: string | null
+}>
+export function canUseDocumentEditing(
+  dim: DocDimensions,
+  viewingVersion: number | null,
+  presentationRun: unknown | null,
+): boolean
+export function useWorkspaceFind(input: {
+  dim: DocDimensions
+  viewingVersion: number | null
+  presentationRun: unknown | null
+  editorRef: RefObject<Editor | null>
+}): {
+  findInitialQuery: string
+  findMode: FindBarMode
+  findOpen: boolean
+  setFindInitialQuery: (query: string) => void
+  setFindOpen: (open: boolean) => void
+}
 export interface DocWriteBaseline {
   expectedDocumentSnapshot: number
   baseContentHash: string

@@ -18,6 +18,7 @@ const viewHarness = vi.hoisted(() => ({
   } } | null,
 }))
 const patchNavHarness = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }))
+const toolbarHarness = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }))
 
 vi.mock('@qingweb/pages/workspace/components/DocumentSnapshotView', async () => {
   const React = await import('react')
@@ -61,6 +62,20 @@ vi.mock('@qingweb/pages/workspace/components/PatchNav', async () => {
   }
 })
 
+vi.mock('@qingweb/pages/workspace/components/DocToolbar', async () => {
+  const React = await import('react')
+  return {
+    DocToolbar: (props: Record<string, unknown>) => {
+      toolbarHarness.props = props
+      return React.createElement('div', {
+        'data-testid': 'mock-doc-toolbar',
+        'data-active': String(props.active === true),
+        'data-session-id': String(props.sessionId ?? ''),
+      })
+    },
+  }
+})
+
 class FakeEventSource {
   onerror: (() => void) | null = null
   addEventListener(): void {}
@@ -84,11 +99,47 @@ afterEach(() => {
   viewHarness.pending = null
   viewHarness.props = null
   patchNavHarness.props = null
+  toolbarHarness.props = null
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
 describe('QingDocPanel 保存生命周期', () => {
+  it('DocToolbar 严格跟随 canUseDocumentEditing：编辑态启用且使用资产桥会话', async () => {
+    installBridgeFetch('dsh-toolbar', ['qing-toolbar'])
+    renderPanel('dsh-toolbar')
+
+    await vi.waitFor(() => expect(
+      document.querySelector('[data-testid="mock-doc-toolbar"]')?.getAttribute('data-active'),
+    ).toBe('true'))
+    expect(toolbarHarness.props?.containerSelector).toBe('[data-qingagent-doc-panel] .ws-right')
+    expect(document.querySelector('[data-testid="mock-doc-toolbar"]')?.getAttribute('data-session-id'))
+      .toContain('dsh-qingasset:')
+  })
+
+  it('DocToolbar 在 pendingReview 下保持挂载但 active=false', async () => {
+    installBridgeFetch('dsh-toolbar-review', ['qing-toolbar'], { pendingReview: true })
+    renderPanel('dsh-toolbar-review')
+
+    await vi.waitFor(() => expect(
+      document.querySelector('[data-testid="mock-doc-toolbar"]')?.getAttribute('data-active'),
+    ).toBe('false'))
+    expect(toolbarHarness.props?.onAiModify).toBeTypeOf('function')
+  })
+
+  it('Ctrl+F 走青简 useWorkspaceFind 并挂出原生 DocFindBar', async () => {
+    installBridgeFetch('dsh-find', ['qing-find'])
+    renderPanel('dsh-find')
+    await vi.waitFor(() => expect(toolbarHarness.props?.active).toBe(true))
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true }))
+    })
+
+    expect(document.querySelector('[data-wf="DocFindBar"]')).not.toBeNull()
+    expect(document.querySelector<HTMLInputElement>('[aria-label="查找"]')).not.toBeNull()
+  })
+
   it('输入后立即卸载会先 flush，并把 PUT 发给当前文稿', async () => {
     const fetchMock = installBridgeFetch('dsh-unmount', ['qing-a'])
     renderPanel('dsh-unmount')

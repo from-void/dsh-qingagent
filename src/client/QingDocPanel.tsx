@@ -3,18 +3,30 @@ import type { CSSProperties } from 'react'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
+import type { Editor } from '@tiptap/react'
 import {
   DocumentSnapshotView,
   type DocumentSnapshotViewHandle,
 } from '@qingweb/pages/workspace/components/DocumentSnapshotView'
+import { DocFindBar } from '@qingweb/pages/workspace/components/DocFindBar'
+import { DocToolbar } from '@qingweb/pages/workspace/components/DocToolbar'
 import { PatchNav } from '@qingweb/pages/workspace/components/PatchNav'
+import type { AiModifyTarget } from '@qingweb/pages/workspace/data/aiModifyTarget'
+import type { DocDimensions } from '@qingweb/pages/workspace/data/docDimensions'
 import {
   appliedDocWriteBaseline,
   EMPTY_PM_DOC,
   type DocWriteBaseline,
 } from '@qingweb/pages/workspace/data/docWriteBaseline'
 import { pmDocToViewDocumentSnapshot } from '@qingweb/pages/workspace/data/protocol'
+import { canUseDocumentEditing } from '@qingweb/pages/workspace/data/reviewActions'
+import { useWorkspaceFind } from '@qingweb/pages/workspace/hooks/useWorkspaceFind'
 import type { PmDoc } from '@qingagent/pm-schema'
+import {
+  encodeAssetBridgeContext,
+  type AssetBridgeContext,
+} from '../assetBridge.js'
+import { AssetBridgeProvider } from '../qingdoc/AssetBridgeProvider.js'
 import { DocumentSaveCoordinator, type DocumentSaveState } from './documentSaveCoordinator.js'
 import { createQingmlCompileThrottle, type QingmlCompileThrottle } from './streamingDocument.js'
 import { buildReviewPresentationModel } from './reviewPresentation.js'
@@ -45,6 +57,8 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const rootRef = useRef<HTMLElement>(null)
   const docViewRef = useRef<DocumentSnapshotViewHandle | null>(null)
   const lastDocViewHandleRef = useRef<DocumentSnapshotViewHandle | null>(null)
+  const tiptapEditorRef = useRef<Editor | null>(null)
+  const [tiptapEditor, setTiptapEditor] = useState<Editor | null>(null)
   const editorEngineSessionIdRef = useRef<string | null>(null)
   const saveCoordinatorRef = useRef<DocumentSaveCoordinator | null>(null)
   const compileThrottleRef = useRef<QingmlCompileThrottle | null>(null)
@@ -74,6 +88,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const setDocViewHandle = useCallback((handle: DocumentSnapshotViewHandle | null) => {
     docViewRef.current = handle
     if (handle) lastDocViewHandleRef.current = handle
+  }, [])
+
+  const handleEditorReady = useCallback((editor: Editor | null) => {
+    tiptapEditorRef.current = editor
+    setTiptapEditor(editor)
   }, [])
 
   const flushPendingDocSave = useCallback(async () => {
@@ -303,11 +322,25 @@ export function QingDocPanel(props: QingDocPanelProps) {
       ?? pmDocToViewDocumentSnapshot(surfacePmDoc, surfaceVersion, panelDoc?.ts ?? ''),
     [panelDoc?.ts, reviewPresentation?.doc, surfacePmDoc, surfaceVersion],
   )
-
+  const assetContext = useMemo<AssetBridgeContext | null>(
+    () => activeEngineSessionId ? { dshSessionId: sessionId, engineSessionId: activeEngineSessionId } : null,
+    [activeEngineSessionId, sessionId],
+  )
+  const assetSessionId = useMemo(
+    () => assetContext ? encodeAssetBridgeContext(assetContext) : undefined,
+    [assetContext],
+  )
   const handleEditorChange = useCallback((doc: PmDoc, baseline?: DocWriteBaseline) => {
     const engineSessionId = editorEngineSessionIdRef.current
     if (!baseline || !engineSessionId || !saveCoordinatorRef.current) return Promise.resolve()
     return saveCoordinatorRef.current.enqueue(engineSessionId, doc, baseline)
+  }, [])
+
+  const handleAiModify = useCallback(async (_target: AiModifyTarget): Promise<boolean> => {
+    // 青简本尊把选段引用写入左侧 ChatInput；DSH details slot 暂未提供 composer
+    // draft/chip 写入口。保留原按钮与表格工具栏挂载面，但不伪造另一套引用 UI。
+    setToast('宿主输入框暂不支持选段引用')
+    return false
   }, [])
 
   const handleFocusDocument = useCallback(async (engineSessionId: string) => {
@@ -512,6 +545,32 @@ export function QingDocPanel(props: QingDocPanelProps) {
     : undefined
   const contentKind = pendingReview ? 'pendingReview' : panelDoc?.state === 'empty' ? 'empty' : 'editable'
 
+  const docDimensions = useMemo<DocDimensions>(() => ({
+    content: { kind: contentKind === 'editable' ? 'editing' : contentKind },
+    agentBusy: busy,
+    overlay: null,
+    editor: busy || saveLocked
+      ? 'locked'
+      : pendingReview
+        ? 'pendingReview'
+        : panelDoc?.state === 'editing'
+          ? 'editable'
+          : 'empty',
+  }), [busy, contentKind, panelDoc?.state, pendingReview, saveLocked])
+  const documentEditingActive = canUseDocumentEditing(docDimensions, null, null)
+  const {
+    findInitialQuery,
+    findMode,
+    findOpen,
+    setFindInitialQuery,
+    setFindOpen,
+  } = useWorkspaceFind({
+    dim: docDimensions,
+    viewingVersion: null,
+    presentationRun: null,
+    editorRef: tiptapEditorRef,
+  })
+
   const rootStyle = {
     '--ws-paper-body-padding-inline': '40px',
     '--ws-paper-chat-column-width': '400px',
@@ -577,31 +636,57 @@ export function QingDocPanel(props: QingDocPanelProps) {
         <main className="ws-right">
           <div className="ws-paper-shell" data-wf="WorkspacePaperShell" aria-hidden="true" />
           <div className="ws-document-content" data-wf="WorkspaceHydrationDocumentContent">
-            <DocumentSnapshotView
-              ref={setDocViewHandle}
-              doc={surfaceDoc}
-              docId={activeEngineSessionId ? `dsh:${activeEngineSessionId}` : `dsh:${sessionId}:empty`}
-              editable
-              interactiveEditable={interactiveEditable}
-              deferBlockIdNormalization={pendingReview}
-              showPatches={pendingReview && Boolean(reviewPresentation?.applied.length)}
-              acceptedPatches={reviewPresentation?.acceptedIds ?? EMPTY_PATCH_IDS}
-              rejectedPatches={reviewPresentation?.rejectedIds ?? EMPTY_PATCH_IDS}
-              onPatchVerdict={(patchId: string, verdict: 'accepted' | 'rejected') => {
-                void handleReviewVerdict(patchId, verdict)
-              }}
-              patchMeta={reviewPresentation?.patchMeta}
-              activePatchId={reviewPresentation?.visibleReviewTargets.find(
-                (target) => target.id === activeReviewTargetId,
-              )?.patchId ?? null}
-              reviewSuggestions={reviewPresentation?.suggestions}
-              reviewOverlayInputs={reviewPresentation?.overlayInputs}
-              reviewBlockPatches={reviewPresentation?.blockPatchInputs}
-              reviewAppliedPatches={reviewPresentation?.applied}
-              reviewTargets={reviewPresentation?.reviewTargets}
-              activeReviewTargetId={activeReviewTargetId}
-              onEditorChange={interactiveEditable ? handleEditorChange : undefined}
+            <AssetBridgeProvider context={assetContext}>
+              <DocumentSnapshotView
+                ref={setDocViewHandle}
+                doc={surfaceDoc}
+                docId={assetSessionId ?? `dsh:${sessionId}:empty`}
+                editable
+                interactiveEditable={interactiveEditable}
+                deferBlockIdNormalization={pendingReview}
+                showPatches={pendingReview && Boolean(reviewPresentation?.applied.length)}
+                acceptedPatches={reviewPresentation?.acceptedIds ?? EMPTY_PATCH_IDS}
+                rejectedPatches={reviewPresentation?.rejectedIds ?? EMPTY_PATCH_IDS}
+                onPatchVerdict={(patchId: string, verdict: 'accepted' | 'rejected') => {
+                  void handleReviewVerdict(patchId, verdict)
+                }}
+                patchMeta={reviewPresentation?.patchMeta}
+                activePatchId={reviewPresentation?.visibleReviewTargets.find(
+                  (target) => target.id === activeReviewTargetId,
+                )?.patchId ?? null}
+                reviewSuggestions={reviewPresentation?.suggestions}
+                reviewOverlayInputs={reviewPresentation?.overlayInputs}
+                reviewBlockPatches={reviewPresentation?.blockPatchInputs}
+                reviewAppliedPatches={reviewPresentation?.applied}
+                reviewTargets={reviewPresentation?.reviewTargets}
+                activeReviewTargetId={activeReviewTargetId}
+                onEditorReady={handleEditorReady}
+                onEditorChange={interactiveEditable ? handleEditorChange : undefined}
+                onAiModify={handleAiModify}
+                onToast={setToast}
+              />
+            </AssetBridgeProvider>
+            {findOpen && findMode !== 'hidden' ? (
+              <DocFindBar
+                editor={tiptapEditor}
+                mode={findMode}
+                docVersion={surfaceVersion}
+                initialQuery={findInitialQuery}
+                scrollContainerSelector="[data-qingagent-doc-panel] .ws-right"
+                onClose={() => {
+                  setFindOpen(false)
+                  setFindInitialQuery('')
+                }}
+                onToast={setToast}
+              />
+            ) : null}
+            <DocToolbar
+              active={documentEditingActive}
+              editor={tiptapEditor}
+              containerSelector="[data-qingagent-doc-panel] .ws-right"
+              onAiModify={handleAiModify}
               onToast={setToast}
+              sessionId={assetSessionId}
             />
           </div>
         </main>
