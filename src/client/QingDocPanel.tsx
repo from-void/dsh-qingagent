@@ -895,7 +895,8 @@ export function panelStatus(input: {
   showSaving: boolean
 }): string {
   if (input.pendingReview) return `审阅中·${input.reviewCount}处`
-  if (input.busy) return `写作中·${input.blocks}块·约${input.words}字`
+  // 「块」是内部概念不暴露给用户;没有字数时只说「写作中」,不出现「约 0 字」。
+  if (input.busy) return input.words > 0 ? `写作中 · 约${input.words}字` : '写作中'
   if (input.saveState.kind === 'saving') return input.showSaving ? '保存中…' : ''
   if (input.saveState.kind === 'conflict') return '保存冲突·已暂停编辑'
   if (input.saveState.kind === 'blocked') {

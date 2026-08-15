@@ -40,7 +40,8 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
           ? `未完成${failure ? ` · ${failure}` : ''}`
           : <>
               {title ? `《${title}》 · ` : ''}
-              {settled ? `${blocks} 块 · 约 ${words} 字` : `已写 ${blocks} 块 · ${words} 字`}
+              {/* 「块」是内部概念不暴露;没有字数时不显示「约 0 字」。 */}
+              {words > 0 ? `约 ${words} 字` : (settled ? '' : '写作中')}
               {meta?.status === 'review' ? ' · 待审阅' : ''}
             </>}
       </span>

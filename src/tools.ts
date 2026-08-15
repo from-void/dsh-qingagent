@@ -85,6 +85,8 @@ function writeDraftTool(services: ToolServices) {
         ? textBlock(REVIEW_END_MESSAGE)
         : textBlock([
           `青简文稿《${value.title}》已提交。`,
+          // 反幻觉锚点:committed 必须明确否定审阅态,防模型把审阅纪律泛化脑补(实测幻觉案例)。
+          `文稿已直接落库生效,当前不在审阅态,没有任何待审稿,可以立即继续修改。`,
           `文稿引用：${value.engineSessionId}`,
           `共 ${value.blocks} 个块，约 ${value.words} 字。`,
           ...(typeof value.warning === 'string' ? [`⚠ ${value.warning}`] : []),
