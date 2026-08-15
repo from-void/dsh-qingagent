@@ -49,4 +49,24 @@ describe('青简纸面移植契约', () => {
       expect(await readFile(resolve(local!))).toEqual(await readFile(upstream!))
     }
   })
+
+  it('顶栏作为面板首行通栏嵌入，纸面在下方独立滚动', async () => {
+    const [css, generator, panelSource] = await Promise.all([
+      readFile(resolve('src/qingdoc/qingdoc.css'), 'utf8'),
+      readFile(resolve('scripts/extract-qingdoc-css.mjs'), 'utf8'),
+      readFile(resolve('src/client/QingDocPanel.tsx'), 'utf8'),
+    ])
+    const headerRule = css.match(/\[data-qingagent-doc-panel\] \.qingdoc-stage-controls \{([\s\S]*?)\n\}/)?.[1]
+
+    expect(headerRule).toBeDefined()
+    expect(headerRule).toContain('flex: 0 0 auto;')
+    expect(headerRule).toContain('width: 100%;')
+    expect(headerRule).toContain('min-height: 52px;')
+    expect(headerRule).toContain('border-radius: 0;')
+    expect(headerRule).toContain('box-shadow: none;')
+    expect(headerRule).not.toMatch(/position:\s*(?:absolute|fixed)|left:|right:|transform:|backdrop-filter:/)
+    expect(generator).not.toContain('width: min(860px, calc(100% - 28px))')
+    expect(panelSource).toContain("'--ws-paper-top-offset': '0px'")
+    expect(css).toMatch(/\[data-qingagent-doc-panel\] \.ws-right \{[\s\S]*?overflow-y: auto;/)
+  })
 })

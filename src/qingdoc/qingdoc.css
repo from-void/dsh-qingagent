@@ -69,26 +69,22 @@
 [data-qingagent-doc-panel] .ws-document-content { display: contents; }
 [data-qingagent-doc-panel] .ws-document-content > * { position: relative; z-index: 1; }
 [data-qingagent-doc-panel] .qingdoc-stage-controls {
-  position: absolute;
-  z-index: 100200;
-  top: 10px;
-  left: 50%;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  padding: 4px 5px 4px 10px;
-  color: rgba(236, 227, 208, .76);
-  border: 1px solid rgba(184, 169, 140, .28);
-  border-radius: 0;
-  background: rgba(8, 11, 15, .78);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, .24);
-  font: 12px/1.4 var(--font-zh-serif);
-  transform: translateX(-50%);
-  backdrop-filter: blur(10px);
-  width: min(860px, calc(100% - 28px));
-  box-sizing: border-box;
   justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 52px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  color: rgba(236, 227, 208, .76);
+  border: 0;
+  border-bottom: 1px solid rgba(184, 169, 140, .28);
+  border-radius: 0;
+  background: rgba(8, 11, 15, .96);
+  box-shadow: none;
+  font: 13px/1.4 var(--font-zh-serif);
 }
 [data-qingagent-doc-panel] .qingdoc-heading,
 [data-qingagent-doc-panel] .qingdoc-host-actions {
@@ -123,7 +119,7 @@
 [data-qingagent-doc-panel] .qingdoc-status[data-kind="error"] { color: #e6bd86; }
 [data-qingagent-doc-panel] .qingdoc-doc-select,
 [data-qingagent-doc-panel] .qingdoc-open {
-  min-height: 22px;
+  min-height: 28px;
   box-sizing: border-box;
   color: rgba(236, 227, 208, .66);
   border: 1px solid rgba(184, 169, 140, .22);
@@ -140,7 +136,7 @@
   white-space: nowrap;
 }
 [data-qingagent-doc-panel] .qingdoc-close {
-  min-height: 22px;
+  min-height: 28px;
   padding: 0 8px;
   color: rgba(236, 227, 208, .64);
   border: 1px solid rgba(184, 169, 140, .22);
@@ -148,7 +144,7 @@
   background: transparent;
   cursor: pointer;
 }
-[data-qingagent-doc-panel] .qingdoc-close { width: 24px; padding: 0; font-size: 16px; }
+[data-qingagent-doc-panel] .qingdoc-close { width: 28px; padding: 0; font-size: 17px; }
 /* source: packages/ui-kit/src/tokens.css:4-48 */
 [data-qingagent-doc-panel] {
   /* 中性色板:暖墨纸系(原 slate-blue 冷色 base 已废弃,全站统一暖化)。
@@ -2896,7 +2892,7 @@
    safe-center + scrollbar-gutter 后的真实 rect；窗口放不下时两端都回退靠左，
    由 .ws-body 横向滚动承接。 */
 [data-qingagent-doc-panel] .ws-right {
-  --ws-paper-min-height: calc(100vh - var(--ws-paper-top-offset));
+  --ws-paper-min-height: 100%;
   /* 纸内功能区(.ws-docfns)绝对定位的锚:相对滚动容器定位,随内容一起滚。 */
   position: relative;
   flex: 0 0 var(--ws-paper-column-width) !important;

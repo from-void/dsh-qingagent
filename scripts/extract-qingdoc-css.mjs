@@ -44,27 +44,26 @@ ${panelRoot} .ws-body {
 ${panelRoot} .ws-document-content { display: contents; }
 ${panelRoot} .ws-document-content > * { position: relative; z-index: 1; }
 ${panelRoot} .qingdoc-stage-controls {
-  position: absolute;
-  z-index: 100200;
-  top: 10px;
-  left: 50%;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  min-height: 30px;
-  padding: 4px 5px 4px 10px;
+  width: 100%;
+  min-height: 52px;
+  box-sizing: border-box;
+  padding: 10px 12px;
   color: rgba(236, 227, 208, .76);
-  border: 1px solid rgba(184, 169, 140, .28);
+  border: 0;
+  border-bottom: 1px solid rgba(184, 169, 140, .28);
   border-radius: 0;
-  background: rgba(8, 11, 15, .78);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, .24);
-  font: 12px/1.4 var(--font-zh-serif);
-  transform: translateX(-50%);
-  backdrop-filter: blur(10px);
+  background: rgba(8, 11, 15, .96);
+  box-shadow: none;
+  font: 13px/1.4 var(--font-zh-serif);
 }
 ${panelRoot} .qingdoc-stage-title { white-space: nowrap; }
 ${panelRoot} .qingdoc-close {
-  min-height: 22px;
+  min-height: 28px;
   padding: 0 8px;
   color: rgba(236, 227, 208, .64);
   border: 1px solid rgba(184, 169, 140, .22);
@@ -72,7 +71,7 @@ ${panelRoot} .qingdoc-close {
   background: transparent;
   cursor: pointer;
 }
-${panelRoot} .qingdoc-close { width: 24px; padding: 0; font-size: 16px; }
+${panelRoot} .qingdoc-close { width: 28px; padding: 0; font-size: 17px; }
 `
 
 function lineRange(source, start, end) {

@@ -591,7 +591,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
     '--ws-paper-chat-column-width': '400px',
     '--ws-paper-column-gap': '48px',
     '--ws-paper-column-width': '800px',
-    '--ws-paper-top-offset': '52px',
+    '--ws-paper-top-offset': '0px',
     '--ws-paper-radius': '0',
   } as CSSProperties
 
