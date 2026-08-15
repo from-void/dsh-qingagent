@@ -278,6 +278,12 @@
   cursor: pointer;
 }
 [data-qingagent-doc-panel] .qingdoc-close { width: 28px; padding: 0; font-size: 17px; }
+[data-qingagent-doc-panel] .qingdoc-open:hover,
+[data-qingagent-doc-panel] .qingdoc-close:hover {
+  color: #ece3d0;
+  border-color: rgba(236, 227, 208, .5);
+  background: rgba(236, 227, 208, .08);
+}
 
 /* source: packages/ui-kit/src/tokens.css:4-48 */
 [data-qingagent-doc-panel] {

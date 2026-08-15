@@ -77,6 +77,12 @@ ${panelRoot} .qingdoc-close {
   cursor: pointer;
 }
 ${panelRoot} .qingdoc-close { width: 28px; padding: 0; font-size: 17px; }
+${panelRoot} .qingdoc-open:hover,
+${panelRoot} .qingdoc-close:hover {
+  color: #ece3d0;
+  border-color: rgba(236, 227, 208, .5);
+  background: rgba(236, 227, 208, .08);
+}
 `
 
 function lineRange(source, start, end) {
