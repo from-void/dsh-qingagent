@@ -250,10 +250,21 @@ export function QingDocPanel(props: QingDocPanelProps) {
       : null
     if (root) observer?.observe(root)
     if (paper) observer?.observe(paper)
+    const mutationObserver = root && !root.querySelector('.wf-doc') && typeof MutationObserver !== 'undefined'
+      ? new MutationObserver(() => {
+          const renderedPaper = root.querySelector<HTMLElement>('.wf-doc')
+          if (!renderedPaper) return
+          observer?.observe(renderedPaper)
+          measurePaper()
+          mutationObserver?.disconnect()
+        })
+      : null
+    if (root) mutationObserver?.observe(root, { childList: true, subtree: true })
     window.addEventListener('resize', measurePaper)
     return () => {
       cancelAnimationFrame(raf1)
       observer?.disconnect()
+      mutationObserver?.disconnect()
       window.removeEventListener('resize', measurePaper)
     }
   }, [measurePaper, snapshot.panelDoc, snapshot.reviewModel, snapshot.streaming, activeEngineSessionId])
@@ -495,8 +506,10 @@ export function QingDocPanel(props: QingDocPanelProps) {
         className="qingdoc-details-resizer"
         data-qing-details-resizer
         role="separator"
+        tabIndex={0}
         aria-label="调整青简文档栏宽度"
         aria-orientation="vertical"
+        aria-valuemin={420}
       />
       <header className="qingdoc-stage-controls">
         <div className="qingdoc-heading">

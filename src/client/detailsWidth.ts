@@ -30,6 +30,8 @@ export function installDetailsColumnWidth(root: HTMLElement): () => void {
     const width = clampDetailsWidth(preferredWidth, view.innerWidth)
     frame.style.setProperty('--qing-details-width', `${Math.round(width)}px`)
     root.style.setProperty('--qing-details-width', `${Math.round(width)}px`)
+    handle.setAttribute('aria-valuenow', String(Math.round(width)))
+    handle.setAttribute('aria-valuemax', String(Math.round(Math.max(420, view.innerWidth * 0.7))))
   }
   const handleResize = () => {
     syncSidebar()
@@ -57,6 +59,14 @@ export function installDetailsColumnWidth(root: HTMLElement): () => void {
     root.dataset.qingDetailsResizing = '1'
     handle.setPointerCapture?.(event.pointerId)
   }
+  const keyDown = (event: KeyboardEvent) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    const step = event.shiftKey ? 40 : 10
+    preferredWidth += event.key === 'ArrowLeft' ? step : -step
+    applyPreferredWidth()
+    writeStoredWidth(view.localStorage, clampDetailsWidth(preferredWidth, view.innerWidth))
+  }
 
   syncSidebar()
   applyPreferredWidth()
@@ -65,6 +75,7 @@ export function installDetailsColumnWidth(root: HTMLElement): () => void {
     : null
   observer?.observe(sidebar)
   handle.addEventListener('pointerdown', pointerDown)
+  handle.addEventListener('keydown', keyDown)
   view.addEventListener('pointermove', pointerMove)
   view.addEventListener('pointerup', finishDrag)
   view.addEventListener('pointercancel', finishDrag)
@@ -73,6 +84,7 @@ export function installDetailsColumnWidth(root: HTMLElement): () => void {
   return () => {
     observer?.disconnect()
     handle.removeEventListener('pointerdown', pointerDown)
+    handle.removeEventListener('keydown', keyDown)
     view.removeEventListener('pointermove', pointerMove)
     view.removeEventListener('pointerup', finishDrag)
     view.removeEventListener('pointercancel', finishDrag)

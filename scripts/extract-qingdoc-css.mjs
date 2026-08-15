@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-const qingRoot = '/home/jimmy/proj/qingagent/main'
+const qingRoot = '/home/jimmy/proj/qingagent/wt/dsh-bridge'
 const panelRoot = '[data-qingagent-doc-panel]'
 const bannedSelectors = [
   '.web-page-frame--workspace',
@@ -63,8 +63,6 @@ ${panelRoot} .qingdoc-stage-controls {
   backdrop-filter: blur(10px);
 }
 ${panelRoot} .qingdoc-stage-title { white-space: nowrap; }
-${panelRoot} .qingdoc-mode-switch { display: flex; }
-${panelRoot} .qingdoc-mode-switch button,
 ${panelRoot} .qingdoc-close {
   min-height: 22px;
   padding: 0 8px;
@@ -73,11 +71,6 @@ ${panelRoot} .qingdoc-close {
   border-radius: 0;
   background: transparent;
   cursor: pointer;
-}
-${panelRoot} .qingdoc-mode-switch button + button { border-left: 0; }
-${panelRoot} .qingdoc-mode-switch button.is-active {
-  color: #1a1410;
-  background: #b59a63;
 }
 ${panelRoot} .qingdoc-close { width: 24px; padding: 0; font-size: 16px; }
 ${panelRoot} .qingdoc-toast {
@@ -241,7 +234,7 @@ for (const [relativePath, ranges] of sources) {
 }
 
 const output = [
-  '/* 由 scripts/extract-qingdoc-css.mjs 从青简 main@26ef9b19 机械提取；声明值不改。 */',
+  '/* 由 scripts/extract-qingdoc-css.mjs 从青简 wt/dsh-bridge@dc1a0baf 机械提取；声明值不改。 */',
   hostGlue,
   scopeStylesheet(extracted.join('\n\n')),
   '',

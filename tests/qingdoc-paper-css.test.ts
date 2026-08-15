@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const qingRoot = '/home/jimmy/proj/qingagent/main'
+const qingRoot = '/home/jimmy/proj/qingagent/wt/dsh-bridge'
 
 describe('青简纸面移植契约', () => {
   it('固定 800px、52/64 padding、宋体、直角和暖纸，并只作用于面板根', async () => {
@@ -14,6 +14,10 @@ describe('青简纸面移植契约', () => {
 
     expect(panelSource).toContain("'--ws-paper-column-width': '800px'")
     expect(panelSource).toContain('id="view-workspace"')
+    expect(panelSource).toContain('tabIndex={0}')
+    expect(panelSource).toContain('new MutationObserver')
+    expect(css).toContain('青简 wt/dsh-bridge@dc1a0baf')
+    expect(css).not.toContain('.qingdoc-mode-switch')
     expect(css).toContain('--bg-paper-deep: #efe7d6;')
     expect(css).toContain('--font-zh-serif: "Noto Serif SC"')
     expect(css).toContain('--r: 0;')
