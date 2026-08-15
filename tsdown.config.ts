@@ -1,6 +1,6 @@
 import { builtinModules, createRequire } from 'node:module'
 import { readFile } from 'node:fs/promises'
-import { basename, dirname, resolve as resolvePath } from 'node:path'
+import { basename, dirname, extname, resolve as resolvePath } from 'node:path'
 import type { UserConfig } from 'tsdown'
 import { transform } from 'lightningcss'
 
@@ -21,19 +21,128 @@ const NODE_BUILTINS = new Set([...builtinModules, ...builtinModules.map((id) => 
 const INLINE_SAFE = /^@deepseek-ai\/dsh-(session|llm|tools|brand)(\/|$)/
 const CSS_PREFIX = '\0dsh-qing-css:'
 const CSS_SUFFIX = '.mjs'
+const QING_ROOT = '/home/jimmy/proj/qingagent/main'
+const QING_WEB_SOURCE = `${QING_ROOT}/apps/web/src`
+const QING_SYSTEM_SOURCE = `${QING_WEB_SOURCE}/system`
+const QING_PANEL_SELECTOR = '[data-qingagent-doc-panel]'
+const FFLATE_BROWSER = resolvePath(dirname(require.resolve('fflate/package.json')), 'esm/browser.js')
+const UUID_BROWSER = resolvePath(dirname(require.resolve('uuid/package.json')), 'dist/esm-browser/index.js')
+const QING_SOURCE_ALIASES = {
+  fflate: FFLATE_BROWSER,
+  uuid: UUID_BROWSER,
+  '@qingagent/contract-ts/schemas': `${QING_ROOT}/packages/contract-ts/src/schemas/index.ts`,
+  '@qingagent/contract-ts': `${QING_ROOT}/packages/contract-ts/src/index.ts`,
+  '@qingagent/diagram-engine': `${QING_ROOT}/packages/diagram-engine/src/index.ts`,
+  '@qingagent/pm-schema/tiptap': `${QING_ROOT}/packages/pm-schema/src/tiptap/createQingagentExtensions.ts`,
+  '@qingagent/pm-schema': `${QING_ROOT}/packages/pm-schema/src/index.ts`,
+  '@qingweb': QING_WEB_SOURCE,
+}
 
 type BuildPlugin = NonNullable<UserConfig['plugins']>
 
 function purityGate(): BuildPlugin {
   return {
     name: 'dsh-qingagent-client-purity',
-    resolveId(source: string) {
-      if (NODE_BUILTINS.has(source)) throw new Error(`客户端包不能引用 Node 内置模块：${source}`)
+    resolveId(source: string, importer?: string) {
+      if (NODE_BUILTINS.has(source)) throw new Error(`客户端包不能引用 Node 内置模块：${source}（来自 ${importer ?? 'unknown'}）`)
       if (!source.startsWith('@deepseek-ai/')) return null
       if (CLIENT_EXTERNALS.includes(source) || INLINE_SAFE.test(source)) return null
       throw new Error(`客户端包引用了未共享的 DSH 值模块：${source}`)
     },
   }
+}
+
+function qingSourceBridge(): BuildPlugin {
+  const systemShim = resolvePath('src/qingdoc/shims/system.tsx')
+  const sealAsset = resolvePath('src/qingdoc/assets/seal-kongshengmiaoyou.png')
+  let sealDataUri: string | undefined
+  return {
+    name: 'dsh-qingagent-source-bridge',
+    resolveId(source: string, importer?: string) {
+      if (!importer?.startsWith(QING_WEB_SOURCE) || !source.startsWith('.')) return null
+      const target = resolvePath(dirname(importer), source)
+      if (
+        target === QING_SYSTEM_SOURCE ||
+        target === `${QING_SYSTEM_SOURCE}/ConfirmProvider` ||
+        target === `${QING_SYSTEM_SOURCE}/ToastProvider`
+      ) {
+        return systemShim
+      }
+      return null
+    },
+    async transform(code: string, id: string) {
+      if (!id.startsWith(QING_WEB_SOURCE)) return null
+      let next = code
+      if (id.endsWith('/DocumentSnapshotView.tsx')) {
+        next = next.replace('import { chatInputBus } from "../../../system";\n', '')
+      }
+
+      next = next
+        .replaceAll('document.getElementById("view-workspace")', `document.querySelector("${QING_PANEL_SELECTOR}")`)
+        .replaceAll('document.getElementById(\'view-workspace\')', `document.querySelector("${QING_PANEL_SELECTOR}")`)
+        .replaceAll('"#view-workspace"', `"${QING_PANEL_SELECTOR}"`)
+        .replaceAll("'#view-workspace'", `"${QING_PANEL_SELECTOR}"`)
+
+      if (
+        id.endsWith('/CodeBlockView.tsx') ||
+        id.endsWith('/MediaZoomFullscreen.tsx') ||
+        id.endsWith('/diagram/GraphDiagramView.tsx')
+      ) {
+        next = next.replace(
+          /(,\n\s*)document\.body(,\n)/g,
+          `$1(document.querySelector("${QING_PANEL_SELECTOR}") ?? document.body)$2`,
+        )
+      }
+      if (id.endsWith('/ListItemDnD.ts')) {
+        next = next.replaceAll(
+          'document.body.classList',
+          `(document.querySelector("${QING_PANEL_SELECTOR}") ?? document.body).classList`,
+        )
+      }
+      if (id.endsWith('/drawioEditorLauncher.tsx')) {
+        next = next.replace(
+          'document.body.appendChild(host);',
+          `(document.querySelector("${QING_PANEL_SELECTOR}") ?? document.body).appendChild(host);`,
+        )
+      }
+      if (id.endsWith('/DocColophon.tsx')) {
+        sealDataUri ??= `data:image/png;base64,${(await readFile(sealAsset)).toString('base64')}`
+        next = next.replace(
+          'const SEAL_SRC = "/chinese-masonry-assets/curated-backgrounds/seal-kongshengmiaoyou.png";',
+          `const SEAL_SRC = ${JSON.stringify(sealDataUri)};`,
+        )
+      }
+      return next === code ? null : { code: next, map: null }
+    },
+  }
+}
+
+function assetMime(filename: string): string {
+  switch (extname(filename).toLowerCase()) {
+    case '.woff2': return 'font/woff2'
+    case '.woff': return 'font/woff'
+    case '.png': return 'image/png'
+    case '.svg': return 'image/svg+xml'
+    default: return 'application/octet-stream'
+  }
+}
+
+async function inlineLocalCssAssets(
+  source: string,
+  filename: string,
+  addWatchFile: (filename: string) => void,
+): Promise<string> {
+  const matches = [...source.matchAll(/url\(\s*(["']?)([^"')]+)\1\s*\)/g)]
+  let result = source
+  for (const match of matches) {
+    const url = match[2]!
+    if (/^(?:data:|https?:|#|\/)/.test(url)) continue
+    const asset = resolvePath(dirname(filename), url)
+    addWatchFile(asset)
+    const dataUri = `data:${assetMime(asset)};base64,${(await readFile(asset)).toString('base64')}`
+    result = result.replace(match[0], `url(${JSON.stringify(dataUri)})`)
+  }
+  return result
 }
 
 function cssPlugin(pluginId: string): BuildPlugin {
@@ -50,11 +159,15 @@ function cssPlugin(pluginId: string): BuildPlugin {
       if (!id.startsWith(CSS_PREFIX)) return null
       const filename = id.slice(CSS_PREFIX.length, -CSS_SUFFIX.length)
       this.addWatchFile(filename)
-      const source = await readFile(filename)
+      let source = await readFile(filename, 'utf8')
+      source = await inlineLocalCssAssets(source, filename, (asset) => this.addWatchFile(asset))
+      if (filename.startsWith(`${QING_WEB_SOURCE}/pages/workspace/`)) {
+        source = `@scope (${QING_PANEL_SELECTOR}) {\n${source}\n}`
+      }
       const { code, exports } = transform({
         filename,
-        code: source,
-        cssModules: { pattern: '[hash]_[local]' },
+        code: Buffer.from(source),
+        cssModules: filename.endsWith('.module.css') ? { pattern: '[hash]_[local]' } : undefined,
         minify: true,
       })
       const classMap: Record<string, string> = {}
@@ -80,8 +193,9 @@ const client: UserConfig = {
   sourcemap: true,
   external: CLIENT_EXTERNALS,
   noExternal: (id: string) => CLIENT_EXTERNALS.includes(id) ? undefined : true,
+  alias: QING_SOURCE_ALIASES,
   inputOptions: { resolve: { conditionNames: ['browser', 'import', 'require', 'default'] } },
-  plugins: [purityGate(), cssPlugin('dsh-qingagent')],
+  plugins: [qingSourceBridge(), purityGate(), cssPlugin('dsh-qingagent')],
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
     'import.meta.env.MODE': JSON.stringify(process.env.NODE_ENV ?? 'production'),

@@ -1,7 +1,7 @@
 import type { ClientContext, ISessions } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
-import { QingPaperPanel } from './QingPaperPanel.js'
+import { QingDocPanel } from './QingDocPanel.js'
 import { QingWriteToolCard } from './QingWriteToolCard.js'
 import { qingClientStore } from './store.js'
 
@@ -27,7 +27,7 @@ export function apply(ctx: ClientContext): void {
           name: 'details',
           priority: -10,
           inject: () => ({ qingLayout: layout }),
-        }, QingPaperPanel)
+        }, QingDocPanel)
       } else if (!shouldRegister && disposePanel) {
         disposePanel()
         disposePanel = undefined

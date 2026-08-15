@@ -6,7 +6,16 @@
     "declaration": true,
     "declarationMap": true,
     "outDir": "lib/types",
-    "rootDir": "src"
+    "rootDir": "src",
+    "paths": {
+      "@qingagent/pm-schema": ["./src/qingdoc/shims/pm-schema.build.d.ts"],
+      "@qingagent/pm-schema/*": ["./src/qingdoc/shims/pm-schema.build.d.ts"],
+      "@qingagent/contract-ts": ["./src/qingdoc/shims/pm-schema.build.d.ts"],
+      "@qingagent/contract-ts/*": ["./src/qingdoc/shims/pm-schema.build.d.ts"],
+      "@qingagent/diagram-engine": ["./src/qingdoc/shims/pm-schema.build.d.ts"],
+      "@qingagent/diagram-engine/*": ["./src/qingdoc/shims/pm-schema.build.d.ts"],
+      "@qingweb/*": ["./src/qingdoc/shims/DocumentSnapshotView.build.d.ts"]
+    }
   },
   "include": ["src"]
 }

@@ -1,0 +1,3552 @@
+/* 由 scripts/extract-qingdoc-css.mjs 从青简 main@26ef9b19 机械提取；声明值不改。 */
+/* dsh 面板薄胶水：只建立青简纸面所需的唯一根与原 DOM 骨架。 */
+[data-qingagent-doc-panel] {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+[data-qingagent-doc-panel] .ws-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+[data-qingagent-doc-panel] .ws-document-content { display: contents; }
+[data-qingagent-doc-panel] .ws-document-content > * { position: relative; z-index: 1; }
+[data-qingagent-doc-panel] .qingdoc-stage-controls {
+  position: absolute;
+  z-index: 100200;
+  top: 10px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 5px 4px 10px;
+  color: rgba(236, 227, 208, .76);
+  border: 1px solid rgba(184, 169, 140, .28);
+  border-radius: 0;
+  background: rgba(8, 11, 15, .78);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .24);
+  font: 12px/1.4 var(--font-zh-serif);
+  transform: translateX(-50%);
+  backdrop-filter: blur(10px);
+}
+[data-qingagent-doc-panel] .qingdoc-stage-title { white-space: nowrap; }
+[data-qingagent-doc-panel] .qingdoc-mode-switch { display: flex; }
+[data-qingagent-doc-panel] .qingdoc-mode-switch button,
+[data-qingagent-doc-panel] .qingdoc-close {
+  min-height: 22px;
+  padding: 0 8px;
+  color: rgba(236, 227, 208, .64);
+  border: 1px solid rgba(184, 169, 140, .22);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+[data-qingagent-doc-panel] .qingdoc-mode-switch button + button { border-left: 0; }
+[data-qingagent-doc-panel] .qingdoc-mode-switch button.is-active {
+  color: #1a1410;
+  background: #b59a63;
+}
+[data-qingagent-doc-panel] .qingdoc-close { width: 24px; padding: 0; font-size: 16px; }
+[data-qingagent-doc-panel] .qingdoc-toast {
+  position: absolute;
+  z-index: 100210;
+  right: 16px;
+  bottom: 16px;
+  padding: 8px 12px;
+  color: #2f2a22;
+  border: 1px solid rgba(120, 90, 50, .28);
+  border-radius: 0;
+  background: #faf6ec;
+  font: 12px/1.5 var(--font-zh-serif);
+}
+
+/* source: packages/ui-kit/src/tokens.css:4-48 */
+[data-qingagent-doc-panel] {
+  /* 中性色板:暖墨纸系(原 slate-blue 冷色 base 已废弃,全站统一暖化)。
+   * 暖值与 workspace-ink-skin 的逐容器暖化保持一致(墨 #2f2a22 / 金棕 mark #a8823f)。 */
+  --bg-window: #e7ddc9;
+  --bg-canvas: #faf6ec;
+  --bg-paper-deep: #efe7d6;
+  --bg-subtle: rgba(120, 90, 50, 0.07);
+  --bg-panel: rgba(120, 90, 50, 0.05);
+  --bg-hover: rgba(120, 90, 50, 0.1);
+  --line-1: rgba(120, 90, 50, 0.16);
+  --line-2: rgba(120, 90, 50, 0.28);
+  --line-3: rgba(120, 90, 50, 0.42);
+  --line-ink: #2f2a22;
+  --ink-1: #2f2a22;
+  --ink-2: #5c5346;
+  --ink-3: #8a7f6e;
+  --ink-4: #b3a791;
+  --ink-cool: #8a7f6e;
+  --ink-on-dark: #ece3d0;
+  --mark: #a8823f;
+  --mark-soft: rgba(168, 130, 63, 0.14);
+  --diff-ins-bg: #e6ecd7;
+  --diff-ins-ink: #3a4e1d;
+  --diff-ins-bd: #c2cfa4;
+  --diff-del-bg: #f1dfd7;
+  --diff-del-ink: #6b2d1a;
+  --diff-del-bd: #d7b6a4;
+  --sel-bg: #f1e4a8;
+  --ink-surface: #1a1410;
+  --ink-surface-2: #221c15;
+  --shadow-1: 0 1px 2px rgba(50, 38, 18, 0.06);
+  --shadow-2: 0 6px 20px rgba(50, 38, 18, 0.1), 0 1px 3px rgba(50, 38, 18, 0.06);
+  --shadow-3: 0 24px 60px rgba(50, 38, 18, 0.2), 0 4px 12px rgba(50, 38, 18, 0.08);
+  --font-display: "EB Garamond", "Newsreader", "Source Serif Pro", "Charter", Georgia, serif;
+  --font-sans: "Noto Sans SC", "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
+    "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --font-zh-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun",
+    "宋体", serif;
+  --r-sm: 0;
+  --r: 0;
+  --r-lg: 0;
+  --r-pill: 999px;
+  --z-popover: 10020;
+}
+
+/* source: packages/ui-kit/src/base.css:5-36 */
+[data-qingagent-doc-panel], [data-qingagent-doc-panel] * {
+  box-sizing: border-box;
+}
+
+[data-qingagent-doc-panel],
+[data-qingagent-doc-panel] {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-window);
+  color: var(--ink-1);
+}
+
+[data-qingagent-doc-panel] {
+  font-family: var(--font-zh-serif);
+  font-size: 13.5px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 表单控件的 UA 默认字体不会可靠继承 body；这是 portal、弹窗与菜单共用的字体防线，勿删。
+ * 局部等宽/装饰字体仍可由更具体的组件规则覆盖，并会连同完整 font 属性正常继承。 */
+[data-qingagent-doc-panel] button,
+[data-qingagent-doc-panel] input,
+[data-qingagent-doc-panel] select,
+[data-qingagent-doc-panel] textarea,
+[data-qingagent-doc-panel] optgroup {
+  font: inherit;
+}
+
+[data-qingagent-doc-panel] .font-mono {
+  font-family: var(--font-mono);
+}
+
+/* source: packages/ui-kit/src/components.css:181-274 */
+/* ============ Doc ============ */
+/* .doc-typography 是只读正文的共享排版作用域；.wf-doc 继续承载编辑器 chrome。 */
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) {
+  font-size: 14.5px;
+  line-height: 1.85;
+  color: var(--ink-1);
+  font-family: var(--font-zh-serif);
+}
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) h1 {
+  font-family: var(--font-zh-serif);
+  font-size: 26px;
+  font-weight: 600;
+  margin: 16px 0 10px;
+  letter-spacing: 0.012em;
+}
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) h2 {
+  font-family: var(--font-zh-serif);
+  font-size: 20px;
+  font-weight: 600;
+  margin: 22px 0 8px;
+  letter-spacing: 0.01em;
+}
+/* H3-H6 与 H1/H2 一样继承 .wf-doc 的 --ink-1 深色;曾用 --ink-2/--ink-3
+   逐级变浅做层级,但用户要求所有标题一律深色对齐 H1(靠字号/字重区分层级即可) */
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) h3 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 14px 0 4px;
+}
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) h4 {
+  font-size: 15.5px;
+  font-weight: 600;
+  margin: 12px 0 4px;
+}
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) h5 {
+  font-size: 14.8px;
+  font-weight: 600;
+  margin: 10px 0 4px;
+}
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) h6 {
+  font-size: 14.5px;
+  font-weight: 600;
+  margin: 10px 0 4px;
+  letter-spacing: 0.02em;
+}
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) p { margin: 8px 0; }
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) table {
+  border-collapse: collapse;
+  font-size: 12.5px;
+  margin: 10px 0;
+  border: 1px solid var(--line-2);
+  border-radius: 0;
+  overflow: hidden;
+}
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) th,
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) td {
+  border-bottom: 1px solid var(--line-1);
+  border-right: 1px solid var(--line-1);
+  padding: 7px 12px;
+  text-align: left;
+}
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) th {
+  background: var(--bg-subtle);
+  font-weight: 600;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) th:last-child,
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) td:last-child {
+  border-right: none;
+}
+[data-qingagent-doc-panel] :is(.wf-doc, .doc-typography) tr:last-child td {
+  border-bottom: none;
+}
+
+/* ============ Patches / Selection / Annotation ============ */
+[data-qingagent-doc-panel] .wf-patch-ins {
+  background: linear-gradient(
+    to bottom,
+    transparent 50%,
+    rgba(74, 180, 100, 0.22) 50%
+  );
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 0;
+  border-bottom: none;
+}
+[data-qingagent-doc-panel] .wf-sel {
+  background: var(--sel-bg);
+  border-radius: 0;
+  padding: 0 3px;
+  cursor: pointer;
+}
+
+/* source: apps/web/src/app.css:1-15 */
+@font-face {
+  font-family: "QingYanShiSubset";
+  src: url("./assets/yanshi-colophon-subset.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+[data-qingagent-doc-panel] {
+  /* 转场、新建页与工作区共用同一张玄青桌面，避免跨路由首尾帧色值断层。 */
+  --desk-base: #16212c;
+  --desk-cinnabar-glow: radial-gradient(130% 100% at 72% 8%, rgba(207, 90, 79, 0.1), transparent 50%);
+  --desk-teal-glow: radial-gradient(120% 120% at 16% 90%, rgba(70, 120, 120, 0.09), transparent 55%);
+  --desk-vignette: radial-gradient(150% 130% at 50% 42%, transparent 0%, transparent 48%, rgba(8, 13, 19, 0.42) 100%);
+}
+
+/* source: apps/web/src/pages/workspace/workspace.css:197-214 */
+  /* 右栏 DOC · 文档独立滚动容器。
+     作为 .ws-body(横向 flex)的 flex item,必须显式 min-height:0:
+     flex item 默认 min-height:auto 会被长文档内容撑开,使 overflow-y:auto 失效、
+     高度溢出冒泡到 body。加 min-height:0 后高度被父锁死,长文档在本列内部滚动。 */
+  [data-qingagent-doc-panel] .ws-right {
+    flex:1 1 auto;min-width:0;min-height:0;position:relative;overflow-y:auto;overflow-x:hidden;
+    /* flex 列:让内容区撑满高度,末尾 .ws-edit-lock 用 margin-top:auto 稳定钉底——
+       否则生成期 RightPane 渲染 QingLoading 等矮占位时,sticky-bottom 的编辑锁会落到顶部
+       (自然流位置)。bigplan 态早已用 flex column,此处统一为默认。 */
+    display:flex;flex-direction:column;
+    /* 顶部 36 留白(深墨间隔=顶部空间);底部 0,纸张 min-height:100% 直接铺到底,不留黑空隙 */
+    padding:36px 80px 0 60px;
+    background:var(--bg-canvas);
+  }
+  [data-qingagent-doc-panel] .ws-right::-webkit-scrollbar {width:6px}
+  [data-qingagent-doc-panel] .ws-right::-webkit-scrollbar-thumb {background:var(--line-2);border-radius:0}
+  [data-qingagent-doc-panel] .ws-right::-webkit-scrollbar-thumb:hover {background:var(--ink-4)}
+  [data-qingagent-doc-panel] .ws-right::-webkit-scrollbar-track {background:transparent}
+
+/* source: apps/web/src/pages/workspace/workspace.css:304-386 */
+  /* ============ Patch 固定顶条 ============ */
+  /* ============ Patch 审核条 · 只在 review 态出现 · 贴正文左, 横向精简 ============ */
+  [data-qingagent-doc-panel] .patch-nav {
+    position:sticky;top:0;z-index:8;
+    margin:0 0 18px 0;              /* 对齐 .wf-doc 左边 */
+    max-width:660px;                /* = 860 正文 - 200 右留白 */
+    width:100%;
+    padding:7px 10px 7px 14px;
+    background:var(--bg-subtle);    /* 去 backdrop-filter 提速 */
+    border:1px solid var(--line-2);
+    border-radius:var(--r);
+    display:flex;align-items:center;gap:8px;
+    font-size:12px;color:var(--ink-2);
+    white-space:nowrap;
+    /* 改动B 微调:"打字"完成后审批条才挂载,挂载时下滑淡入 */
+    animation:pn-in .34s cubic-bezier(.2,.7,.3,1) both;
+  }
+  @keyframes pn-in {from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+  [data-qingagent-doc-panel] .patch-nav .pn-dot {
+    width:7px;height:7px;border-radius:50%;
+    background:#e8913a;box-shadow:0 0 0 3px rgba(232,145,58,.18);flex-shrink:0;
+  }
+  [data-qingagent-doc-panel] .patch-nav .pn-label {color:var(--ink-1);font-weight:500;margin-right:4px}
+  [data-qingagent-doc-panel] .patch-nav .pn-label b {color:#e8913a;font-weight:600;margin:0 2px}
+  [data-qingagent-doc-panel] .patch-nav .pn-jump {
+    display:inline-flex;align-items:center;gap:4px;
+    background:transparent;color:var(--ink-1);
+    border:1px solid var(--line-2);border-radius:var(--r-sm);
+    padding:3px 10px;font-size:11.5px;cursor:pointer;
+    transition:background .12s,border-color .12s;
+  }
+  [data-qingagent-doc-panel] .patch-nav .pn-jump:hover {background:var(--bg-hover);border-color:var(--ink-3)}
+  [data-qingagent-doc-panel] .patch-nav .pn-ghost {
+    background:transparent;color:var(--ink-3);
+    border:1px solid var(--line-2);border-radius:var(--r-sm);
+    padding:3px 10px;font-size:11.5px;cursor:pointer;
+    transition:color .12s,border-color .12s,background .12s;
+  }
+  [data-qingagent-doc-panel] .patch-nav .pn-ghost:hover {color:var(--ink-1);border-color:var(--ink-3);background:var(--bg-hover)}
+  [data-qingagent-doc-panel] .patch-nav .pn-commit {
+    display:inline-flex;align-items:center;gap:4px;
+    background:var(--ink-1);color:var(--ink-on-dark);
+    border:1px solid var(--ink-1);border-radius:var(--r-sm);
+    padding:3px 12px;font-size:11.5px;cursor:pointer;font-weight:500;
+    transition:background .12s;
+  }
+  [data-qingagent-doc-panel] .patch-nav .pn-commit:hover {background:#2d2a22}
+  [data-qingagent-doc-panel] .patch-nav .pn-jump:disabled {opacity:.35;cursor:default;pointer-events:none}
+  [data-qingagent-doc-panel] .patch-nav .pn-spacer {flex:1}
+  [data-qingagent-doc-panel] .patch-nav .pn-confirm-inline {
+    width:100%;display:flex;align-items:center;gap:8px;white-space:nowrap;
+  }
+  [data-qingagent-doc-panel] .patch-nav .pn-confirm-message {font-size:12.5px;font-weight:500}
+  [data-qingagent-doc-panel] .patch-nav .pn-confirm-action,
+[data-qingagent-doc-panel] .patch-nav .pn-confirm-cancel {
+    padding:4px 12px;border:1px solid var(--line-2);border-radius:0;
+    font:11.5px/1.4 var(--font-zh-serif);cursor:pointer;transition:background .12s,border-color .12s,color .12s;
+  }
+
+  /* ============ 整篇审(大改 ≥70%)新旧版切换 ============ */
+  /* 底部条里的互斥选择器 [新版 ‖ 旧版]:滑动 thumb;颜色在 ink-skin 按暗条重定。 */
+  [data-qingagent-doc-panel] .wdr-toggle {
+    position:relative;display:inline-flex;align-items:center;
+    background:var(--bg-hover);border:1px solid var(--line-2);
+    border-radius:999px;padding:2px;margin-left:2px;flex-shrink:0;
+  }
+  [data-qingagent-doc-panel] .wdr-opt {
+    position:relative;z-index:1;flex:1 1 0;min-width:46px;text-align:center;
+    background:transparent;border:0;padding:3px 13px;
+    font-size:11.5px;font-family:inherit;color:var(--ink-3);
+    cursor:pointer;border-radius:999px;transition:color .18s;white-space:nowrap;
+  }
+  [data-qingagent-doc-panel] .wdr-opt.is-on {color:var(--ink-on-dark)}
+  [data-qingagent-doc-panel] .wdr-thumb {
+    position:absolute;z-index:0;left:2px;top:2px;bottom:2px;
+    width:calc(50% - 2px);background:var(--ink-1);border-radius:999px;
+    transition:transform .26s cubic-bezier(.4,.1,.2,1);
+  }
+  [data-qingagent-doc-panel] .wdr-thumb.is-new {transform:translateX(0)}
+  [data-qingagent-doc-panel] .wdr-thumb.is-old {transform:translateX(100%)}
+  /* 新旧版正文切换:淡入 + 轻微上移(keyed remount 触发) */
+  [data-qingagent-doc-panel] .wdr-swap {animation:wdr-swap-in .34s cubic-bezier(.22,.61,.36,1) both}
+  @keyframes wdr-swap-in {from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+/* source: apps/web/src/pages/workspace/workspace.css:1299-3662 */
+  /* ============ 工具栏 · 浮现式 (选中文本时出现在选区上方) ============ */
+  [data-qingagent-doc-panel] .doc-toolbar {
+    /* z-index 必须高于表格列/行头热区(.tbl-col-hdr/.tbl-row-hdr=100010、.tbl-dot=100020):
+       在表格单元格内选中文字时,本浮层会盖在表格顶部,层级不够会被列头热区反盖住,
+       重叠处点击穿透去触发选列(bug)。抬到 100050 让工具栏始终在最上、挡住下层点击 */
+    position:fixed;z-index:100050;
+    display:flex;align-items:center;gap:2px;
+    padding:5px 6px;
+    background:var(--ink-1);
+    border:1px solid var(--ink-1);border-radius:var(--r);
+    box-shadow:0 10px 28px rgba(20,30,38,.28),0 2px 6px rgba(20,30,38,.12);
+    font-size:13px;user-select:none;
+    opacity:0;pointer-events:none;transform:translate(-50%,-4px);
+    transition:opacity .14s ease,transform .14s cubic-bezier(.2,.8,.2,1);
+    white-space:nowrap;
+  }
+  [data-qingagent-doc-panel] .doc-toolbar.on {opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+  /* 指向箭头:用 clip-path 切出的纯三角(非旋转方块),顶边正好贴气泡底缘、不伸进气泡内部。
+     旋转方块那种"一半压进气泡"的做法,当气泡/箭头半透明时叠加区会出现加深的三角;纯三角零
+     重叠,根除该问题。 */
+  [data-qingagent-doc-panel] .doc-toolbar::after {
+    content:"";position:absolute;left:50%;top:100%;transform:translateX(-50%);
+    width:12px;height:6px;background:var(--ink-1);
+    clip-path:polygon(50% 100%, 0 0, 100% 0); /* 朝下三角 */
+  }
+  /* 浮条翻到选区下方时(上方没空间),箭头移到顶部并朝上指向选区。 */
+  [data-qingagent-doc-panel] .doc-toolbar.is-below::after {
+    top:auto;bottom:100%;
+    clip-path:polygon(50% 0, 0 100%, 100% 100%); /* 朝上三角 */
+  }
+  [data-qingagent-doc-panel] .dt-btn {
+    display:inline-flex;align-items:center;justify-content:center;gap:3px;
+    min-width:26px;height:26px;padding:0 6px;
+    background:transparent;border:none;cursor:pointer;
+    color:var(--ink-1);font-size:13px;font-family:var(--font-zh-serif);
+    border-radius:var(--r-sm);transition:background .1s,color .1s;
+  }
+  [data-qingagent-doc-panel] .dt-btn:hover {background:var(--bg-hover)}
+  [data-qingagent-doc-panel] .dt-btn.active {background:#e5dfc9;color:var(--ink-1)}
+  /* 暂不支持的格式命令(行内标记/对齐等)按钮置灰,避免"看着能点其实无效"的误导。
+     待 0606 给文档模型加行内标记支持后再启用。 */
+  [data-qingagent-doc-panel] .dt-btn:disabled {
+    opacity:.32;cursor:not-allowed;
+  }
+  [data-qingagent-doc-panel] .dt-btn:disabled:hover {background:transparent}
+  [data-qingagent-doc-panel] .dt-btn .dt-lbl {font-family:var(--font-zh-serif);font-weight:500;font-size:14px;line-height:1}
+  /* 尖角/对齐改成 SVG 图标(旧的 ▾ ≡ 是文字字符,字形随系统字体、粗细不一也不居中) */
+  [data-qingagent-doc-panel] .dt-btn .dt-caret {
+    display:inline-flex;align-items:center;justify-content:center;color:var(--ink-3);
+  }
+  [data-qingagent-doc-panel] .dt-btn .dt-lbl-icon {display:inline-flex;align-items:center;justify-content:center}
+  [data-qingagent-doc-panel] .dt-svg {
+    width:16px;height:16px;display:block;fill:none;
+    stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;
+  }
+  /* 表格结构类图标(合并/删除/对齐)线条多,1.8 描边显糊粗,细化与左侧文字钮协调。 */
+  [data-qingagent-doc-panel] .dt-svg-thin {stroke-width:1.3}
+  /* 删除行/列是危险操作,用项目红提亮(深底可辨),避免金棕被误读为禁用态;
+     需盖过 .doc-toolbar .dt-btn 的 ink-on-dark。 */
+  [data-qingagent-doc-panel] .doc-toolbar .dt-btn.dt-btn-danger {color:#d97a5e}
+  [data-qingagent-doc-panel] .doc-toolbar .dt-btn.dt-btn-danger:hover {color:#e8907a}
+  [data-qingagent-doc-panel] .dt-code-icon {
+    width:30px;height:22px;display:inline-flex;align-items:center;justify-content:center;
+    border:1px solid rgba(255,255,255,.28);border-radius:0;
+    background:rgba(255,255,255,.08);
+  }
+  [data-qingagent-doc-panel] .dt-code-icon .dt-svg {width:18px;height:18px;stroke-width:1.9}
+  [data-qingagent-doc-panel] .dt-divider {width:1px;height:16px;background:var(--line-2);margin:0 4px}
+  [data-qingagent-doc-panel] .dt-group {position:relative}
+  [data-qingagent-doc-panel] .dt-menu {
+    display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:100030;
+    min-width:148px;padding:4px 0;
+    background:var(--bg-canvas);border:1px solid var(--line-2);
+    border-radius:var(--r);box-shadow:0 8px 20px rgba(20,30,38,.20);
+    max-height:min(60vh, 420px);overflow-y:auto;
+  }
+  [data-qingagent-doc-panel] .dt-group.open .dt-menu {display:block}
+  [data-qingagent-doc-panel] .dt-group.flip-up .dt-menu {top:auto;bottom:calc(100% + 6px)}
+  [data-qingagent-doc-panel] .dt-mi {
+    padding:6px 12px;font-size:12.5px;color:var(--ink-1);cursor:pointer;
+    display:flex;align-items:center;gap:8px;
+  }
+  [data-qingagent-doc-panel] .dt-mi:focus {outline:none}
+  [data-qingagent-doc-panel] .dt-mi:focus-visible {
+    outline:1px solid rgba(255,255,255,.32);
+    outline-offset:-2px;
+  }
+  [data-qingagent-doc-panel] .dt-mi:hover {background:var(--bg-hover)}
+  [data-qingagent-doc-panel] .dt-mi-spacer {margin-left:auto;display:inline-flex;align-items:center;justify-content:center;color:var(--ink-3)}
+  [data-qingagent-doc-panel] .dt-mi-k {font-family:var(--font-mono);font-size:10px;color:var(--ink-3);min-width:24px}
+  [data-qingagent-doc-panel] .dt-menu-icon {
+    width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;
+    flex:0 0 18px;color:currentColor;opacity:.86;
+  }
+  [data-qingagent-doc-panel] .dt-menu-svg {
+    width:17px;height:17px;display:block;fill:none;
+    stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;
+  }
+  [data-qingagent-doc-panel] .dt-menu-colors {
+    min-width:214px;padding:10px;max-height:min(70vh,560px);overflow:auto;
+  }
+  [data-qingagent-doc-panel] .table-size-picker {
+    position:fixed;z-index:100070;box-sizing:border-box;width:238px;padding:10px;
+    background:var(--bg-canvas);border:1px solid var(--line-2);border-radius:0;
+    box-shadow:0 10px 28px rgba(20,30,38,.18),0 2px 6px rgba(20,30,38,.08);
+    color:var(--ink-1);font-family:var(--font-zh-serif);user-select:none;
+  }
+  [data-qingagent-doc-panel] .table-size-picker:focus-visible {outline:1px solid var(--mark);outline-offset:2px}
+  [data-qingagent-doc-panel] .table-size-picker__head {
+    display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;
+    font-size:12.5px;color:var(--ink-2);
+  }
+  [data-qingagent-doc-panel] .table-size-picker__head output {
+    color:var(--mark);font-family:var(--font-mono);font-size:11px;font-variant-numeric:tabular-nums;
+  }
+  [data-qingagent-doc-panel] .table-size-picker__grid {
+    display:grid;grid-template-columns:repeat(10,18px);grid-auto-rows:18px;gap:3px;
+  }
+  [data-qingagent-doc-panel] .table-size-picker__grid [data-table-size-cell] {
+    width:18px;height:18px;box-sizing:border-box;padding:0;border:1px solid var(--line-2);
+    border-radius:0;background:var(--bg-subtle);cursor:pointer;
+  }
+  [data-qingagent-doc-panel] .table-size-picker__grid [data-table-size-cell].is-active {
+    border-color:var(--mark);background:var(--mark-soft);
+  }
+  [data-qingagent-doc-panel] .dt-color-menu {display:flex;flex-direction:column;gap:10px}
+  [data-qingagent-doc-panel] .dt-color-menu-compact {gap:6px}
+  [data-qingagent-doc-panel] .dt-color-section {display:flex;flex-direction:column;gap:6px}
+  [data-qingagent-doc-panel] .dt-color-label {
+    font-size:11px;color:rgba(255,255,255,.62);
+    padding:0 2px;font-family:var(--font-zh-serif);
+  }
+  [data-qingagent-doc-panel] .dt-swatch-grid,
+[data-qingagent-doc-panel] .graph-diagram-editor .dt-swatch-grid {
+    display:grid;grid-template-columns:repeat(7,22px);gap:6px;
+  }
+  [data-qingagent-doc-panel] .dt-swatch,
+[data-qingagent-doc-panel] .graph-diagram-editor .dt-swatch {
+    width:22px;height:22px;padding:0;border:1px solid transparent;border-radius:0;
+    background:transparent;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+  }
+  [data-qingagent-doc-panel] .dt-swatch:hover,
+[data-qingagent-doc-panel] .dt-swatch:focus-visible,
+[data-qingagent-doc-panel] .graph-diagram-editor .dt-swatch:hover,
+[data-qingagent-doc-panel] .graph-diagram-editor .dt-swatch:focus-visible {
+    background:rgba(255,255,255,.14);outline:none;
+  }
+  [data-qingagent-doc-panel] .dt-swatch-chip,
+[data-qingagent-doc-panel] .graph-diagram-editor .dt-swatch-chip {
+    width:14px;height:14px;border-radius:50%;display:block;
+    border:1.5px solid rgba(0,0,0,.22);box-shadow:0 0 0 1px rgba(255,255,255,.16);
+  }
+  [data-qingagent-doc-panel] .dt-swatch-text .dt-swatch-chip {border-color:rgba(255,255,255,.32)}
+  [data-qingagent-doc-panel] .dt-color-none,
+[data-qingagent-doc-panel] .graph-diagram-editor .dt-color-none {
+    background:var(--bg-canvas) !important;
+    border:1.5px dashed var(--ink-4) !important;position:relative;overflow:hidden;
+    display:block;width:14px;height:14px;border-radius:50%;
+  }
+  [data-qingagent-doc-panel] .dt-color-none::after,
+[data-qingagent-doc-panel] .graph-diagram-editor .dt-color-none::after {
+    content:"";position:absolute;left:50%;top:50%;
+    width:12px;height:1.5px;background:var(--ink-4);
+    transform:translate(-50%,-50%) rotate(-45deg);
+  }
+  [data-qingagent-doc-panel] .dt-hi-bar {
+    display:block;height:2.5px;margin-top:1px;border-radius:0;
+    background:#fff3a3;
+  }
+  [data-qingagent-doc-panel] .dt-text-bar {
+    display:block;height:2.5px;margin-top:1px;border-radius:0;
+    background:#f5e985;
+  }
+  [data-qingagent-doc-panel] .dt-cell-fill-icon {
+    width:18px;height:18px;display:inline-grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;
+    border:1.4px solid currentColor;border-radius:0;overflow:hidden;opacity:.92;
+  }
+  [data-qingagent-doc-panel] .dt-cell-fill-icon span {
+    grid-column:1 / -1;grid-row:2;background:#fff3a3;border-top:1px solid currentColor;
+  }
+  /* 深色浮现工具栏 · 按钮反白 */
+  [data-qingagent-doc-panel] .doc-toolbar .dt-btn {color:var(--ink-on-dark)}
+  [data-qingagent-doc-panel] .doc-toolbar .dt-btn:hover {background:rgba(255,255,255,.15)}
+  [data-qingagent-doc-panel] .doc-toolbar .dt-btn.active {background:rgba(255,255,255,.28)}
+  [data-qingagent-doc-panel] .doc-toolbar .dt-btn .dt-caret {color:rgba(255,255,255,.6)}
+  [data-qingagent-doc-panel] .doc-toolbar .dt-divider {background:rgba(255,255,255,.22)}
+  [data-qingagent-doc-panel] .doc-toolbar .dt-menu {background:#1f2a31;border-color:#2c3942}
+  [data-qingagent-doc-panel] .doc-toolbar .dt-mi {color:#fff}
+  [data-qingagent-doc-panel] .doc-toolbar .dt-mi:hover {background:rgba(255,255,255,.08)}
+  [data-qingagent-doc-panel] .doc-toolbar .dt-mi-k {color:rgba(255,255,255,.55)}
+  /* 深底工具栏菜单里的标题层级格 */
+  [data-qingagent-doc-panel] .doc-toolbar .wf-hlevel {color:rgba(255,255,255,.86)}
+  [data-qingagent-doc-panel] .doc-toolbar .wf-hlevel:hover:not(:disabled) {
+    background:rgba(255,255,255,.10);color:#fff;border-color:rgba(255,255,255,.24);
+  }
+  [data-qingagent-doc-panel] .doc-toolbar .wf-hlevel.is-active {
+    color:var(--mark);border-color:var(--mark);background:rgba(255,255,255,.10);
+  }
+  /* AI 修改按钮 · 把选中段引用到 chat */
+  [data-qingagent-doc-panel] .dt-btn.dt-ai {
+    background:var(--mark);color:#fff;
+    padding:3px 10px;margin-left:2px;
+    border-radius:var(--r-sm);font-weight:500;
+    font-family:var(--font-zh-serif);font-size:12px;
+    display:inline-flex;align-items:center;
+  }
+  [data-qingagent-doc-panel] .doc-toolbar .dt-btn.dt-ai:hover {background:#a4381f}
+  [data-qingagent-doc-panel] .dt-btn.dt-ai .dt-ai-ico {margin-right:3px}
+
+  /* Block handle · "+" button on empty lines */
+  [data-qingagent-doc-panel] .block-handle-wrap {
+    transform:translate(-100%,-50%);
+    /* 手柄右缘与正文留一点呼吸位(此前 0 会贴死正文,用户反馈拖柄离正文太近)。
+       wrap 整体 translate(-100%),右缘锚在正文左缘,padding-right 把手柄内容往左推出 ~3px 间距。 */
+    padding-right:3px;
+    display:flex;align-items:center;gap:2px;
+  }
+  /* 飞书风:贴正文左侧、暖灰、可拖拽,无常驻边框(仅 hover 淡底)。手柄是 fixed 覆盖层,
+     不在 .wf-doc 纸面变量作用域内,直接用奶白纸上的暖色硬值(用 --ink-* 会拿到暗色 chrome 浅色、纸上看不见)。 */
+  /* 块/列表手柄(飞书式 chip):左侧蓝色格式图标 + 右侧灰色六点抓手,圆角描边、无白底 */
+  [data-qingagent-doc-panel] .block-handle-btn {
+    border:0;background:transparent;cursor:grab;
+    display:flex;align-items:center;justify-content:center;
+    transition:background .12s,color .12s,border-color .12s;
+  }
+  [data-qingagent-doc-panel] .block-handle-btn:active {cursor:grabbing}
+  [data-qingagent-doc-panel] .block-handle-btn.is-plus {
+    width:20px;height:20px;border-radius:0;color:rgba(95,83,70,.55);
+  }
+  [data-qingagent-doc-panel] .block-handle-btn.is-plus:hover {background:var(--bg-hover);color:var(--ink-1)}
+  [data-qingagent-doc-panel] .block-handle-btn.is-chip {
+    height:18px;padding:0 3px;border-radius:0;
+    border:1px solid var(--line-2);background:transparent;
+  }
+  [data-qingagent-doc-panel] .block-handle-btn.is-chip:hover {
+    border-color:rgba(120,90,50,.46);background:rgba(120,90,50,.08);
+  }
+  [data-qingagent-doc-panel] .bh-chip-inner {display:flex;align-items:center;gap:3px}
+  [data-qingagent-doc-panel] .bh-type {display:flex;align-items:center;color:rgba(95,83,70,.72)}
+  [data-qingagent-doc-panel] .bh-type-text {
+    font-family:var(--font-mono);font-size:9px;font-weight:700;
+    letter-spacing:-.04em;line-height:1;color:rgba(95,83,70,.72);
+  }
+  [data-qingagent-doc-panel] .bh-type-svg {display:block}
+  [data-qingagent-doc-panel] .bh-grip {display:block;color:rgba(95,83,70,.5)}
+  /* 折叠三角:SVG 旋转保证展开/折叠尺寸一致(展开▼=向下90°,折叠▶=向右0°) */
+  [data-qingagent-doc-panel] .fold-toggle {
+    width:16px;height:16px;border:0;border-radius:0;
+    background:transparent;color:rgba(95,83,70,.6);cursor:pointer;padding:0;
+    display:flex;align-items:center;justify-content:center;
+    transition:background .12s,color .12s;
+  }
+  [data-qingagent-doc-panel] .fold-toggle:hover {background:var(--bg-hover);color:var(--ink-1)}
+  /* transform-box:fill-box + 居中轴心 → 三角绕自身中心旋转,展开/折叠切换时原地转不偏移 */
+  [data-qingagent-doc-panel] .fold-caret {display:block;transform-box:fill-box;transform-origin:center;transform:rotate(90deg)}
+  [data-qingagent-doc-panel] .fold-toggle.is-collapsed .fold-caret {transform:rotate(0deg)}
+  /* 折叠态常驻三角:gutter 悬浮层(fixed,不进入内容区),和拖拽托柄/hover 折叠三角同锚点
+     (translate -100% → 右缘对齐 left,在 gutter 内、列表圆点左侧)。点击展开。 */
+  [data-qingagent-doc-panel] .block-fold-persist {
+    transform:translate(-100%,-50%);
+    width:16px;height:16px;border:0;border-radius:0;padding:0;
+    background:transparent;color:rgba(95,83,70,.6);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:background .12s,color .12s;
+  }
+  [data-qingagent-doc-panel] .block-fold-persist:hover {background:var(--bg-hover);color:var(--ink-1)}
+  [data-qingagent-doc-panel] .block-fold-persist__icon {display:block;transform-box:fill-box;transform-origin:center}
+  [data-qingagent-doc-panel] .wf-doc .is-folded-hidden {display:none !important}
+  /* 空块占位符(@tiptap Placeholder):空标题显示"几级标题"、空文档首段给提示。
+     暖灰、不占位、不可选;标题块的 ::before 继承大字号 → 自然是大号灰字(对齐飞书)。 */
+  [data-qingagent-doc-panel] .wf-doc .is-empty::before,
+[data-qingagent-doc-panel] .wf-doc .is-editor-empty::before {
+    content:attr(data-placeholder);
+    color:rgba(47,42,34,.32);
+    float:left;height:0;pointer-events:none;
+  }
+  [data-qingagent-doc-panel] .block-handle-menu {
+    position:fixed;top:0;left:0;
+    z-index:100060;
+    min-width:222px;padding:6px 0;
+    background:var(--bg-canvas);border:1px solid var(--line-2);
+    border-radius:var(--r);
+    box-shadow:0 8px 24px rgba(20,30,38,.14),0 2px 6px rgba(20,30,38,.08);
+    animation:bh-in .14s ease-out;
+    /* 矮视口兜底(review #5):菜单比视口高时可滚,尾部菜单项不至于永远够不到 */
+    max-height:calc(100vh - 16px);overflow-y:auto;
+  }
+  [data-qingagent-doc-panel] .block-handle-menu.flip-up {bottom:auto}
+  @keyframes bh-in {from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+
+  /* Section labels */
+  [data-qingagent-doc-panel] .bh-section-label {
+    padding:4px 14px 2px;font-family:var(--font-mono);font-size:10px;
+    color:var(--ink-4);letter-spacing:.06em;text-transform:uppercase;
+  }
+  [data-qingagent-doc-panel] .bh-divider {
+    height:1px;background:var(--line-1);margin:6px 10px;
+  }
+
+  /* 标题层级选择器(工具栏标题下拉 / 块手柄「转换为」共用同一套):六级排一行,不做六行长列表 */
+  [data-qingagent-doc-panel] .wf-hlevels {
+    display:grid;grid-template-columns:repeat(6,32px);grid-auto-rows:28px;
+    gap:2px;padding:2px 10px 4px;
+  }
+  [data-qingagent-doc-panel] .wf-hlevel {
+    width:32px;height:28px;border:1px solid transparent;border-radius:var(--r-sm);
+    background:transparent;color:var(--ink-2);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-mono);font-size:11.5px;font-weight:600;line-height:1;
+    transition:background .1s,color .1s,border-color .1s;
+  }
+  [data-qingagent-doc-panel] .wf-hlevel:hover:not(:disabled) {
+    background:var(--bg-hover);color:var(--ink-1);border-color:var(--line-2);
+  }
+  [data-qingagent-doc-panel] .wf-hlevel.is-active {
+    color:var(--mark);border-color:var(--mark);background:var(--mark-soft);
+  }
+  [data-qingagent-doc-panel] .wf-hlevel:disabled {opacity:.32;cursor:not-allowed}
+
+  /* 转换宫格统一六列自动流：H1~H5 + 正文填满首排，H6 与其余块类型连续顺延。 */
+  [data-qingagent-doc-panel] .bh-grid {
+    display:grid;grid-template-columns:repeat(6,32px);grid-auto-rows:28px;
+    gap:2px;padding:2px 10px 4px;
+  }
+  [data-qingagent-doc-panel] .bh-grid-btn {
+    width:32px;height:28px;border:1px solid transparent;border-radius:var(--r-sm);
+    background:transparent;color:var(--ink-3);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:background .1s,color .1s,border-color .1s;
+  }
+  [data-qingagent-doc-panel] .bh-grid-btn:hover {
+    background:var(--bg-hover);color:var(--ink-1);border-color:var(--line-2);
+  }
+  [data-qingagent-doc-panel] .bh-heading-btn {
+    color:var(--ink-2);font-family:var(--font-mono);font-size:11.5px;font-weight:600;line-height:1;
+  }
+  [data-qingagent-doc-panel] .bh-heading-btn.is-active {
+    color:var(--mark);border-color:var(--mark);background:var(--mark-soft);
+  }
+  [data-qingagent-doc-panel] .bh-svg {
+    width:16px;height:16px;display:block;flex:0 0 auto;
+    fill:none;stroke:currentColor;stroke-width:1.45;
+    stroke-linecap:round;stroke-linejoin:round;
+  }
+  [data-qingagent-doc-panel] .bh-grid-btn .bh-svg {width:15px;height:15px}
+  [data-qingagent-doc-panel] .bh-svg-ordered text {
+    fill:currentColor;stroke:none;
+    font-family:var(--font-mono);font-size:5.2px;font-weight:700;
+  }
+
+  /* List items */
+  [data-qingagent-doc-panel] .block-handle-item {
+    display:flex;align-items:center;gap:10px;width:100%;height:34px;
+    padding:7px 14px;background:transparent;border:none;
+    color:var(--ink-1);font-size:13px;font-family:var(--font-zh-serif);
+    cursor:pointer;text-align:left;
+    transition:background .1s;
+  }
+  [data-qingagent-doc-panel] .block-handle-item:hover {background:var(--bg-hover)}
+  [data-qingagent-doc-panel] .block-handle-item.is-danger:hover {
+    background:rgba(150,58,42,.10);color:#7f2f22;
+  }
+  [data-qingagent-doc-panel] .bh-icon {
+    width:20px;height:20px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    color:var(--ink-3);
+  }
+  [data-qingagent-doc-panel] .block-handle-item:hover .bh-icon {color:var(--ink-1)}
+  [data-qingagent-doc-panel] .block-handle-item.is-danger:hover .bh-icon {color:#7f2f22}
+  [data-qingagent-doc-panel] .bh-submenu {position:relative}
+  [data-qingagent-doc-panel] .bh-submenu-trigger {padding-right:10px}
+  [data-qingagent-doc-panel] .bh-caret {
+    margin-left:auto;width:16px;height:16px;display:flex;align-items:center;justify-content:center;
+    color:var(--ink-3);
+  }
+  [data-qingagent-doc-panel] .bh-caret .bh-svg {width:13px;height:13px}
+  [data-qingagent-doc-panel] .bh-submenu-panel {
+    position:fixed;left:var(--bh-submenu-left, -9999px);top:var(--bh-submenu-top, -9999px);z-index:100061;
+    min-width:164px;padding:6px 0;
+    background:var(--bg-canvas);border:1px solid var(--line-2);
+    border-radius:var(--r);
+    box-shadow:0 8px 24px rgba(20,30,38,.14),0 2px 6px rgba(20,30,38,.08);
+    opacity:0;pointer-events:none;transform:translateX(-4px);
+    transition:opacity .1s ease-out,transform .1s ease-out;
+    max-height:calc(100vh - 16px);overflow:auto;
+  }
+  [data-qingagent-doc-panel] .bh-submenu.is-left .bh-submenu-panel,
+[data-qingagent-doc-panel] .bh-submenu-panel.is-left {
+    transform:translateX(4px);
+  }
+  [data-qingagent-doc-panel] .bh-submenu:hover .bh-submenu-panel,
+[data-qingagent-doc-panel] .bh-submenu:focus-within .bh-submenu-panel,
+[data-qingagent-doc-panel] .bh-submenu-panel.is-open {
+    opacity:1;pointer-events:auto;transform:none;
+  }
+  [data-qingagent-doc-panel] .bh-submenu-panel .block-handle-item {white-space:nowrap}
+
+  /* 纯阅读排版统一走 :is(.wf-doc,.doc-typography)：主编辑器与只读衍生预览同源。
+     ProseMirror 选中态、表格手柄和 decoration 仍只挂 .wf-doc，禁止泄漏到只读预览。 */
+  [data-qingagent-doc-panel] .wf-doc.ProseMirror {outline:none}
+  [data-qingagent-doc-panel] .wf-doc.ProseMirror .ProseMirror-gapcursor {display:none}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) .pm-footnote-reference {
+    position:relative;display:inline-block;min-width:.8em;margin:0 1px;color:var(--mark);
+    font-family:var(--font-zh-serif);font-size:.72em;line-height:1;vertical-align:super;
+    cursor:help;outline:none
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) .pm-footnote-reference::after {content:attr(data-footnote-number)}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) .pm-footnote-reference::before {
+    content:attr(data-footnote-note);position:absolute;left:50%;bottom:calc(100% + 8px);z-index:12;
+    box-sizing:border-box;width:max-content;max-width:320px;padding:8px 10px;border:1px solid var(--line-2);
+    border-radius:0;background:var(--bg-paper-deep);color:var(--ink-1);box-shadow:var(--shadow-2);
+    font:13px/1.6 var(--font-zh-serif);text-align:left;white-space:normal;
+    opacity:0;pointer-events:none;transform:translate(-50%,4px);
+    transition:opacity .12s ease-out,transform .12s ease-out
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) .pm-footnote-reference:hover::before,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) .pm-footnote-reference:focus::before {opacity:1;transform:translate(-50%,0)}
+  [data-qingagent-doc-panel] .wf-doc .pm-footnote-reference.ProseMirror-selectednode {outline:1px solid var(--mark)}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark {border-radius:0;padding:0 1px;background:#fff3a3;color:inherit}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="ink"] {color:var(--ink-1)}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="gray"] {color:#5f625c}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="slate"] {color:#44555c}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="brown"] {color:#7a5234}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="red"] {color:#a33a2a}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="orange"] {color:#a65d1f}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="amber"] {color:#927016}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="yellow"] {color:#7f7418}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="lime"] {color:#627a22}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="green"] {color:#3f7a42}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="sage"] {color:#57745c}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="mint"] {color:#2f7b69}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="teal"] {color:#24777a}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="cyan"] {color:#27738e}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="sky"] {color:#3f6e9a}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="blue"] {color:#365d9f}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="indigo"] {color:#4d55a0}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="violet"] {color:#694c9a}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="purple"] {color:#7a4d9b}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="magenta"] {color:#974487}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="pink"] {color:#a6476f}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="rose"] {color:#a74755}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="sand"] {color:#836d4a}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) span[data-text-color="lavender"] {color:#6f5c8f}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="ink"] {background:#eee2c6}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="gray"] {background:#e8e5dc}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="slate"] {background:#dbe7e9}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="brown"] {background:#ead8c7}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="red"] {background:#f4d2ca}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="orange"] {background:#f2d9bd}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="amber"] {background:#f0e0ad}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="yellow"] {background:#fff3a3}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="lime"] {background:#e5efba}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="green"] {background:#d4edd4}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="sage"] {background:#dce9d7}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="mint"] {background:#cfebe0}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="teal"] {background:#cce8e7}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="cyan"] {background:#cde8f0}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="sky"] {background:#d7e7f6}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="blue"] {background:#cfe0f5}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="indigo"] {background:#d8dcf5}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="violet"] {background:#e1d8f2}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="purple"] {background:#e7d7ff}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="magenta"] {background:#efd4ea}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="pink"] {background:#f5d0cf}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="rose"] {background:#f3d3d9}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="sand"] {background:#eadfc8}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) mark[data-color="lavender"] {background:#e5ddf0}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="ink"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="ink"] {background:#eee4cf}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="gray"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="gray"] {background:#e7e1d4}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="slate"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="slate"] {background:#d3d9d5}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="brown"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="brown"] {background:#e5d4c3}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="red"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="red"] {background:#e4c9bf}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="orange"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="orange"] {background:#e6ceb4}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="amber"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="amber"] {background:#ead9ae}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="yellow"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="yellow"] {background:#eee4bd}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="lime"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="lime"] {background:#dde1c2}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="green"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="green"] {background:#cad9c8}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="sage"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="sage"] {background:#d6dfcf}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="mint"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="mint"] {background:#cfebe0}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="teal"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="teal"] {background:#cadbd2}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="cyan"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="cyan"] {background:#cde8f0}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="sky"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="sky"] {background:#d7e7f6}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="blue"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="blue"] {background:#cfe0f5}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="indigo"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="indigo"] {background:#d8dcf5}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="violet"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="violet"] {background:#e1d8f2}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="purple"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="purple"] {background:#e7d7ff}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="magenta"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="magenta"] {background:#efd4ea}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="pink"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="pink"] {background:#f5d0cf}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="rose"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="rose"] {background:#f3d3d9}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="sand"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="sand"] {background:#eadfc8}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td[data-bg-color="lavender"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-bg-color="lavender"] {background:#e5ddf0}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) img {
+    max-width:100%;height:auto;border-radius:var(--r-sm);
+    margin:8px 0;cursor:default;
+  }
+  [data-qingagent-doc-panel] .wf-doc img.ProseMirror-selectednode {
+    outline:2px solid var(--mark);outline-offset:2px;
+  }
+
+  /* ============ Table 基础样式 ============ */
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) .tableWrapper {overflow-x:auto;max-width:100%}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) table {
+    border-collapse:separate;border-spacing:0;width:auto;min-width:240px;
+    margin:16px 0;border:0;box-shadow:none;
+  }
+  /* UIKit 的 table overflow:hidden 会截断 cell sticky 的滚动参照；真表由外层 wrapper 负责裁剪。 */
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) .tableWrapper > table,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) .pm-table-scroll > table {overflow:visible}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td {
+    border:0;border-right:1px solid var(--line-2);border-bottom:1px solid var(--line-2);padding:8px 12px;
+    min-width:80px;vertical-align:top;position:relative;
+    font-size:13px;line-height:1.6;
+  }
+  /* TipTap 表格首子元素是 colgroup,:first-child 会落空;按 thead/tbody 首个取首行补上边框。 */
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) table > :is(thead,tbody):first-of-type > tr:first-child > th,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) table > :is(thead,tbody):first-of-type > tr:first-child > td {
+    border-top:1px solid var(--line-2);
+  }
+  /* TableMap / 静态渲染写入逻辑列号；overlay 等无标记克隆退回首个 DOM 格。 */
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) table > :is(thead,tbody,tfoot) > tr > [data-table-logical-col="0"],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) table > :is(thead,tbody,tfoot) > tr > :first-child:not([data-table-logical-col]) {
+    border-left:1px solid var(--line-2);
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th {
+    background:var(--bg-subtle);font-weight:700;font-size:12.5px;color:var(--ink-2);
+  }
+  /* 标题列由 JS 按逻辑第 0 列标记，rowspan 覆盖行不重复标记。 */
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) [data-sticky-col] {
+    position:sticky;left:0;z-index:4;
+  }
+  /* 无自定义底色时补不透明纸底；显式 data-bg-color 继续保留用户选择的实色。 */
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) [data-sticky-col]:not([data-bg-color]) {
+    background:var(--bg-canvas);
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) th[data-sticky-col]:not([data-bg-color]) {
+    background:var(--bg-subtle);
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) .tableWrapper[data-scrolled-x] [data-sticky-col],
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) .pm-table-scroll[data-scrolled-x] [data-sticky-col],
+[data-qingagent-doc-panel] .table-header-overlay-viewport[data-scrolled-x] [data-sticky-col] {
+    box-shadow:6px 0 8px -6px color-mix(in srgb,var(--ink-1) 22%,transparent);
+  }
+  [data-qingagent-doc-panel] .table-header-overlay-viewport {
+    overflow:clip;z-index:100005;background:var(--bg-canvas);pointer-events:auto;
+    box-shadow:0 6px 8px -6px color-mix(in srgb,var(--ink-1) 22%,transparent);
+  }
+  /* 只借用 wf-doc 的正文语义样式；display:contents 隔离墨水皮肤的整页纸面盒模型。 */
+  [data-qingagent-doc-panel] .wf-doc.table-header-overlay-content {
+    display:contents!important;background:transparent!important;box-shadow:none!important;
+    padding:0!important;width:auto!important;max-width:none!important;min-height:0!important;margin:0!important;
+  }
+  [data-qingagent-doc-panel] .wf-doc.table-header-overlay-content > .table-header-overlay__table {
+    margin:0;border-collapse:separate;border-spacing:0;border:0;box-shadow:none;
+    background:var(--bg-canvas);color:var(--ink-1);
+    font-family:var(--font-zh-serif);
+  }
+  [data-qingagent-doc-panel] .table-header-overlay__table th {
+    box-sizing:border-box;border:0;border-right:1px solid var(--line-2);border-bottom:1px solid var(--line-2);padding:8px 12px;
+    min-width:80px;vertical-align:top;text-align:left;background:var(--bg-subtle);
+    font-size:12.5px;line-height:1.6;font-weight:700;color:var(--ink-2);cursor:pointer;
+  }
+  [data-qingagent-doc-panel] .table-header-overlay__table th:hover {background:var(--bg-hover)}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td p {margin:0}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) td img {max-width:100%;margin:4px 0;border-radius:var(--r-sm)}
+  /* TipTap selected cell highlight */
+  [data-qingagent-doc-panel] .wf-doc .selectedCell::after {
+    content:"";position:absolute;inset:0;
+    background:color-mix(in srgb,var(--mark) 18%,transparent);pointer-events:none;
+  }
+  [data-qingagent-doc-panel] .wf-doc .column-resize-handle {
+    position:absolute;top:0;right:-4px;bottom:-2px;width:8px;
+    background:transparent;pointer-events:none;
+  }
+  [data-qingagent-doc-panel] .wf-doc .column-resize-handle::before {
+    content:"";position:absolute;inset:0 auto 0 50%;width:1px;
+    transform:translateX(-50%);
+    background:color-mix(in srgb,var(--mark) 62%,transparent);
+  }
+  [data-qingagent-doc-panel] .wf-doc .column-resize-dragging .column-resize-handle::before {
+    background:var(--mark);
+  }
+  [data-qingagent-doc-panel] .wf-doc.resize-cursor,
+[data-qingagent-doc-panel] .wf-doc.resize-cursor * {cursor:col-resize!important}
+
+  /* ============ 待办清单 taskList ============ */
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) ul[data-type="taskList"],
+[data-qingagent-doc-panel] ul.pm-task-list {
+    list-style:none;margin:8px 0;padding-left:2px;
+  }
+  /* NodeView 渲染的 li 只带 data-checked 不带 data-type,统一用 ul > li 命中 */
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) ul[data-type="taskList"] > li,
+[data-qingagent-doc-panel] ul.pm-task-list > li {
+    display:flex;align-items:flex-start;gap:8px;margin:4px 0;
+  }
+  /* label/checkbox 与首行文字垂直居中:行高约 24.6px、框 16px,几何居中上边距≈4.3px;
+     CJK 文字光学重心偏下,再补 ~1.2px 让勾框视觉对齐首行中心(多行待办仍对齐首行,符合飞书/Notion) */
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) ul[data-type="taskList"] > li > label {
+    flex:0 0 auto;margin-top:5.5px;user-select:none;
+    display:inline-flex;align-items:center;
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) ul[data-type="taskList"] > li > div,
+[data-qingagent-doc-panel] ul.pm-task-list > li > div {
+    flex:1 1 auto;min-width:0;
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) ul[data-type="taskList"] > li > div > p,
+[data-qingagent-doc-panel] ul.pm-task-list > li > div > p {margin:0}
+  /* 暖色自定义 checkbox(对齐暖墨纸面;未勾=暖描边透明框,勾选=暖金填充+白勾居中) */
+  [data-qingagent-doc-panel] ul[data-type="taskList"] input[type="checkbox"],
+[data-qingagent-doc-panel] ul.pm-task-list input[type="checkbox"] {
+    appearance:none;-webkit-appearance:none;
+    width:16px;height:16px;flex:0 0 16px;box-sizing:border-box;
+    border:1.5px solid rgba(120,90,50,.45);border-radius:0;
+    background:transparent;cursor:pointer;margin:0;
+    display:inline-flex;align-items:center;justify-content:center;
+    transition:background .12s,border-color .12s;
+  }
+  [data-qingagent-doc-panel] ul[data-type="taskList"] input[type="checkbox"]:hover,
+[data-qingagent-doc-panel] ul.pm-task-list input[type="checkbox"]:hover {
+    border-color:rgba(120,90,50,.7);
+  }
+  [data-qingagent-doc-panel] ul[data-type="taskList"] input[type="checkbox"]:checked,
+[data-qingagent-doc-panel] ul.pm-task-list input[type="checkbox"]:checked {
+    background:var(--mark);border-color:var(--mark);
+  }
+  [data-qingagent-doc-panel] ul[data-type="taskList"] input[type="checkbox"]:checked::after,
+[data-qingagent-doc-panel] ul.pm-task-list input[type="checkbox"]:checked::after {
+    content:"";width:4px;height:8px;margin-top:-1px;
+    border:solid #fff;border-width:0 2px 2px 0;
+    transform:rotate(45deg);
+  }
+  [data-qingagent-doc-panel] ul.pm-task-list > li input[type="checkbox"] {margin-top:5.5px}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) ul[data-type="taskList"] > li[data-checked="true"] > div,
+[data-qingagent-doc-panel] ul.pm-task-list > li[data-checked="true"] > div {
+    color:var(--ink-3);text-decoration:line-through;text-decoration-color:var(--line-2);
+  }
+
+  /* ============ Callout 高亮框 ============ */
+  [data-qingagent-doc-panel] .pm-callout {
+    position:relative;
+    display:flex;gap:8px;align-items:flex-start;
+    padding:10px 12px;margin:8px 0;
+    border-radius:var(--r-sm);
+    background:var(--bg-subtle);border:1px solid var(--line-2);
+  }
+  /* emoji 图标:编辑态是 button(可点选换图标),只读/序列化态是 span;两者同款式 */
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-emoji-wrap {flex:0 0 auto;position:relative;line-height:1.7}
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-emoji {
+    flex:0 0 auto;line-height:1.7;user-select:none;
+    border:0;background:transparent;padding:0 1px;margin:0;font:inherit;font-size:1em;
+    cursor:pointer;border-radius:0;transition:background .12s ease;
+  }
+  [data-qingagent-doc-panel] .pm-callout button.pm-callout-emoji:hover {background:rgba(120,90,50,.12)}
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-emoji-empty {opacity:.42;font-weight:600}
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-body {flex:1 1 auto;min-width:0}
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-body p {margin:0 0 4px 0}
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-body p:last-child {margin-bottom:0}
+
+  /* emoji 选择器浮层(暖白底,贴纸面美学) */
+  /* 宽度按 8 列定宽格子精算(8×28 + 7×2 gap = 238,+16 padding = 254),box-sizing:border-box
+     杜绝 emoji 字形宽于 1fr 轨道导致最后一列溢出面板背景框(各平台 emoji 字形宽度不一)。 */
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-emoji-pop {
+    position:absolute;top:calc(100% + 6px);left:0;z-index:20;
+    width:254px;padding:8px;border-radius:0;box-sizing:border-box;
+    background:var(--bg-canvas);border:1px solid rgba(120,90,50,.24);
+    box-shadow:0 12px 28px rgba(40,28,12,.22);
+  }
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-emoji-grid {
+    display:grid;grid-template-columns:repeat(8,28px);gap:2px;justify-content:center;
+  }
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-emoji-opt {
+    width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+    box-sizing:border-box;border:0;background:transparent;cursor:pointer;
+    font-size:16px;line-height:1;padding:0;border-radius:0;transition:background .1s ease;
+  }
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-emoji-opt:hover {background:rgba(120,90,50,.12)}
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-emoji-opt.is-active {background:rgba(168,130,63,.28)}
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-emoji-none {
+    width:100%;margin-top:6px;padding:4px;border:1px solid rgba(120,90,50,.2);
+    background:transparent;border-radius:0;cursor:pointer;font-size:12px;color:var(--ink-3);
+  }
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-emoji-none:hover {background:rgba(120,90,50,.08)}
+
+  /* 主题选择器:右上角触发钮(当前主题色),默认隐藏,hover/聚焦编辑时浮现;点开为带名色板 */
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-themes-wrap {
+    position:absolute;top:7px;right:8px;
+    opacity:0;transition:opacity .14s ease;pointer-events:none;
+  }
+  [data-qingagent-doc-panel] .pm-callout:hover .pm-callout-themes-wrap,
+[data-qingagent-doc-panel] .pm-callout:focus-within .pm-callout-themes-wrap {opacity:1;pointer-events:auto}
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-theme-trigger {
+    width:15px;height:15px;border-radius:50%;cursor:pointer;padding:0;display:block;
+    border:1px solid rgba(255,255,255,.65);box-shadow:0 0 0 1px rgba(120,90,50,.3);
+    transition:transform .1s ease;
+  }
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-theme-trigger:hover {transform:scale(1.12)}
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-theme-pop {
+    position:absolute;top:calc(100% + 6px);right:0;z-index:20;
+    width:190px;padding:6px;border-radius:0;
+    display:grid;grid-template-columns:1fr 1fr;gap:2px;
+    background:var(--bg-canvas);border:1px solid rgba(120,90,50,.24);
+    box-shadow:0 12px 28px rgba(40,28,12,.22);
+  }
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-theme-opt {
+    display:flex;align-items:center;gap:7px;padding:5px 7px;border:0;border-radius:0;
+    background:transparent;cursor:pointer;font-size:12.5px;color:var(--ink-2);text-align:left;
+    transition:background .1s ease;
+  }
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-theme-opt:hover {background:rgba(120,90,50,.1)}
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-theme-opt.is-active {background:rgba(168,130,63,.22)}
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-theme-chip {
+    width:13px;height:13px;border-radius:50%;flex:0 0 auto;
+    border:1px solid rgba(255,255,255,.6);box-shadow:0 0 0 1px rgba(120,90,50,.25);
+  }
+  [data-qingagent-doc-panel] .pm-callout .pm-callout-theme-label {flex:1 1 auto;white-space:nowrap}
+
+  /* 10 主题暖化配色(贴合奶白纸 + 暖墨;全部去饱和、压低,横跨色相轮不刺眼) */
+  [data-qingagent-doc-panel] .pm-callout--neutral {background:rgba(120,90,50,.06);border-color:rgba(120,90,50,.20)}
+  [data-qingagent-doc-panel] .pm-callout--warning {background:var(--mark-soft);border-color:rgba(168,130,63,.34)}
+  [data-qingagent-doc-panel] .pm-callout--ochre {background:rgba(176,122,60,.13);border-color:rgba(176,122,60,.32)}
+  [data-qingagent-doc-panel] .pm-callout--danger {background:rgba(176,74,52,.10);border-color:rgba(176,74,52,.28)}
+  [data-qingagent-doc-panel] .pm-callout--rose {background:rgba(189,106,114,.11);border-color:rgba(189,106,114,.30)}
+  [data-qingagent-doc-panel] .pm-callout--mauve {background:rgba(154,106,158,.11);border-color:rgba(154,106,158,.30)}
+  [data-qingagent-doc-panel] .pm-callout--indigo {background:rgba(106,108,174,.10);border-color:rgba(106,108,174,.28)}
+  [data-qingagent-doc-panel] .pm-callout--info {background:rgba(82,108,150,.10);border-color:rgba(82,108,150,.26)}
+  [data-qingagent-doc-panel] .pm-callout--teal {background:rgba(79,143,136,.12);border-color:rgba(79,143,136,.30)}
+  [data-qingagent-doc-panel] .pm-callout--success {background:rgba(90,125,74,.12);border-color:rgba(90,125,74,.30)}
+
+  /* ============ 内容分栏 ============ */
+  /* 左右各留 10px 内边距、再用负外边距抵消——列的视觉位置不变,但 hover 背景 ::before 的 -8px
+     外延落在这段 padding 里,不会撑破 overflow-x:auto 冒出横向滚动条。 */
+  [data-qingagent-doc-panel] .pm-column-list {
+    position:relative;display:flex;box-sizing:border-box;
+    margin:12px -24px;padding:0 24px;overflow-x:auto;
+  }
+  [data-qingagent-doc-panel] .pm-column-list > .pm-column-list-content {
+    display:flex;width:100%;min-width:0;
+  }
+  [data-qingagent-doc-panel] .pm-column-list > .pm-column-list-content > [data-node-view-content-react] {
+    display:flex;align-items:stretch;gap:24px;width:100%;min-width:0;
+  }
+  [data-qingagent-doc-panel] .pm-column-list > .pm-column-list-content > [data-node-view-content-react] > .react-renderer.node-column {
+    display:contents;
+  }
+  [data-qingagent-doc-panel] .pm-column-list > .pm-column,
+[data-qingagent-doc-panel] .pm-column-list > .pm-column-list-content > .pm-column,
+[data-qingagent-doc-panel] .pm-column-list > .pm-column-list-content > [data-node-view-content-react] > .react-renderer.node-column > .pm-column {
+    position:relative;min-width:0;box-sizing:border-box;
+  }
+  /* 分栏是容器：默认列间无竖线；hover 列时淡色底（飞书风格),提示内部各块各自可编辑/格式化。
+     背景用 ::before 负外延(左右各伸出 8px)——不改文字排版(文字仍严格左对齐),但 hover 高亮
+     左右多出一截留白,文字不再贴边。::before z-index:0、正文 z-index:1,背景压在文字下。 */
+  [data-qingagent-doc-panel] .pm-column {border-radius:0;isolation:isolate}
+  [data-qingagent-doc-panel] .pm-column::before {
+    content:"";position:absolute;inset:0 -8px;border-radius:0;z-index:0;pointer-events:none;
+    background:transparent;transition:background .14s ease;
+  }
+  [data-qingagent-doc-panel] .pm-column:hover::before {background:var(--bg-subtle)}
+  [data-qingagent-doc-panel] .pm-column-list.pm-column-resizing .pm-column:hover::before {background:transparent}
+  /* 分隔线区域独立 hover：gutter 是左列的子元素,hover 它会连带触发 .pm-column:hover——
+     用 :has 在"正 hover 自己的 gutter"时压掉该列底色,让分隔线有独立 hover、不连带亮列。 */
+  [data-qingagent-doc-panel] .pm-column:has(> .pm-column-gutter:hover)::before {background:transparent}
+  [data-qingagent-doc-panel] .pm-column-body {position:relative;z-index:1;min-width:0;padding-right:12px}
+  [data-qingagent-doc-panel] .pm-column:last-child .pm-column-body,
+[data-qingagent-doc-panel] .react-renderer.node-column:last-child > .pm-column .pm-column-body {padding-right:0}
+  [data-qingagent-doc-panel] .pm-column-body p {margin:0 0 6px 0}
+  [data-qingagent-doc-panel] .pm-column-body p:last-child {margin-bottom:0}
+
+  /* ── 分隔线 gutter：占列间间隙，默认无可见竖线，hover/拖拽才显形 ── */
+  /* gutter 只在非末列由 React 渲染（!isLastColumn）；勿用 .pm-column:last-child——
+     编辑态每个 .pm-column 都是其 .react-renderer 包裹层的唯一/末位子元素，该选择器恒真会全隐藏。 */
+  [data-qingagent-doc-panel] .pm-column-gutter {
+    position:absolute;top:0;right:-22px;bottom:0;width:20px;z-index:5;user-select:none;
+  }
+  /* 末列右侧追加柄：整条落在内容区外侧的右留白里(列表 padding:24px 内,不溢出)、无竖线。
+     它本身就是 hover 触发区——鼠标移到背景右侧外面这条留白时才显形(不跟随列背景 hover);
+     复用上面的基础规则 .pm-column-gutter:hover .pm-column-insert-dot{opacity:1} 显形,
+     并由 :has(> .pm-column-gutter:hover) 在此时压掉列背景。因整条在内容外,不会挡文字。 */
+  [data-qingagent-doc-panel] .pm-column-gutter--end {right:-22px}
+  [data-qingagent-doc-panel] .pm-column-resize-handle {
+    position:absolute;inset:0;cursor:col-resize;touch-action:none;background:transparent;
+  }
+  /* 竖线：更细(2px)、顶端从 24px 起——与上方圆点留出空隙不相连;无 hover 光晕,线就只是线。 */
+  [data-qingagent-doc-panel] .pm-column-resize-handle::before {
+    content:"";position:absolute;top:24px;bottom:6px;left:50%;transform:translateX(-50%);
+    width:2px;border-radius:0;background:transparent;
+    transition:background .12s ease;
+  }
+  [data-qingagent-doc-panel] .pm-column-gutter:hover .pm-column-resize-handle::before,
+[data-qingagent-doc-panel] .pm-column-resize-handle:active::before {
+    background:var(--line-3);
+  }
+
+  /* 拖拽时各列右上角的实时百分比徽标 */
+  [data-qingagent-doc-panel] .pm-column-pct-badge {
+    position:absolute;top:4px;right:4px;z-index:7;
+    padding:1px 6px;border-radius:999px;
+    font-size:11px;font-weight:600;line-height:1.6;
+    color:#fff;background:rgba(120,90,50,.92);
+    box-shadow:0 1px 3px rgba(40,30,15,.25);
+    pointer-events:none;user-select:none;font-variant-numeric:tabular-nums;
+  }
+
+  /* 分隔线顶端小圆点 → hover 展开为加号圆钮 → 点击插入新分栏 */
+  /* 圆点贴分隔线顶端，但留在列表盒内——.pm-column-list 的 overflow-x:auto 会令 overflow-y 也变 auto，
+     若用负 top 伸到列表外会被裁掉、且命中不到。 */
+  [data-qingagent-doc-panel] .pm-column-insert-dot {
+    position:absolute;top:10px;left:50%;transform:translate(-50%,-50%);
+    display:flex;align-items:center;justify-content:center;
+    width:14px;height:14px;padding:0;border:none;border-radius:50%;
+    background:transparent;cursor:pointer;opacity:0;z-index:6;
+    transition:opacity .12s ease,width .12s ease,height .12s ease,background .12s ease,box-shadow .12s ease;
+  }
+  [data-qingagent-doc-panel] .pm-column-gutter:hover .pm-column-insert-dot {opacity:1}
+  [data-qingagent-doc-panel] .pm-column-insert-dot__icon {
+    position:relative;width:7px;height:7px;border-radius:50%;
+    background:rgba(120,90,50,.5);transition:background .12s ease;
+  }
+  [data-qingagent-doc-panel] .pm-column-insert-dot__icon::before,
+[data-qingagent-doc-panel] .pm-column-insert-dot__icon::after {
+    content:"";position:absolute;top:50%;left:50%;background:#fff;border-radius:0;opacity:0;
+    transition:opacity .12s ease;
+  }
+  [data-qingagent-doc-panel] .pm-column-insert-dot__icon::before {width:11px;height:2px;transform:translate(-50%,-50%)}
+  [data-qingagent-doc-panel] .pm-column-insert-dot__icon::after {width:2px;height:11px;transform:translate(-50%,-50%)}
+  [data-qingagent-doc-panel] .pm-column-insert-dot:hover {
+    width:20px;height:20px;background:rgba(168,130,63,.96);box-shadow:0 2px 6px rgba(40,30,15,.25);
+  }
+  [data-qingagent-doc-panel] .pm-column-insert-dot:hover .pm-column-insert-dot__icon {background:transparent}
+  [data-qingagent-doc-panel] .pm-column-insert-dot:hover .pm-column-insert-dot__icon::before,
+[data-qingagent-doc-panel] .pm-column-insert-dot:hover .pm-column-insert-dot__icon::after {opacity:1}
+  /* 列表拖拽时压制原生 dropcursor(配了 .wf-dropcursor class):列表自绘了金色落点线,原生
+     dropcursor 会在嵌套 gap 里与它同时出现两根线。dropcursor 元素挂在 .ProseMirror 兄弟/父级,
+     用 body scope class 兜住最可靠。分栏 DnD 竖直落点故意复用原生 dropcursor,故不在此压制。 */
+  [data-qingagent-doc-panel].pm-listitem-dnd-active-scope .wf-dropcursor,
+[data-qingagent-doc-panel].pm-listitem-dnd-active-scope .ProseMirror-dropcursor {display:none !important}
+  [data-qingagent-doc-panel] .pm-listitem-drop-line {
+    position:fixed;
+    height:1px;
+    transform:translateY(-50%);
+    border-radius:999px;
+    background:rgba(188,142,56,.85);
+    pointer-events:none;
+    z-index:8;
+  }
+  /* 飞书式拖拽选区高亮:高亮当前落点所属的层级容器(列表项),暗示正在哪一层排序/嵌入;根级不高亮。
+     用 ::before 画一整块底色并向左延伸盖住 marker 圆点,无边线、不改布局。 */
+  [data-qingagent-doc-panel] .wf-doc .pm-listitem-drop-scope {position:relative}
+  [data-qingagent-doc-panel] .wf-doc .pm-listitem-drop-scope::before {
+    content:"";position:absolute;top:0;bottom:0;left:-28px;right:0;
+    background:rgba(188,142,56,.12);
+    border-radius:0;
+    z-index:-1;pointer-events:none;
+  }
+  [data-qingagent-doc-panel] .pm-column-drop-target--left,
+[data-qingagent-doc-panel] .pm-column-drop-target--right {
+    background:linear-gradient(0deg, rgba(188,142,56,.10), rgba(188,142,56,.10));
+    border-radius:0;
+  }
+  [data-qingagent-doc-panel] .pm-column-drop-target--left {
+    box-shadow:inset 4px 0 0 rgba(188,142,56,.78), 0 0 0 1px rgba(188,142,56,.18);
+  }
+  [data-qingagent-doc-panel] .pm-column-drop-target--right {
+    box-shadow:inset -4px 0 0 rgba(188,142,56,.78), 0 0 0 1px rgba(188,142,56,.18);
+  }
+
+  /* ============ LaTeX 公式(KaTeX) ============ */
+  [data-qingagent-doc-panel] .tiptap-mathematics-render {border-radius:var(--r-sm);padding:0 2px}
+  [data-qingagent-doc-panel] .tiptap-mathematics-render--editable {cursor:pointer;transition:background .15s}
+  [data-qingagent-doc-panel] .tiptap-mathematics-render--editable:hover {background:rgba(168,130,63,.16)}
+  [data-qingagent-doc-panel] div.tiptap-mathematics-render {padding:8px 4px;margin:8px 0;text-align:center}
+  [data-qingagent-doc-panel] .tiptap-mathematics-render.block-math-error,
+[data-qingagent-doc-panel] .tiptap-mathematics-render.inline-math-error,
+[data-qingagent-doc-panel] .pm-math-error {
+    color:#c0392b;font-family:ui-monospace,monospace;font-size:13px;
+  }
+  [data-qingagent-doc-panel] .tiptap-mathematics-render.ProseMirror-selectednode {
+    outline:2px solid var(--mark);outline-offset:2px;
+  }
+
+  /* 公式编辑浮层 */
+  [data-qingagent-doc-panel] .math-edit-popover {
+    position:fixed;z-index:99999;width:340px;
+    display:flex;flex-direction:column;gap:8px;
+    padding:10px;
+    background:var(--bg-paper-deep);border:1px solid rgba(168,130,63,.30);border-radius:var(--r-sm);
+    box-shadow:0 10px 28px rgba(40,30,15,.22),0 2px 6px rgba(40,30,15,.12);
+  }
+  [data-qingagent-doc-panel] .math-edit-popover textarea {
+    width:100%;min-height:56px;resize:vertical;
+    font-family:ui-monospace,monospace;font-size:13px;line-height:1.5;
+    padding:6px 8px;border:1px solid rgba(168,130,63,.28);border-radius:var(--r-sm);
+    background:#f3ecdc;color:var(--ink-1);outline:none;
+  }
+  [data-qingagent-doc-panel] .math-edit-popover textarea:focus {border-color:rgba(168,130,63,.6)}
+  [data-qingagent-doc-panel] .math-edit-preview {
+    min-height:32px;display:flex;align-items:center;justify-content:center;
+    padding:6px;border-radius:var(--r-sm);background:#f3ecdc;color:var(--ink-1);
+    overflow-x:auto;
+  }
+  [data-qingagent-doc-panel] .math-edit-preview.is-error {color:#c0392b;font-size:12px;font-family:ui-monospace,monospace}
+  [data-qingagent-doc-panel] .math-edit-actions {display:flex;justify-content:flex-end;gap:6px}
+  [data-qingagent-doc-panel] .math-edit-actions button {
+    font-size:12px;padding:4px 10px;border-radius:var(--r-sm);cursor:pointer;
+    border:1px solid rgba(168,130,63,.30);background:var(--bg-paper-deep);color:var(--ink-2);
+  }
+  [data-qingagent-doc-panel] .math-edit-actions button.primary {
+    background:var(--mark);border-color:var(--mark);color:#fff;
+  }
+
+  /* ============ 链接 hover 浮层(暖纸面,与编辑器同色系) ============ */
+  [data-qingagent-doc-panel] .link-hover-card {
+    display:flex;align-items:center;max-width:380px;
+    padding:5px 8px;border-radius:0;font-size:12.5px;
+    background:var(--bg-paper-deep);border:1px solid rgba(168,130,63,.30);
+    box-shadow:0 8px 24px rgba(40,30,15,.20),0 2px 6px rgba(40,30,15,.10);
+  }
+  [data-qingagent-doc-panel] .link-hover-card .lhc-view,
+[data-qingagent-doc-panel] .link-hover-card .lhc-edit {display:flex;align-items:center;gap:6px;width:100%}
+  [data-qingagent-doc-panel] .link-hover-card .lhc-url {
+    color:var(--mark);text-decoration:none;max-width:240px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  [data-qingagent-doc-panel] .link-hover-card .lhc-url:hover {text-decoration:underline}
+  [data-qingagent-doc-panel] .link-hover-card .lhc-sep {flex:0 0 auto;width:1px;height:14px;background:rgba(168,130,63,.30)}
+  [data-qingagent-doc-panel] .link-hover-card .lhc-btn {
+    flex:0 0 auto;font-size:12px;padding:2px 8px;border-radius:0;cursor:pointer;white-space:nowrap;
+    border:1px solid rgba(168,130,63,.30);background:transparent;color:var(--ink-2);
+  }
+  [data-qingagent-doc-panel] .link-hover-card .lhc-btn:hover {background:var(--bg-hover);color:var(--ink-1)}
+  [data-qingagent-doc-panel] .link-hover-card .lhc-btn.primary {background:var(--mark);border-color:var(--mark);color:#fff}
+  [data-qingagent-doc-panel] .link-hover-card .lhc-input {
+    flex:1;min-width:200px;font-size:12.5px;padding:3px 7px;
+    border:1px solid rgba(168,130,63,.30);border-radius:0;
+    background:#f3ecdc;color:var(--ink-1);outline:none;font-family:var(--font-mono);
+  }
+  [data-qingagent-doc-panel] .link-hover-card .lhc-input:focus {border-color:rgba(168,130,63,.6)}
+
+  /* ============ Table controls (Feishu-style) ============ */
+
+  [data-qingagent-doc-panel] .tbl-chrome-viewport {
+    overflow:clip;pointer-events:none;z-index:100010;
+  }
+  [data-qingagent-doc-panel] .tbl-span-hint {
+    z-index:100040;padding:4px 8px;border:1px solid var(--line-2);border-radius:0;
+    background:var(--bg-canvas);color:var(--ink-2);box-shadow:var(--shadow-2);
+    font:12px/1.5 var(--font-zh-serif);pointer-events:none;
+  }
+
+  /* column / row header bars — always visible when cursor in table */
+  [data-qingagent-doc-panel] .tbl-col-hdr {
+    cursor:pointer;z-index:100010;pointer-events:auto;
+    background:rgba(168,130,63,.16);
+    border-radius:0;
+    transition:background .1s;
+  }
+  [data-qingagent-doc-panel] .tbl-col-hdr:hover {background:rgba(168,130,63,.25)}
+  [data-qingagent-doc-panel] .tbl-col-hdr.active {background:rgba(168,130,63,.55)}
+
+  [data-qingagent-doc-panel] .tbl-row-hdr {
+    cursor:pointer;z-index:100010;pointer-events:auto;
+    background:rgba(168,130,63,.16);
+    border-radius:0;
+    transition:background .1s;
+  }
+  [data-qingagent-doc-panel] .tbl-row-hdr:hover {background:rgba(168,130,63,.25)}
+  [data-qingagent-doc-panel] .tbl-row-hdr.active {background:rgba(168,130,63,.55)}
+
+  [data-qingagent-doc-panel] .tbl-axis-drag-ghost {
+    z-index:100025;pointer-events:none;background:rgba(168,130,63,.18);
+    border:1px solid rgba(168,130,63,.48);opacity:.68;
+  }
+  [data-qingagent-doc-panel] .tbl-axis-drag-ghost[data-clone="true"] {
+    box-shadow:4px 4px 0 rgba(168,130,63,.14);
+  }
+  [data-qingagent-doc-panel] .tbl-axis-drop-line {
+    z-index:100030;pointer-events:none;background:var(--mark);
+    box-shadow:0 0 8px rgba(168,130,63,.32);
+  }
+  [data-qingagent-doc-panel] .tbl-axis-drop-line[data-axis="column"] {width:2px;transform:translateX(-1px)}
+  [data-qingagent-doc-panel] .tbl-axis-drop-line[data-axis="row"] {height:2px;transform:translateY(-1px)}
+  [data-qingagent-doc-panel] .tbl-axis-drop-line.is-forbidden {
+    background:rgba(176,74,52,.85);box-shadow:none;
+  }
+
+  /* edge dots — small circles between col/row borders */
+  /* 默认态保持低调:透明底无描边只见 ::before 小点;不透明纸底只给 hover 态(+号),避免一排白圈扎眼。 */
+  [data-qingagent-doc-panel] .tbl-dot {
+    width:16px;height:16px;border-radius:50%;
+    box-sizing:border-box;border:1px solid transparent;background:transparent;color:var(--mark);
+    cursor:pointer;z-index:100020;
+    display:flex;align-items:center;justify-content:center;
+    transform:translate(-50%,-50%);
+    padding:0;position:relative;pointer-events:auto;
+    transition:width .12s,height .12s,background .12s,border-color .12s,color .12s;
+  }
+  [data-qingagent-doc-panel] .tbl-dot::before {
+    content:"";width:5px;height:5px;border-radius:50%;
+    background:color-mix(in srgb,var(--mark) 50%,transparent);transition:opacity .12s;
+  }
+  [data-qingagent-doc-panel] .tbl-dot .tbl-dot-mark {
+    display:none;position:relative;z-index:1;overflow:visible;pointer-events:none;
+  }
+  [data-qingagent-doc-panel] .tbl-dot:hover::before {display:none}
+  [data-qingagent-doc-panel] .tbl-dot:hover {
+    width:18px;height:18px;background:var(--bg-paper-deep);border-color:var(--mark);color:var(--mark);
+  }
+  [data-qingagent-doc-panel] .tbl-dot:hover .tbl-dot-mark {display:block}
+
+  /* guide line on dot hover — clipped to table size via --tbl-guide */
+  /* z-index:-1 让指示线沉到按钮不透明底之下,避免贯穿加号(按钮自身是 stacking context,不会漏到页面层)。 */
+  [data-qingagent-doc-panel] .tbl-dot-col:hover::after {
+    content:"";position:absolute;top:50%;left:50%;z-index:-1;
+    width:1px;height:var(--tbl-guide,100px);
+    background:color-mix(in srgb,var(--mark) 42%,transparent);transform:translateX(-50%);
+    pointer-events:none;
+  }
+  [data-qingagent-doc-panel] .tbl-dot-row:hover::after {
+    content:"";position:absolute;top:50%;left:50%;z-index:-1;
+    height:1px;width:var(--tbl-guide,200px);
+    background:color-mix(in srgb,var(--mark) 42%,transparent);transform:translateY(-50%);
+    pointer-events:none;
+  }
+
+  /* selection toolbar — reuses .doc-toolbar styles, minor overrides */
+  [data-qingagent-doc-panel] .tbl-sel-toolbar {z-index:100040}
+  /* 箭头已改 clip-path 纯三角(见 .doc-toolbar::after),不再用 rotate 方块,这里只居中即可。 */
+  [data-qingagent-doc-panel] .tbl-sel-toolbar.doc-toolbar::after {left:50%;transform:translateX(-50%)}
+
+  /* editing idle · .wf-doc 可编辑 · 不加任何背景/focus 染色 */
+  [data-qingagent-doc-panel][data-content="editing"][data-tool="none"] .wf-doc {outline:none;background:transparent;cursor:text}
+
+  /* editing idle 下, 正文不显示 review 阶段的 patch 染色 · 表现为干净正文 */
+  [data-qingagent-doc-panel][data-content="editing"][data-tool="none"] .wf-doc .wf-patch-ins {
+    background:transparent;border:none;color:inherit;text-decoration:none;padding:0;
+  }
+  [data-qingagent-doc-panel][data-content="editing"][data-tool="none"] .wf-doc .wf-sel {
+    background:transparent;border-bottom:none;cursor:text;
+  }
+
+  /* 改动B:审批入口 patch 标记"逐处入场"——每个标记随 revealedPatchIds 递进而 mount，mount 即淡入。
+     仅 pendingReview content 生效；若 data-content 未设亦安全降级（标记直接出现，功能不受影响）。 */
+  @keyframes wf-patch-reveal {from{opacity:0;filter:blur(2px)}to{opacity:1;filter:blur(0)}}
+  [data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc .wf-patch-ins-wrap,
+[data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc .wf-patch-del-marker {
+    animation:wf-patch-reveal .32s ease-out;
+  }
+  /* 发光特效:打字进行中(发光开关开启),新点亮的绿字随入场短暂泛光,与右栏环境辉光呼应。
+     仅在 body[data-patch-revealing] 时生效——关闭发光开关即整体收敛为朴素淡入。 */
+  [data-qingagent-doc-panel][data-patch-revealing="1"] .wf-doc .wf-patch-ins {
+    animation:wf-patch-ins-glow .7s ease-out;
+  }
+  @keyframes wf-patch-ins-glow {
+    0%{text-shadow:0 0 9px rgba(74,180,100,.85)}
+    60%{text-shadow:0 0 6px rgba(74,180,100,.5)}
+    100%{text-shadow:0 0 0 rgba(74,180,100,0)}
+  }
+  /* 发光特效:打字进行中给右栏挂 Apple-Intelligence 环境辉光(复用 locked/drafting 全文生成那套) */
+  [data-qingagent-doc-panel][data-patch-revealing="1"] .ws-right {
+    animation:ai-inner-glow 4s ease-in-out infinite;
+  }
+
+  /* ============ 0603 拟人鼠标 overlay(叠加在打字光标之上) ============ */
+  [data-qingagent-doc-panel] .human-cursor-layer {position:fixed;inset:0;pointer-events:none;z-index:40}
+  [data-qingagent-doc-panel] .hc-cursor {position:fixed;transform:translate(-2px,-2px);transition:opacity .2s ease;will-change:left,top}
+  [data-qingagent-doc-panel] .hc-arrow {display:block;filter:drop-shadow(0 1px 2px rgba(20,30,38,.28))}
+  [data-qingagent-doc-panel] .hc-name {
+    position:absolute;left:13px;top:11px;padding:1px 6px;border-radius:0;
+    color:#fff;font-size:11px;font-weight:700;white-space:nowrap;line-height:1.5;
+    box-shadow:0 4px 12px rgba(20,30,38,.18);
+  }
+  /* 越界边缘气泡:上圆下尖 pin,颜色随 --hc(lane 同色系),带序号 */
+  [data-qingagent-doc-panel] .hc-edge {position:fixed;transform:translateX(-50%)}
+  [data-qingagent-doc-panel] .hc-edge-num {
+    width:22px;height:22px;border-radius:50%;background:var(--hc,#b58a3e);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;
+    border:2px solid #fff;box-shadow:0 2px 8px rgba(20,30,38,.32);
+  }
+  [data-qingagent-doc-panel] .hc-edge::after {content:"";position:absolute;left:50%;transform:translateX(-50%);width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent}
+  [data-qingagent-doc-panel] .hc-edge-bottom::after {top:19px;border-top:7px solid var(--hc,#b58a3e)}
+  [data-qingagent-doc-panel] .hc-edge-top::after {bottom:19px;border-bottom:7px solid var(--hc,#b58a3e)}
+
+  /* Markdown 阅读排版：主文档与只读衍生预览共用。 */
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) blockquote {
+    margin:10px 0;padding:6px 14px;
+    border-left:3px solid var(--line-2);
+    color:var(--ink-2);background:var(--bg-subtle);
+    border-radius:0 var(--r-sm) var(--r-sm) 0;
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) ul,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) ol {margin:8px 0;padding-left:24px;line-height:1.7}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) ul {list-style:disc}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) ol {list-style:decimal}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) li {margin:2px 0}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) hr {
+    border:none;height:1px;background:var(--line-2);margin:16px 0;
+  }
+  /* 分隔线不做选中态视觉(ProseMirror 默认给选中节点描一圈系统蓝);编辑语义不变。 */
+  [data-qingagent-doc-panel] .wf-doc hr.ProseMirror-selectednode {
+    outline:none;box-shadow:none;background:var(--line-2);
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) a {color:var(--mark);text-decoration:underline;text-decoration-thickness:.5px;text-underline-offset:2px}
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre.md-code-block {
+    background:var(--bg-subtle);border:1px solid var(--line-1);
+    border-radius:var(--r-sm);padding:10px 14px;margin:10px 0;
+    font-family:var(--font-mono);font-size:12.5px;line-height:1.55;
+    color:var(--ink-2);white-space:pre-wrap;
+  }
+  /* 代码行内样式 (自定义 code 包) */
+  /* 行内代码:暖底 + 暖锈字(与金色链接区分),贴合奶白纸 */
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) code.inline-code {
+    background:rgba(120,90,50,.09);border:1px solid rgba(168,130,63,.22);
+    padding:1px 5px;border-radius:0;
+    font-family:var(--font-mono);font-size:.9em;color:#9c5a2c;
+  }
+
+  /* ============ Code block (ProseMirror + lowlight) ============ */
+  [data-qingagent-doc-panel] .wf-doc .code-block-node {
+    position:relative;margin:14px 0;
+  }
+  [data-qingagent-doc-panel] .wf-doc .code-block-node pre {
+    margin:0;white-space:pre-wrap;cursor:text;
+  }
+  [data-qingagent-doc-panel] .wf-doc .code-block-node pre::before {
+    content:none;
+  }
+  [data-qingagent-doc-panel] .wf-doc .code-block-node pre code {
+    display:block;white-space:pre-wrap;
+  }
+  [data-qingagent-doc-panel] .wf-doc .code-block-language-select {
+    position:absolute;top:8px;right:10px;z-index:2;
+    font-family:var(--font-mono);font-size:10px;line-height:1.4;
+    color:var(--ink-3);background:transparent;border:1px solid rgba(168,130,63,.24);
+    border-radius:var(--r-sm);padding:1px 6px;cursor:pointer;
+    outline:none;appearance:none;
+  }
+  [data-qingagent-doc-panel] .wf-doc .code-block-language-select:hover {
+    color:var(--ink-2);border-color:var(--line-2);
+  }
+  /* 自定义语言下拉菜单(portal 到 body,正文树之外,不污染正文 innerText) */
+  [data-qingagent-doc-panel] .code-block-language-menu {
+    z-index:1000;max-height:260px;overflow-y:auto;
+    min-width:132px;padding:5px;
+    background:var(--bg-canvas);
+    border:1px solid var(--line-2);border-radius:var(--r-sm, 0);
+    box-shadow:0 8px 26px rgba(60,48,30,.20);
+    font-family:var(--font-mono);font-size:11px;
+  }
+  /* 选项是 <button>:浏览器默认给按钮塞系统无衬线 13.3px,且 font 不从菜单容器继承。
+     不在选项自身写死字族/字号,菜单就退化成"白底大号无衬线"的裸样子(用户真机反馈)。 */
+  [data-qingagent-doc-panel] .code-block-language-option {
+    display:flex;align-items:center;gap:6px;width:100%;
+    padding:4px 8px 4px 6px;border:none;background:transparent;cursor:pointer;
+    color:var(--ink-2);border-radius:0;white-space:nowrap;text-align:left;
+    font-family:var(--font-mono);font-size:11px;line-height:1.6;
+  }
+  [data-qingagent-doc-panel] .code-block-language-option:hover { background:var(--mark-soft);color:var(--ink-1); }
+  [data-qingagent-doc-panel] .code-block-language-option:focus-visible { outline:1px solid var(--line-3);outline-offset:-1px; }
+  [data-qingagent-doc-panel] .code-block-language-option[data-active="true"] { color:var(--mark);font-weight:600; }
+  /* 勾选位固定占位:当前语言打勾时其余选项不左右位移 */
+  [data-qingagent-doc-panel] .code-block-language-option__check {
+    display:inline-flex;width:12px;flex:none;align-items:center;justify-content:center;
+    color:var(--mark);
+  }
+  /* Read-only pre blocks (static render) keep basic style */
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre {
+    position:relative;
+    background:#ece1cc;border:1px solid rgba(168,130,63,.22);
+    border-radius:var(--r);padding:32px 16px 14px;margin:14px 0;
+    font-family:var(--font-mono);font-size:12.5px;line-height:1.6;
+    color:#3a322a;white-space:pre;overflow-x:auto;
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre code {
+    background:none;border:none;padding:0;border-radius:0;
+    font-family:inherit;font-size:inherit;color:inherit;
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-keyword,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-built_in,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-selector-tag {
+    color:#9c5a2c;
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-string,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-title,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-section,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-attribute {
+    color:#5a7d4a;
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-comment,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-quote {
+    color:var(--ink-3);font-style:italic;
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-number,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-literal,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-variable,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-template-variable {
+    color:var(--mark);
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-type,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-class,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-function,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-name {
+    color:#7b5d94;
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-operator,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-punctuation,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-symbol,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-bullet {
+    color:#6f665a;
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-meta,
+[data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-deletion {
+    color:#b15059;
+  }
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre .hljs-addition {
+    color:#4f7d61;
+  }
+  /* Language label for static pre blocks */
+  [data-qingagent-doc-panel] :is(.wf-doc,.doc-typography) pre::before {
+    content:attr(data-language);
+    position:absolute;top:8px;right:12px;
+    font-family:var(--font-mono);font-size:10px;
+    color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;
+    pointer-events:none;
+  }
+
+  /* locked · 文档区编辑锁的「正在编辑中」提示统一由 .ws-edit-lock(贴底,
+     workspace-ink-skin.css)负责;旧的 .doc-lock-mask 居中提示已移除,避免重复。 */
+  [data-qingagent-doc-panel][data-tool="imageProgress"] .wf-doc {
+    pointer-events:none;user-select:none;
+  }
+
+  /* ============ AI editing cursors · imageProgress tool ============ */
+  [data-qingagent-doc-panel] .ai-cursor {
+    display: inline-block;
+    position: relative;
+    width: 0;
+    height: 1.2em;
+    vertical-align: text-bottom;
+    margin: 0 1px;
+  }
+  [data-qingagent-doc-panel] .ai-cursor::before {
+    content: "";
+    position: absolute;
+    left: -1px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: rgba(181, 138, 62, 0.8);
+    border-radius:0;
+    animation: ai-cursor-blink 1s step-end infinite;
+  }
+  [data-qingagent-doc-panel] .ai-cursor::after {
+    content: "";
+    position: absolute;
+    left: -4px;
+    top: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(181, 138, 62, 0.9);
+  }
+  @keyframes ai-cursor-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* Red cursor variant for deletion phase */
+  [data-qingagent-doc-panel] .ai-cursor.red::before {
+    background: rgba(220, 80, 70, 0.8);
+  }
+  [data-qingagent-doc-panel] .ai-cursor.red::after {
+    background: rgba(220, 80, 70, 0.9);
+  }
+  /* ============ Tiptap 原生应用动效 ============ */
+  [data-qingagent-doc-panel] .native-presentation-shell {
+    position:relative;
+    min-height:100%;
+  }
+  [data-qingagent-doc-panel] .native-presentation-shell.native-presentation-active {
+    /* 动效光晕使用负 inset，必须限制在纸张容器内，避免扩大 .ws-right 的滚动尺寸。 */
+    overflow:hidden;
+    /* .ws-right 是 flex 容器:默认 shrink 会把壳压到视口高,叠加上面的 hidden 就把
+       打字中越过首屏的正文整段剪掉,滚动区归零(260726 用户报障:放映时右侧滚不动)。
+       flex:none 让壳保持内容高 → hidden 只裁光晕的负 inset,滚动恢复。 */
+    flex:none;
+  }
+  [data-qingagent-doc-panel] .native-presentation-vignette {
+    position:absolute;
+    /* 顶部不再用负 inset 上溢:纸张顶上浮着固定的 .ws-doc-topbar(z-index:21),
+       负的 -36px 顶 inset 会把环境辉光顶到导航栏区域("内发光盖到顶栏")。
+       顶边收回到纸张顶(0),只保留左右/底的柔光晕——发光只落在纸张区域内。 */
+    inset:0 -80px -40px -60px;
+    z-index:0;
+    pointer-events:none;
+    box-shadow:
+      inset 0 0 70px rgba(44, 76, 128, .12),
+      inset 0 0 110px rgba(92, 164, 135, .08);
+    animation:ai-inner-glow 4s ease-in-out infinite;
+  }
+  [data-qingagent-doc-panel] .native-presentation-shell .wf-doc.ProseMirror {
+    position:relative;
+    z-index:1;
+  }
+  [data-qingagent-doc-panel] .native-char-enter {
+    /* 拉长到 .5s + 柔缓动:多个相邻新字的淡入相互重叠,形成"半透明渐变波"丝滑流出,而非逐字硬蹦。 */
+    animation:native-char-enter .5s cubic-bezier(.22,1,.36,1);
+    will-change:opacity, filter;
+  }
+  [data-qingagent-doc-panel] .native-presentation-cursor::before {
+    animation:
+      ai-cursor-blink 1s step-end infinite,
+      native-presentation-cursor-vibe .18s ease-in-out infinite;
+    background:var(--native-cursor-color, rgba(181, 138, 62, .8));
+    box-shadow:0 0 10px color-mix(in srgb, var(--native-cursor-color, #b58a3e) 46%, transparent);
+  }
+  [data-qingagent-doc-panel] .native-presentation-cursor::after {
+    background:var(--native-cursor-color, rgba(181, 138, 62, .9));
+    box-shadow:0 0 14px color-mix(in srgb, var(--native-cursor-color, #b58a3e) 38%, transparent);
+  }
+  [data-qingagent-doc-panel] .native-presentation-cursor.red::before {
+    background: rgba(220, 80, 70, .85);
+    box-shadow:0 0 10px rgba(220, 80, 70, .34);
+  }
+  [data-qingagent-doc-panel] .native-presentation-cursor.red::after {
+    background: rgba(220, 80, 70, .9);
+    box-shadow:0 0 14px rgba(220, 80, 70, .30);
+  }
+  [data-qingagent-doc-panel] .native-presentation-red-dot::before {
+    display:none;
+  }
+  [data-qingagent-doc-panel] .native-presentation-red-dot::after {
+    top:.35em;
+  }
+  /* ============ 临时 churn 动效调参面板 ============ */
+  [data-qingagent-doc-panel] .presentation-tuning-panel {
+    position:fixed;
+    right:22px;
+    bottom:22px;
+    z-index:44;
+    width:286px;
+    border:1px solid rgba(31,42,49,.14);
+    border-radius:0;
+    background:rgba(251,248,242,.96);
+    box-shadow:0 18px 48px rgba(20,30,38,.18);
+    backdrop-filter:blur(14px);
+    color:var(--ink-1);
+    user-select:none;
+  }
+  [data-qingagent-doc-panel] .presentation-tuning-panel.is-collapsed {
+    width:auto;
+    border-radius:999px;
+  }
+  /* 入场动效面板:与 Churn 动效面板共用内部样式,挪到左下角,避免两个浮层重叠 */
+  [data-qingagent-doc-panel] .reveal-tuning-panel {
+    right:auto;
+    left:22px;
+  }
+  /* 拟人鼠标面板:挪到右上(顶栏下),避开 Churn(右下)与入场(左下) */
+  [data-qingagent-doc-panel] .human-cursor-tuning-panel {
+    right:22px;
+    left:auto;
+    bottom:auto;
+    top:72px;
+  }
+  [data-qingagent-doc-panel] .ptp-toggle {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:12px;
+    color:var(--ink-2);
+    cursor:pointer;
+    flex-wrap:wrap;
+  }
+  /* 勾选框样式统一由 .wf-checkbox(ui-kit components.css)提供,这里不再各自设 accent-color */
+  [data-qingagent-doc-panel] .ptp-toggle small {
+    flex-basis:100%;
+    font-size:10.5px;
+    color:var(--ink-3);
+  }
+  [data-qingagent-doc-panel] .ptp-header {
+    display:flex;
+    align-items:center;
+    gap:9px;
+    min-height:38px;
+    padding:7px 8px;
+    cursor:grab;
+    touch-action:none;
+  }
+  [data-qingagent-doc-panel] .ptp-header:active {cursor:grabbing}
+  [data-qingagent-doc-panel] .ptp-collapse,
+[data-qingagent-doc-panel] .ptp-reset,
+[data-qingagent-doc-panel] .ptp-replay {
+    border:1px solid var(--line-2);
+    border-radius:0;
+    background:var(--bg-canvas);
+    color:var(--ink-2);
+    font-family:var(--font-zh-serif);
+    cursor:pointer;
+    transition:background .12s,border-color .12s,color .12s,opacity .12s;
+  }
+  [data-qingagent-doc-panel] .ptp-collapse:hover,
+[data-qingagent-doc-panel] .ptp-reset:hover,
+[data-qingagent-doc-panel] .ptp-replay:hover:not(:disabled) {
+    background:var(--bg-hover);
+    border-color:var(--ink-3);
+    color:var(--ink-1);
+  }
+  [data-qingagent-doc-panel] .ptp-collapse {
+    flex:0 0 auto;
+    min-width:32px;
+    height:26px;
+    padding:0 8px;
+    font-size:12px;
+    font-weight:700;
+  }
+  [data-qingagent-doc-panel] .is-collapsed .ptp-collapse {
+    min-width:48px;
+  }
+  [data-qingagent-doc-panel] .ptp-title {
+    flex:1 1 auto;
+    min-width:0;
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:8px;
+  }
+  [data-qingagent-doc-panel] .ptp-title span {
+    font-size:12.5px;
+    font-weight:700;
+    white-space:nowrap;
+  }
+  [data-qingagent-doc-panel] .ptp-title small {
+    font-family:var(--font-mono);
+    font-size:10.5px;
+    color:var(--ink-3);
+    white-space:nowrap;
+  }
+  [data-qingagent-doc-panel] .ptp-reset {
+    height:26px;
+    padding:0 8px;
+    font-size:11.5px;
+  }
+  [data-qingagent-doc-panel] .ptp-body {
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    padding:0 12px 12px;
+  }
+  [data-qingagent-doc-panel] .ptp-field {
+    display:flex;
+    flex-direction:column;
+    gap:5px;
+  }
+  [data-qingagent-doc-panel] .ptp-field-head {
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:10px;
+    font-size:12px;
+    color:var(--ink-2);
+  }
+  [data-qingagent-doc-panel] .ptp-field-head strong {
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--ink-1);
+  }
+  [data-qingagent-doc-panel] .ptp-field input[type="range"] {
+    width:100%;
+    accent-color:#4d6dff;
+    cursor:pointer;
+  }
+  [data-qingagent-doc-panel] .ptp-hint {
+    font-size:10.5px;
+    color:var(--ink-3);
+  }
+  [data-qingagent-doc-panel] .ptp-actions {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding-top:2px;
+  }
+  [data-qingagent-doc-panel] .ptp-replay {
+    height:30px;
+    padding:0 12px;
+    font-size:12px;
+    font-weight:700;
+  }
+  [data-qingagent-doc-panel] .ptp-replay:disabled {
+    cursor:not-allowed;
+    opacity:.48;
+  }
+  [data-qingagent-doc-panel] .ptp-actions span {
+    font-size:11px;
+    color:var(--ink-3);
+  }
+  @keyframes native-presentation-cursor-vibe {
+    0%,100%{transform:translateX(0)}
+    50%{transform:translateX(.7px)}
+  }
+  @keyframes native-char-enter {
+    from{opacity:0;filter:var(--fx-native-char-enter-from)}
+    to{opacity:1;filter:var(--fx-native-char-enter-to)}
+  }
+
+  /* review · patch three-state wrappers + hover popup */
+  [data-qingagent-doc-panel] .wf-patch-ins-wrap,
+[data-qingagent-doc-panel] .wf-patch-replace-wrap {
+    position:relative;
+    display:inline;
+    cursor:pointer;
+  }
+  [data-qingagent-doc-panel] .wf-patch-replace-wrap[data-patch-state="replace"] {
+    -webkit-box-decoration-break:clone;
+    box-decoration-break:clone;
+  }
+  [data-qingagent-doc-panel] .wf-patch-ins {
+    background:linear-gradient(to bottom, transparent 50%, rgba(74, 180, 100, 0.25) 50%);
+  }
+  [data-qingagent-doc-panel] .wf-patch-add-badge {
+    display:inline-flex;
+    align-items:center;
+    height:16px;
+    margin-right:5px;
+    padding:0 5px;
+    border:1px solid rgba(74, 180, 100, 0.34);
+    background:rgba(74, 180, 100, 0.12);
+    color:#2f6d3b;
+    font-size:10px;
+    font-weight:700;
+    line-height:1;
+    vertical-align:1px;
+  }
+  /* 审阅态行级 diff:列表/待办清单逐行标注,取代整块替换 —— 新增/改动行用与行内新增
+     (.wf-row-ins)一致的"半高绿高亮"(下半截绿),不再画整块绿底或左侧条;
+     删除行正文消失，仅留可 hover 的紧凑删除标记。 */
+  /* 所有行统一左内距,各行 checkbox/文字左对齐一致。 */
+  [data-qingagent-doc-panel] .wf-list-row {
+    padding-left:8px;
+  }
+  /* 块级「左绿条 + 极淡底」只留给**无法字符级**的整块替换/新增(.wf-diff-inline 之外);
+     能走字符级的行/块(加了 .wf-diff-inline)不再叠这层块级底色——改动字的行内绿(.wf-row-ins)
+     就是唯一标记,块级+字符级是一件事,不重复出。半高绿渐变永不用于块级背景。 */
+  [data-qingagent-doc-panel] .wf-list-row--added:not(.wf-diff-inline),
+[data-qingagent-doc-panel] .wf-list-row--changed:not(.wf-diff-inline) {
+    box-shadow:inset 3px 0 0 rgba(74, 180, 100, 0.55);
+    background:rgba(74, 180, 100, 0.06);
+  }
+  /* 行级删除:被删那行整行清掉——不出列表圆点、且**零布局占位**(height:0 + margin:0),
+     上下两行仍按正常行距贴合、绝不因删除而撑开;红横线 + 左端红点用绝对定位骑在行间缝隙上,
+     命中区(delete-marker span)也绝对定位、不占布局。hover 这条缝线才弹出被删原文。
+     选择器必须带 .wf-doc 提权,否则 margin 被 `.wf-doc li{margin:2px}` 压过、删除位仍多 2px。 */
+  [data-qingagent-doc-panel] .wf-doc .wf-list-row--removed {
+    list-style:none;
+    position:relative;
+    height:0;
+    margin:0;
+    padding:0;
+    cursor:default;
+  }
+  /* 命中区收窄到 8px 且不越过缝隙太多,避免抢上一行(尤其相邻 changed 行)的 hover。 */
+  [data-qingagent-doc-panel] .wf-list-row--removed > .wf-review-delete-marker {
+    position:absolute;
+    left:0;
+    right:0;
+    top:0;
+    height:8px;
+    transform:translateY(-50%);
+  }
+  [data-qingagent-doc-panel] .wf-list-row--removed::before {
+    content:"";
+    position:absolute;
+    left:0;
+    right:0;
+    top:50%;
+    height:2px;
+    background:rgba(220, 80, 70, 0.5);
+    transform:translateY(-50%);
+    pointer-events:none;
+  }
+  [data-qingagent-doc-panel] .wf-list-row--removed::after {
+    content:"";
+    position:absolute;
+    left:-1px;
+    top:50%;
+    width:5px;
+    height:5px;
+    border-radius:50%;
+    background:rgba(220, 80, 70, 0.6);
+    transform:translateY(-50%);
+    pointer-events:none;
+  }
+  [data-qingagent-doc-panel] .wf-row-del {
+    color:var(--ink-3, #8a8f98);
+    text-decoration:line-through;
+    text-decoration-color:rgba(220, 80, 70, 0.7);
+  }
+  [data-qingagent-doc-panel] .wf-row-ins {
+    background:linear-gradient(to bottom, transparent 50%, rgba(74, 180, 100, 0.25) 50%);
+  }
+  [data-qingagent-doc-panel] [data-review-target-id] { cursor:default; }
+  [data-qingagent-doc-panel] .wf-review-delete-marker {
+    position:relative;
+    display:block;
+    width:100%;
+    min-width:18px;
+    height:10px;
+  }
+  [data-qingagent-doc-panel] .wf-review-delete-marker::before {
+    content:"";
+    position:absolute;
+    left:0;
+    right:0;
+    top:50%;
+    height:2px;
+    background:rgba(220, 80, 70, 0.5);
+    transform:translateY(-50%);
+  }
+  [data-qingagent-doc-panel] .wf-review-delete-marker::after {
+    content:"";
+    position:absolute;
+    left:-1px;
+    top:50%;
+    width:5px;
+    height:5px;
+    border-radius:50%;
+    background:rgba(220, 80, 70, 0.6);
+    transform:translateY(-50%);
+  }
+  [data-qingagent-doc-panel] .wf-list-row--removed > .wf-review-delete-marker::before,
+[data-qingagent-doc-panel] .wf-list-row--removed > .wf-review-delete-marker::after {
+    display:none;
+  }
+  /* 审阅态容器局部 diff：表格只标真实变化的行/格，callout/分栏只标变化的内部块。 */
+  [data-qingagent-doc-panel] .wf-table-row--added > .wf-table-cell {
+    box-shadow:inset 3px 0 0 rgba(74, 180, 100, 0.55);
+    background:rgba(74, 180, 100, 0.06);
+  }
+  [data-qingagent-doc-panel] .wf-table-row--removed {
+    position:relative;
+  }
+  [data-qingagent-doc-panel] .wf-table-delete-cell {
+    padding:2px 8px;
+  }
+  [data-qingagent-doc-panel] .wf-table-cell--changed:not(.wf-diff-inline) {
+    box-shadow:inset 3px 0 0 rgba(74, 180, 100, 0.55);
+    background:rgba(74, 180, 100, 0.06);
+  }
+  [data-qingagent-doc-panel] .wf-container-block {
+    position:relative;
+    padding-left:8px;
+  }
+  [data-qingagent-doc-panel] .wf-container-block--added:not(.wf-diff-inline),
+[data-qingagent-doc-panel] .wf-container-block--changed:not(.wf-diff-inline) {
+    box-shadow:inset 3px 0 0 rgba(74, 180, 100, 0.55);
+    background:rgba(74, 180, 100, 0.06);
+  }
+  [data-qingagent-doc-panel] .wf-container-block--removed {
+    min-height:10px;
+    padding-top:2px;
+    padding-bottom:2px;
+  }
+  /* 栏级增删必须覆盖整栏边界，不能只给栏内首个块着色，否则空栏/多块栏会丢失“整栏”语义。 */
+  [data-qingagent-doc-panel] .wf-column--added {
+    box-shadow:inset 3px 0 0 rgba(74, 180, 100, 0.55);
+    background:rgba(74, 180, 100, 0.06);
+  }
+  [data-qingagent-doc-panel] .wf-column--removed {
+    min-width:18px;
+  }
+  /* hover 卡片"原文":自带紧凑表格样式(不借 .wf-doc,避免吃整篇纸张 padding/min-height/阴影污染)。
+     宽表在卡片内横向滚动、不被裁切;收紧首尾外边距贴合紧凑卡片。 */
+  /* 静态 PM 表格横滚容器(正文块级补丁 / hover 原文共用):宽表在此滚动,不撑破布局。 */
+  [data-qingagent-doc-panel] .pm-table-scroll { overflow-x:auto; max-width:100%; }
+  [data-qingagent-doc-panel] .review-table-reveal-cell {
+    display:flex;align-items:baseline;min-height:1.6em;
+  }
+  [data-qingagent-doc-panel] .review-table-reveal-cell > p {margin:0;min-width:0}
+  [data-qingagent-doc-panel] .review-table-reveal-cursor {flex:0 0 auto;pointer-events:none}
+  [data-qingagent-doc-panel] .pm-hover-original { overflow-x:auto; }
+  [data-qingagent-doc-panel] .pm-hover-original > :first-child { margin-top:0; }
+  [data-qingagent-doc-panel] .pm-hover-original > :last-child { margin-bottom:0; }
+  [data-qingagent-doc-panel] .pm-hover-original table {
+    border-collapse:separate;
+    border-spacing:0;
+    width:auto;
+    max-width:100%;
+    margin:4px 0;
+    border:0;
+    box-shadow:none;
+  }
+  [data-qingagent-doc-panel] .pm-hover-original th,
+[data-qingagent-doc-panel] .pm-hover-original td {
+    border:0;
+    border-right:1px solid var(--line-2);
+    border-bottom:1px solid var(--line-2);
+    padding:4px 8px;
+    text-align:left;
+    vertical-align:top;
+  }
+  /* 同 .wf-doc:colgroup 抢占 :first-child,按 thead/tbody 首个取首行补上边框。 */
+  [data-qingagent-doc-panel] .pm-hover-original table > :is(thead,tbody):first-of-type > tr:first-child > th,
+[data-qingagent-doc-panel] .pm-hover-original table > :is(thead,tbody):first-of-type > tr:first-child > td {
+    border-top:1px solid var(--line-2);
+  }
+  [data-qingagent-doc-panel] .pm-hover-original table > :is(thead,tbody,tfoot) > tr > [data-table-logical-col="0"],
+[data-qingagent-doc-panel] .pm-hover-original table > :is(thead,tbody,tfoot) > tr > :first-child:not([data-table-logical-col]) {
+    border-left:1px solid var(--line-2);
+  }
+  /* 单元格内段落去掉 UA 外边距(对齐正文 .wf-doc td p{margin:0}),行高不虚胖。 */
+  [data-qingagent-doc-panel] .pm-hover-original th > p,
+[data-qingagent-doc-panel] .pm-hover-original td > p,
+[data-qingagent-doc-panel] .pm-hover-original li > p { margin:0; }
+  /* 流式正文打字头:末尾几个刚打出的字用横向渐变遮罩,光标处最透明→变老变实,做半透明渐变淡入。 */
+  [data-qingagent-doc-panel] .wf-patch-ins-head {
+    -webkit-mask-image:linear-gradient(90deg, #000 0%, #000 30%, transparent 100%);
+    mask-image:linear-gradient(90deg, #000 0%, #000 30%, transparent 100%);
+  }
+  @keyframes wf-patch-current-flash-green {
+    0%,100%{
+      background-color:transparent;
+      box-shadow:none;
+      filter:none;
+    }
+    22%,68%{
+      background-color:rgba(74, 180, 100, 0.10);
+      box-shadow:0 0 0 3px rgba(74, 180, 100, 0.28), 0 0 18px rgba(74, 180, 100, 0.22);
+      filter:saturate(1.12);
+    }
+  }
+  @keyframes wf-patch-current-flash-red {
+    0%,100%{
+      background-color:rgba(220, 80, 70, 0.82);
+      box-shadow:none;
+      filter:none;
+    }
+    22%,68%{
+      background-color:rgba(220, 80, 70, 0.95);
+      box-shadow:0 0 0 3px rgba(220, 80, 70, 0.30), 0 0 18px rgba(220, 80, 70, 0.22);
+      filter:saturate(1.12);
+    }
+  }
+  [data-qingagent-doc-panel] .wf-patch-ins-wrap.is-current[data-patch-state="insert"],
+[data-qingagent-doc-panel] .wf-patch-replace-wrap.is-current[data-patch-state="insert"],
+[data-qingagent-doc-panel] .wf-patch-replace-wrap.is-current[data-patch-state="replace"],
+[data-qingagent-doc-panel] .wf-blockmark.is-current[data-patch-state="insert"],
+[data-qingagent-doc-panel] .wf-blockmark.is-current[data-patch-state="replace"],
+[data-qingagent-doc-panel] .wf-table-row-add-hover.is-current[data-patch-state="insert"] {
+    animation:wf-patch-current-flash-green .72s ease-in-out 0s 2;
+  }
+  [data-qingagent-doc-panel] .wf-list-row--added.is-current,
+[data-qingagent-doc-panel] .wf-list-row--changed.is-current,
+[data-qingagent-doc-panel] .wf-table-row--added.is-current,
+[data-qingagent-doc-panel] .wf-table-cell--changed.is-current,
+[data-qingagent-doc-panel] .wf-container-block--added.is-current,
+[data-qingagent-doc-panel] .wf-container-block--changed.is-current {
+    animation:wf-patch-current-flash-green .72s ease-in-out 0s 2;
+  }
+  [data-qingagent-doc-panel] .wf-patch-ins-wrap.is-current[data-patch-state="insert"] .wf-patch-ins,
+[data-qingagent-doc-panel] .wf-patch-replace-wrap.is-current[data-patch-state="insert"] .wf-patch-ins,
+[data-qingagent-doc-panel] .wf-patch-replace-wrap.is-current[data-patch-state="replace"] .wf-patch-ins {
+    animation:wf-patch-current-flash-green .72s ease-in-out 0s 2;
+  }
+  [data-qingagent-doc-panel] .wf-patch-del-marker.is-current[data-patch-state="delete"] .patch-del-cursor {
+    animation:wf-patch-current-flash-red .72s ease-in-out 0s 2;
+  }
+  [data-qingagent-doc-panel] .wf-patch-del-marker.is-current[data-patch-state="delete"] .patch-del-cursor::after,
+[data-qingagent-doc-panel] .wf-blockmark-del.is-current[data-patch-state="delete"] .wf-blockmark-del-line,
+[data-qingagent-doc-panel] .wf-blockmark-del.is-current[data-patch-state="delete"] .wf-blockmark-del-line::after,
+[data-qingagent-doc-panel] .row-del.is-current[data-patch-state="delete"] .row-del-line {
+    animation:wf-patch-current-flash-red .72s ease-in-out 0s 2;
+  }
+  [data-qingagent-doc-panel] .wf-list-row--removed.is-current::before,
+[data-qingagent-doc-panel] .wf-list-row--removed.is-current::after,
+[data-qingagent-doc-panel] .wf-table-row--removed.is-current .wf-review-delete-marker::before,
+[data-qingagent-doc-panel] .wf-table-row--removed.is-current .wf-review-delete-marker::after,
+[data-qingagent-doc-panel] .wf-container-block--removed.is-current .wf-review-delete-marker::before,
+[data-qingagent-doc-panel] .wf-container-block--removed.is-current .wf-review-delete-marker::after {
+    animation:wf-patch-current-flash-red .72s ease-in-out 0s 2;
+  }
+  @media (prefers-reduced-motion:reduce) {
+    [data-qingagent-doc-panel] .wf-patch-ins-wrap.is-current[data-patch-state="insert"],
+[data-qingagent-doc-panel] .wf-patch-replace-wrap.is-current[data-patch-state="insert"],
+[data-qingagent-doc-panel] .wf-patch-replace-wrap.is-current[data-patch-state="replace"],
+[data-qingagent-doc-panel] .wf-blockmark.is-current[data-patch-state="insert"],
+[data-qingagent-doc-panel] .wf-blockmark.is-current[data-patch-state="replace"],
+[data-qingagent-doc-panel] .wf-table-row-add-hover.is-current[data-patch-state="insert"],
+[data-qingagent-doc-panel] .wf-patch-ins-wrap.is-current[data-patch-state="insert"] .wf-patch-ins,
+[data-qingagent-doc-panel] .wf-patch-replace-wrap.is-current[data-patch-state="insert"] .wf-patch-ins,
+[data-qingagent-doc-panel] .wf-patch-replace-wrap.is-current[data-patch-state="replace"] .wf-patch-ins,
+[data-qingagent-doc-panel] .wf-patch-del-marker.is-current[data-patch-state="delete"] .patch-del-cursor,
+[data-qingagent-doc-panel] .wf-patch-del-marker.is-current[data-patch-state="delete"] .patch-del-cursor::after,
+[data-qingagent-doc-panel] .wf-blockmark-del.is-current[data-patch-state="delete"] .wf-blockmark-del-line,
+[data-qingagent-doc-panel] .wf-blockmark-del.is-current[data-patch-state="delete"] .wf-blockmark-del-line::after,
+[data-qingagent-doc-panel] .row-del.is-current[data-patch-state="delete"] .row-del-line {
+      animation:none;
+    }
+    [data-qingagent-doc-panel] .wf-patch-ins-wrap.is-current[data-patch-state="insert"],
+[data-qingagent-doc-panel] .wf-patch-replace-wrap.is-current[data-patch-state="insert"],
+[data-qingagent-doc-panel] .wf-patch-replace-wrap.is-current[data-patch-state="replace"],
+[data-qingagent-doc-panel] .wf-blockmark.is-current[data-patch-state="insert"],
+[data-qingagent-doc-panel] .wf-blockmark.is-current[data-patch-state="replace"],
+[data-qingagent-doc-panel] .wf-table-row-add-hover.is-current[data-patch-state="insert"],
+[data-qingagent-doc-panel] .wf-patch-ins-wrap.is-current[data-patch-state="insert"] .wf-patch-ins,
+[data-qingagent-doc-panel] .wf-patch-replace-wrap.is-current[data-patch-state="insert"] .wf-patch-ins,
+[data-qingagent-doc-panel] .wf-patch-replace-wrap.is-current[data-patch-state="replace"] .wf-patch-ins {
+      background-color:rgba(74, 180, 100, 0.10);
+      box-shadow:0 0 0 2px rgba(74, 180, 100, 0.24);
+    }
+    [data-qingagent-doc-panel] .wf-patch-del-marker.is-current[data-patch-state="delete"] .patch-del-cursor,
+[data-qingagent-doc-panel] .wf-patch-del-marker.is-current[data-patch-state="delete"] .patch-del-cursor::after,
+[data-qingagent-doc-panel] .wf-blockmark-del.is-current[data-patch-state="delete"] .wf-blockmark-del-line,
+[data-qingagent-doc-panel] .wf-blockmark-del.is-current[data-patch-state="delete"] .wf-blockmark-del-line::after,
+[data-qingagent-doc-panel] .row-del.is-current[data-patch-state="delete"] .row-del-line {
+      background-color:rgba(220, 80, 70, 0.95);
+      box-shadow:0 0 0 2px rgba(220, 80, 70, 0.26);
+    }
+  }
+  [data-qingagent-doc-panel] .wf-row-diff-list .wf-patch-ins-wrap {
+    display:inline;
+  }
+  [data-qingagent-doc-panel] .wf-row-diff-list [data-row-status="same"] .wf-patch-ins {
+    background:transparent;
+  }
+  [data-qingagent-doc-panel] .wf-row-diff-list [data-row-status="removed"] {
+    list-style:none;
+  }
+  [data-qingagent-doc-panel] .wf-row-diff-list .row-del {
+    position:relative;
+    display:block;
+    width:min(58%, 320px);
+    padding:5px 0;
+    cursor:pointer;
+  }
+  [data-qingagent-doc-panel] .wf-row-diff-list .row-del-line {
+    display:block;
+    height:2px;
+    border-radius:0;
+    background:repeating-linear-gradient(90deg,
+      rgba(220,80,70,0.7) 0, rgba(220,80,70,0.7) 8px,
+      transparent 8px, transparent 14px);
+  }
+  [data-qingagent-doc-panel] .wf-row-diff-list .cb-changed {
+    box-shadow:0 0 0 2px rgba(74,180,100,.5);
+  }
+  [data-qingagent-doc-panel] .wf-row-diff-list .wf-task-cb-change {
+    display:inline-flex;
+    position:relative;
+    flex:0 0 auto;
+    cursor:pointer;
+  }
+  [data-qingagent-doc-panel] .wf-table-diff tr.row-add {
+    background:rgba(74, 180, 100, 0.08);
+  }
+  [data-qingagent-doc-panel] .wf-table-diff tr.row-add > th,
+[data-qingagent-doc-panel] .wf-table-diff tr.row-add > td {
+    background:rgba(74, 180, 100, 0.10);
+  }
+  [data-qingagent-doc-panel] .wf-table-diff .wf-table-row-add-hover {
+    position:relative;
+    display:inline-block;
+    min-width:100%;
+    cursor:pointer;
+  }
+  [data-qingagent-doc-panel] .wf-table-diff .row-del {
+    position:relative;
+    display:block;
+    width:100%;
+    padding:5px 0;
+    cursor:pointer;
+  }
+  [data-qingagent-doc-panel] .wf-table-diff .row-del-line {
+    display:block;
+    height:2px;
+    border-radius:0;
+    background:repeating-linear-gradient(90deg,
+      rgba(220,80,70,0.7) 0, rgba(220,80,70,0.7) 8px,
+      transparent 8px, transparent 14px);
+  }
+  /* hover 卡片:翻新 + 加宽。定位由 patchHover.tsx 写入 fixed 坐标,
+     不参与正文流、不触发布局宽度变化。 */
+  [data-qingagent-doc-panel] .patch-hover-popup {
+    display:none;
+    position:fixed;
+    bottom:calc(100% + 10px);
+    left:0;
+    background:#fffdf8;
+    border:1px solid var(--line-1);
+    border-radius:0;
+    padding:11px 14px;
+    box-shadow:0 10px 32px rgba(20,30,38,0.14), 0 2px 6px rgba(20,30,38,0.06);
+    width:fit-content;
+    min-width:min(240px, calc(100vw - 32px));
+    max-width:min(540px, calc(100vw - 32px));
+    z-index:20;
+    pointer-events:auto;
+    white-space:normal;
+    overflow-wrap:anywhere;
+    line-height:1.6;
+    contain:layout paint;
+  }
+  [data-qingagent-doc-panel] .patch-hover-popup::before {
+    content:"";
+    position:absolute;
+    left:-14px;
+    right:-14px;
+    bottom:-16px;
+    height:16px;
+    background:transparent;
+    pointer-events:auto;
+  }
+  /* 自适应翻转(usePopupPlacement 写入 data 属性):默认朝上左对齐;顶部不够朝下、右侧越界右对齐 */
+  [data-qingagent-doc-panel] .patch-hover-popup[data-vplace="down"] {
+    bottom:auto;
+    top:calc(100% + 10px);
+  }
+  [data-qingagent-doc-panel] .patch-hover-popup[data-vplace="down"]::before {
+    bottom:auto;
+    top:-16px;
+  }
+  [data-qingagent-doc-panel] .patch-hover-popup[data-hplace="right"] {
+    left:auto;
+    right:0;
+  }
+  [data-qingagent-doc-panel] .patch-hover-popup.is-visible {
+    display:flex;
+    flex-direction:column;
+    gap:7px;
+  }
+  [data-qingagent-doc-panel] .patch-popup-title {
+    font-family:var(--font-mono);
+    font-size:11px;
+    font-weight:700;
+    color:var(--ink-2);
+  }
+  [data-qingagent-doc-panel] .patch-popup-badge {
+    align-self:flex-start;
+    border:1px solid rgba(74, 180, 100, 0.34);
+    background:rgba(74, 180, 100, 0.12);
+    color:#2f6d3b;
+    padding:1px 7px;
+    font-size:12px;
+    font-weight:700;
+    line-height:1.5;
+  }
+  [data-qingagent-doc-panel] .patch-popup-original {
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr);
+    gap:8px;
+    align-items:start;
+    font-size:13px;
+    line-height:1.55;
+  }
+  [data-qingagent-doc-panel] .patch-popup-label {
+    color:var(--ink-4);
+    font-size:11px;
+    font-weight:700;
+    white-space:nowrap;
+  }
+  [data-qingagent-doc-panel] .patch-popup-original-text {
+    color:var(--ink-2);
+    overflow-wrap:anywhere;
+  }
+  /* 替换 hover:字符级改动片段「旧 → 新」,逐处一行;旧字灰淡、新字绿,不再弹整行原文。 */
+  [data-qingagent-doc-panel] .patch-frag-list {
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+  }
+  [data-qingagent-doc-panel] .patch-frag {
+    display:flex;
+    align-items:baseline;
+    gap:6px;
+    overflow-wrap:anywhere;
+  }
+  [data-qingagent-doc-panel] .patch-frag-old {
+    color:var(--ink-3);
+  }
+  [data-qingagent-doc-panel] .patch-frag-arrow {
+    color:var(--ink-4);
+    flex:none;
+  }
+  [data-qingagent-doc-panel] .patch-frag-new {
+    color:#3f7a4e;
+    font-weight:600;
+  }
+  [data-qingagent-doc-panel] .patch-popup-note {
+    color:var(--ink-3);
+    font-size:12.5px;
+    line-height:1.55;
+  }
+  [data-qingagent-doc-panel] .patch-popup-removed-text {
+    color:#a8413a;
+    text-decoration:line-through;
+    text-decoration-color:rgba(220, 80, 70, 0.7);
+    font-weight:600;
+  }
+  /* hover 卡片里的「被删块缩放原版」:把被删结构块(图表/表格/图片等)缩小渲染出来,看到删的是什么 */
+  [data-qingagent-doc-panel] .patch-popup-preview {
+    margin:2px 0;
+    max-width:340px;
+    max-height:240px;
+    overflow:auto;
+    border:1px solid var(--line-1);
+    border-radius:0;
+    padding:6px 9px;
+    background:var(--bg-canvas);
+    zoom:0.8;
+  }
+  [data-qingagent-doc-panel] .patch-popup-preview > * {margin:2px 0}
+  [data-qingagent-doc-panel] .patch-popup-actions {
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-top:2px;
+  }
+  [data-qingagent-doc-panel] .patch-popup-btn {
+    align-self:flex-start;
+    font-size:11px;
+    padding:3px 10px;
+    border:1px solid var(--line-2);
+    border-radius:var(--r-sm);
+    background:var(--bg-canvas);
+    color:var(--ink-2);
+    cursor:pointer;
+    transition:all 0.12s;
+  }
+  [data-qingagent-doc-panel] .patch-popup-btn:hover {
+    background:var(--mark-soft);
+    color:var(--mark);
+    border-color:var(--mark);
+  }
+
+  /* 结构块(图片/分隔线/整表/整图等块内无可标注文本)整块新增/删除:
+     仅一道左侧细竖条(不铺背景),hover 看"新增图片/删除表格"说明;删除时内容降透明示意。
+     文字块(标题/段落等)不走这里——整段已由行内 patchIns/patchDel 铺色。 */
+  [data-qingagent-doc-panel] .wf-blockmark {
+    position:relative;
+    padding-left:14px;
+    margin:10px 0;
+  }
+  [data-qingagent-doc-panel] .wf-blockmark::before {
+    content:"";
+    position:absolute;left:0;top:2px;bottom:2px;
+    width:2px;border-radius:0;
+  }
+  [data-qingagent-doc-panel] .wf-blockmark.insert::before {background:rgba(74, 180, 100, 0.72)}
+  [data-qingagent-doc-panel] .wf-blockmark.delete::before {background:rgba(220, 80, 70, 0.72)}
+  [data-qingagent-doc-panel] .wf-blockmark {cursor:pointer}
+  /* 块级删除/替换:被移除的旧块不留在正文(与行内删除同口径——折叠成红线 marker + hover 看原文),
+     只保留独立的 wf-blockmark-del 折叠标记 widget。否则替换会把整张旧表格也画在正文里。 */
+  [data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc .wf-blockmark.delete {
+    display:none;
+  }
+  /* 块级新增(整张表格/图表等):只保留左侧绿竖线,不叠 wf-patch-ins 的半截绿渐变——
+     那渐变是给行内文字做下划线的,套到整块上就成了突兀的"下半截绿色块"。 */
+  [data-qingagent-doc-panel] .wf-blockmark.insert .wf-patch-ins {
+    background:none;
+  }
+  /* 行级/单元格级 diff 的替换块(列表/待办清单逐行标注):去掉块级整条绿竖线 + 左内距,
+     只保留内部逐行标注,避免"既有行级又有块级"的重复标记。 */
+  [data-qingagent-doc-panel] .wf-blockmark.insert.is-granular {
+    padding-left:0;
+  }
+  [data-qingagent-doc-panel] .wf-blockmark.insert.is-granular::before {
+    display:none;
+  }
+  /* 审阅态图表允许交互(缩放按钮 / 平移看细节),不被 wf-doc 的 pointer-events:none 禁掉。
+     只放开外层 .pm-diagram 即可突破;内部交由 React Flow 自管(勿用 * 覆盖,否则会破坏
+     background/viewport/nodes/edge 各层各自的 pointer-events,导致平移与边命中失效)。 */
+  [data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc .pm-diagram {
+    pointer-events:auto;
+  }
+  /* 结构块删除:折叠成一道红色细线标记(不显示被删内容),hover 看被删内容。
+     与行内删除"红光标 + hover"同口径——删除一律不把旧内容留在原位。 */
+  [data-qingagent-doc-panel] .wf-blockmark-del {
+    position:relative;
+    margin:8px 0;
+    padding:5px 0;
+    cursor:pointer;
+  }
+  /* 与行内删除光标(.patch-del-cursor)同粗细同浓淡:竖条 2px、球 5px、alpha .55/.6,真正统一。 */
+  [data-qingagent-doc-panel] .wf-blockmark-del-line {
+    display:block;
+    position:relative;
+    width:2px;
+    height:18px;
+    margin-left:2px;
+    border-radius:999px;
+    background:rgba(220, 80, 70, 0.55);
+  }
+  [data-qingagent-doc-panel] .wf-blockmark-del-line::after {
+    content:"";
+    position:absolute;
+    left:50%;
+    top:-4px;
+    width:5px;
+    height:5px;
+    border-radius:50%;
+    background:rgba(220, 80, 70, 0.6);
+    transform:translateX(-50%);
+  }
+  /* 审阅态纯删除铁律：被删正文原位只留「竖线+圆点」游标，原文仅在 hover 卡展示。
+     替换不走此红色分支，只显示绿色新值。改此处前先读 AGENTS.md UI Iron Rules。 */
+  [data-qingagent-doc-panel] .wf-doc .wf-patch-del {
+    display:inline-block;
+    width:0;
+    max-width:0;
+    overflow:hidden;
+    white-space:pre;
+    font-size:0;
+    line-height:0;
+    color:transparent;
+    vertical-align:baseline;
+  }
+  [data-qingagent-doc-panel] .wf-patch-del-marker {
+    position:relative;
+    display:inline;
+    cursor:pointer;
+  }
+  [data-qingagent-doc-panel] .patch-del-cursor {
+    display:inline-block;
+    position:relative;
+    width:2px;height:1.05em;
+    vertical-align:text-bottom;
+    margin:0 2px;
+    background:rgba(220, 80, 70, 0.55);
+    border-radius:999px;
+  }
+  [data-qingagent-doc-panel] .patch-del-cursor::after {
+    content:"";
+    position:absolute;left:50%;top:-4px;
+    width:5px;height:5px;
+    border-radius:50%;
+    background:rgba(220, 80, 70, 0.6);
+    transform:translateX(-50%);
+  }
+
+  /* pendingReview · patch 单独操作 · 插在 .wf-patch-ins 之后 */
+  [data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc {
+    pointer-events:none;user-select:text;cursor:default;
+  }
+  [data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc .wf-patch-ins-wrap,
+[data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc .wf-patch-replace-wrap {
+    pointer-events:auto;
+  }
+  [data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc .wf-blockmark,
+[data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc .wf-blockmark-del {
+    pointer-events:auto;
+  }
+  [data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc .row-del,
+[data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc .wf-task-cb-change,
+[data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc .wf-table-row-add-hover {
+    pointer-events:auto;
+  }
+  [data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc .wf-patch-del-marker {
+    pointer-events:auto;
+  }
+  /* ============ Apple Intelligence inner glow · active tool ============ */
+  [data-qingagent-doc-panel][data-tool="imageProgress"] .ws-right,
+[data-qingagent-doc-panel][data-tool="agentBusy"] .ws-right {
+    animation: ai-inner-glow 4s ease-in-out infinite;
+  }
+
+  @keyframes ai-inner-glow {
+    0%, 100% {
+    box-shadow:
+    inset 0 0 30px 5px rgba(100, 150, 255, 0.15),
+    inset 0 0 60px 10px rgba(160, 100, 255, 0.08);
+    }
+    25% {
+    box-shadow:
+    inset 0 0 30px 5px rgba(255, 100, 150, 0.15),
+    inset 0 0 60px 10px rgba(255, 180, 100, 0.08);
+    }
+    50% {
+    box-shadow:
+    inset 0 0 30px 5px rgba(100, 220, 150, 0.15),
+    inset 0 0 60px 10px rgba(100, 180, 255, 0.08);
+    }
+    75% {
+    box-shadow:
+    inset 0 0 30px 5px rgba(200, 100, 255, 0.15),
+    inset 0 0 60px 10px rgba(255, 100, 180, 0.08);
+    }
+  }
+
+  /* ============ Chat loading dots ============ */
+  [data-qingagent-doc-panel] .chat-loading-dots {
+    display: inline-flex;
+    gap: 3px;
+  }
+  [data-qingagent-doc-panel] .chat-loading-dots span {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--ink-3);
+    animation: chat-dot-pulse 1.2s infinite ease-in-out;
+  }
+  [data-qingagent-doc-panel] .chat-loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+  [data-qingagent-doc-panel] .chat-loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes chat-dot-pulse {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.1); }
+  }
+
+  /* Batch 5 · 低端 / 减少动态:仅关闭常驻 infinite 动画,high 默认规则不动。 */
+  [data-qingagent-doc-panel][data-perf="low"] .au-dot,
+[data-qingagent-doc-panel][data-perf="low"] .doc-empty.drafting::before,
+[data-qingagent-doc-panel][data-perf="low"] .doc-drafting-page::after,
+[data-qingagent-doc-panel][data-perf="low"] .doc-empty-loader,
+[data-qingagent-doc-panel][data-perf="low"] .doc-empty-loader::after,
+[data-qingagent-doc-panel][data-perf="low"][data-patch-revealing="1"] .ws-right,
+[data-qingagent-doc-panel][data-perf="low"] .ai-cursor::before,
+[data-qingagent-doc-panel][data-perf="low"] .native-presentation-vignette,
+[data-qingagent-doc-panel][data-perf="low"] .native-presentation-cursor::before,
+[data-qingagent-doc-panel][data-perf="low"][data-tool="imageProgress"] .ws-right,
+[data-qingagent-doc-panel][data-perf="low"][data-tool="agentBusy"] .ws-right,
+[data-qingagent-doc-panel][data-perf="low"] .chat-loading-dots span {
+    animation:none;
+  }
+  [data-qingagent-doc-panel][data-perf="low"] .doc-empty-loader,
+[data-qingagent-doc-panel][data-perf="low"] .chat-loading-dots span {
+    opacity:1;
+    transform:none;
+  }
+  [data-qingagent-doc-panel][data-perf="low"] .doc-empty-loader::after {
+    opacity:.45;
+    transform:translateX(0);
+  }
+  [data-qingagent-doc-panel][data-perf="low"] .presentation-tuning-panel {
+    backdrop-filter:none;
+    -webkit-backdrop-filter:none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-qingagent-doc-panel] .au-dot,
+[data-qingagent-doc-panel] .doc-empty.drafting::before,
+[data-qingagent-doc-panel] .doc-drafting-page::after,
+[data-qingagent-doc-panel] .doc-empty-loader,
+[data-qingagent-doc-panel] .doc-empty-loader::after,
+[data-qingagent-doc-panel][data-patch-revealing="1"] .ws-right,
+[data-qingagent-doc-panel] .ai-cursor::before,
+[data-qingagent-doc-panel] .native-presentation-vignette,
+[data-qingagent-doc-panel] .native-presentation-cursor::before,
+[data-qingagent-doc-panel][data-tool="imageProgress"] .ws-right,
+[data-qingagent-doc-panel][data-tool="agentBusy"] .ws-right,
+[data-qingagent-doc-panel] .chat-loading-dots span {
+      animation:none;
+    }
+    [data-qingagent-doc-panel] .doc-empty-loader,
+[data-qingagent-doc-panel] .chat-loading-dots span {
+      opacity:1;
+      transform:none;
+    }
+    [data-qingagent-doc-panel] .doc-empty-loader::after {
+      opacity:.45;
+      transform:translateX(0);
+    }
+    [data-qingagent-doc-panel] .presentation-tuning-panel {
+      backdrop-filter:none;
+      -webkit-backdrop-filter:none;
+    }
+  }
+
+  /* ============ AskUser summary card (submitted questionnaire) ============ */
+  [data-qingagent-doc-panel] .askuser-card {
+    background:var(--bg-subtle, #f7f7f5);
+    border:1px solid var(--line-1, #e8e5e0);
+    border-radius:0;
+    padding:10px 14px;
+    margin:4px 0 6px;
+    width:100%;
+    box-sizing:border-box;
+  }
+  [data-qingagent-doc-panel] .askuser-card-header {
+    display:flex;align-items:center;gap:6px;
+    font-size:12.5px;font-weight:500;color:var(--ink-2);
+    margin-bottom:8px;
+  }
+  [data-qingagent-doc-panel] .askuser-card-check {
+    color:#5ca465;font-size:13px;
+  }
+  [data-qingagent-doc-panel] .askuser-card-body {
+    display:flex;flex-direction:column;
+  }
+  [data-qingagent-doc-panel] .askuser-card-row {
+    display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+    padding:5px 0;
+    border-bottom:1px solid var(--line-1, #eee);
+    font-size:12.5px;line-height:1.5;
+  }
+  [data-qingagent-doc-panel] .askuser-card-row:last-child {
+    border-bottom:none;
+  }
+  [data-qingagent-doc-panel] .askuser-card-q {
+    color:var(--ink-3);flex-shrink:0;max-width:45%;
+  }
+  [data-qingagent-doc-panel] .askuser-card-a {
+    color:var(--ink-1);font-weight:500;text-align:right;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+
+  /* 左栏联动置灰 (imageProgress/pendingReview) */
+
+
+/* p02:penNote 块在可编辑 TipTap 中的样式(只读渲染另有路径) */
+[data-qingagent-doc-panel] .wf-doc aside.pm-pen-note {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border-left: 3px solid rgba(31, 42, 49, 0.35);
+  background: rgba(31, 42, 49, 0.05);
+  font-style: italic;
+  color: rgba(31, 42, 49, 0.78);
+}
+
+/* ===== 文档查找/替换条 DocFindBar(跟随奶白纸右缘的固定浮层;字体走宋体 serif;直角;既有 token) ===== */
+[data-qingagent-doc-panel] .ws-find-bar {
+  position:fixed; z-index:20;
+  /* 水平居中于文档纸(--doc-left/--doc-right=纸真实左右边);--doc-top=纸面静止顶部,再进纸内 10px */
+  top:calc(var(--doc-top, 12px) + 10px);
+  left:calc((var(--doc-left, 0px) + var(--doc-right, 100vw)) / 2);
+  transform:translateX(-50%);
+  display:flex; flex-direction:column; gap:6px;
+  background:var(--bg-paper-deep); border:1px solid var(--line-2); border-radius:0;
+  box-shadow:0 6px 24px rgba(20,24,32,.14); padding:8px 10px; min-width:360px;
+  font-family:var(--font-zh-serif); font-size:13px; color:var(--ink-1);
+}
+[data-qingagent-doc-panel] .ws-find-row {display:flex; align-items:center; gap:6px}
+[data-qingagent-doc-panel] .ws-find-field {position:relative; flex:1; min-width:0; display:flex}
+[data-qingagent-doc-panel] .ws-find-field .ws-find-input {padding-right:46px}
+[data-qingagent-doc-panel] .ws-find-input {
+  flex:1; min-width:0; border:1px solid var(--line-2); border-radius:0; padding:5px 8px;
+  font-family:var(--font-zh-serif); font-size:13px; background:var(--bg-canvas); color:var(--ink-1); outline:none;
+}
+[data-qingagent-doc-panel] .ws-find-input:focus {border-color:var(--ink-3)}
+[data-qingagent-doc-panel] .ws-find-input.is-nohit {animation:ws-find-nohit .5s ease}
+@keyframes ws-find-nohit {0%,100%{border-color:var(--line-2)} 30%{border-color:#9e2b25; background:rgba(158,43,37,.06)}}
+[data-qingagent-doc-panel] .ws-find-count {position:absolute; right:8px; top:50%; transform:translateY(-50%); color:var(--ink-3); font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; pointer-events:none}
+[data-qingagent-doc-panel] .ws-find-btn {
+  border:none; background:transparent; border-radius:0; width:26px; height:26px;
+  display:inline-flex; align-items:center; justify-content:center; cursor:pointer;
+  color:var(--ink-2); font-family:var(--font-zh-serif); font-size:13px;
+}
+[data-qingagent-doc-panel] .ws-find-btn:hover {background:rgba(0,0,0,.06)}
+[data-qingagent-doc-panel] .ws-find-btn[aria-pressed="true"] {background:rgba(0,0,0,.08); color:var(--ink-1)}
+[data-qingagent-doc-panel] .ws-find-btn:disabled {opacity:.35; cursor:default}
+[data-qingagent-doc-panel] .ws-find-replace-row[hidden] {display:none}
+[data-qingagent-doc-panel] .ws-find-act {
+  border:1px solid var(--line-2); border-radius:0; background:var(--bg-canvas); color:var(--ink-1);
+  padding:4px 10px; font-family:var(--font-zh-serif); font-size:12.5px; cursor:pointer; white-space:nowrap;
+}
+[data-qingagent-doc-panel] .ws-find-act:hover {background:rgba(0,0,0,.05)}
+[data-qingagent-doc-panel] .ws-find-act:disabled {opacity:.4; cursor:not-allowed}
+/* 命中高亮:普通命中=青蓝浅底;当前命中=描金描边+淡金底(非审阅态,状态①) */
+[data-qingagent-doc-panel] .wf-doc .ws-find-hit {background:rgba(64,120,150,.22); color:inherit; border-radius:0}
+[data-qingagent-doc-panel] .wf-doc .ws-find-hit.is-current {background:rgba(196,150,58,.38); outline:2px solid rgba(176,128,32,.85); outline-offset:0}
+/* 审阅态双通道:命中切"只描边不填底",不与补丁底色打架(状态③) */
+[data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc .ws-find-hit {background:transparent; outline:1.5px solid rgba(64,120,150,.55); outline-offset:0}
+[data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc .ws-find-hit.is-current {background:rgba(196,150,58,.20); outline:2px solid rgba(176,128,32,.9)}
+
+/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:20-60 */
+[data-qingagent-doc-panel] {
+  /* 玄青桌面基色 = 纹理槽:整块背景的最底层。以后要在"整个后边"铺纹理,
+     就把纹理作为 background-image 的最后一层(压在色斑/暗角之下)叠到这里即可。
+     深墨蓝、非纯黑(旧渐变外圈 #0a0d10 近黑已弃)。 */
+  background-color: var(--desk-base);
+  /* 色斑与暗角都用**半透明**叠在基色上 → 背后的基色/未来纹理能透出来("打穿")。
+     暗角:中心完全透明(不提亮、不发灰)、只往四周压一层浅半透明深墨,
+     底部因此读作深蓝而非死黑(旧的不透明近黑 #0a0d10 已弃)。 */
+  background-image:
+    var(--desk-cinnabar-glow),
+    var(--desk-teal-glow),
+    var(--desk-vignette);
+  /* 字体统一 Noto Serif SC(只改 family,字号沿用现有);大红同新建页 */
+  --font-sans: "Noto Serif SC", "Songti SC", "STSong", serif;
+  --font-display: "Noto Serif SC", "Songti SC", "STSong", serif;
+  --font-zh-serif: "Noto Serif SC", "Songti SC", "STSong", serif;
+  --ws-red: #d8382b;
+  --ws-red-lite: #ee6a59;
+  --fx-workspace-glass-bg: rgba(16, 21, 26, 0.56);
+  --fx-workspace-input-glass-bg: rgba(8, 11, 15, 0.72);
+  --fx-workspace-backdrop-filter: blur(18px) saturate(1.3);
+  --fx-workspace-glass-shadow: 0 16px 46px rgba(0, 0, 0, 0.5);
+  --fx-workspace-dot-glow: 0 0 8px rgba(184, 169, 140, 0.5);
+  --fx-input-agent-opacity: 1;
+  --fx-input-agent-glow-rest:
+    0 0 0 1px rgba(184, 169, 140, 0.32),
+    0 0 16px 2px rgba(184, 169, 140, 0.22);
+  --fx-input-agent-glow-peak:
+    0 0 0 1px rgba(184, 169, 140, 0.4),
+    0 0 20px 3px rgba(184, 169, 140, 0.24);
+  --fx-input-agent-glow-static:
+    0 0 0 1px rgba(184, 169, 140, 0.34),
+    0 0 14px 2px rgba(184, 169, 140, 0.22);
+  --ws-float-bar-height: 52px;
+  --ws-float-bar-bottom: 26px;
+  --ws-float-bar-safe-gap: 96px;
+  --ws-bigplan-bottom-safe-area: calc(
+    var(--ws-float-bar-height) + var(--ws-float-bar-bottom) + var(--ws-float-bar-safe-gap)
+  );
+  font-family: var(--font-zh-serif);
+}
+
+/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:119-204 */
+/* 主体:居中的左右组(无顶栏,占满全高) */
+[data-qingagent-doc-panel] .ws-body {
+  /* 左右栏定宽不再被压缩:窗口放不下整组时,整体横向滚动而不是把两栏挤窄。
+     safe center:放得下时居中,放不下时回退到 start(靠左)以保证能滚到左侧、不被裁掉。 */
+  justify-content: safe center !important;
+  align-items: stretch !important;
+  gap: var(--ws-paper-column-gap) !important;
+  padding: 0 var(--ws-paper-body-padding-inline) !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+}
+/* 左对话区:定宽 400(不再随 vw 收窄),放不下走 .ws-body 的横向滚动 */
+
+/* 右文档列:定宽上限与首页探针共用 --ws-paper-* 几何变量。转场通过同构 DOM 实测
+   safe-center + scrollbar-gutter 后的真实 rect；窗口放不下时两端都回退靠左，
+   由 .ws-body 横向滚动承接。 */
+[data-qingagent-doc-panel] .ws-right {
+  --ws-paper-min-height: calc(100vh - var(--ws-paper-top-offset));
+  /* 纸内功能区(.ws-docfns)绝对定位的锚:相对滚动容器定位,随内容一起滚。 */
+  position: relative;
+  flex: 0 0 var(--ws-paper-column-width) !important;
+  width: auto !important;
+  max-width: var(--ws-paper-column-width) !important;
+  padding: var(--ws-paper-top-offset) 0 0 !important;
+  overflow-y: auto;
+  /* 内容变长出滚动条时,经典占位滚动条(自定义 4px)会吃掉内容区宽,居中的纸右边被挤、
+     视觉上「往左缩一点」。both-edges 让两侧恒留同宽的滚动槽 → 滚动条出不出,内容区宽度
+     与纸面中心都恒定不跳。 */
+  scrollbar-gutter: stable both-edges;
+}
+
+[data-qingagent-doc-panel] .wf-doc > *,
+[data-qingagent-doc-panel] .doc-toolbar {
+  transition:
+    opacity 0.44s ease,
+    transform 0.52s cubic-bezier(0.19, 0.85, 0.23, 1),
+    filter 0.44s ease;
+}
+
+
+
+
+
+[data-qingagent-doc-panel].ws-arriving .wf-doc > *,
+[data-qingagent-doc-panel].ws-returning .wf-doc > *,
+[data-qingagent-doc-panel].ws-arriving .doc-toolbar,
+[data-qingagent-doc-panel].ws-returning .doc-toolbar {
+  opacity: 0;
+  transform: translateY(12px);
+  filter: blur(1.5px);
+  pointer-events: none;
+}
+
+[data-qingagent-doc-panel].ws-arrive-revealing .wf-doc > * {
+  transition-delay: 80ms;
+}
+
+
+
+
+/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:592-682 */
+/* —— 审批条 PatchNav:复用顶层浮动观感(暗底描金、底部居中、弹性浮现) —— */
+[data-qingagent-doc-panel] .patch-nav {
+  position: fixed !important;
+  z-index: 41;
+  /* 与问卷条完全一致:宽=正文内容宽、固定高 52、毛玻璃 */
+  left: max(12px, calc(var(--doc-left, 0px) + 64px));
+  right: max(12px, calc(100vw - var(--doc-right, 100%) + 64px));
+  top: auto !important;
+  bottom: var(--ws-float-bar-bottom);
+  margin: 0;
+  max-width: none;
+  width: auto;
+  height: var(--ws-float-bar-height);
+  box-sizing: border-box;
+  padding: 0 14px 0 16px;
+  /* 审核条改用纸张色(不要黑底):暖奶白半透明 + 毛玻璃,与正文纸面同语言 */
+  background: rgba(250, 246, 236, 0.92) !important;
+  border: 1px solid rgba(120, 90, 50, 0.22) !important;
+  border-radius: 0 !important;
+  backdrop-filter: var(--fx-workspace-backdrop-filter);
+  -webkit-backdrop-filter: var(--fx-workspace-backdrop-filter);
+  box-shadow: 0 16px 46px rgba(60, 45, 25, 0.18);
+  color: var(--ink-1) !important;
+  /* 入场同样由 FLIP 从输入框位置滑来接管(内容浮现见上方 .patch-nav > *) */
+  animation: none !important;
+}
+[data-qingagent-doc-panel] .patch-nav .pn-label {
+  color: var(--ink-1) !important;
+}
+[data-qingagent-doc-panel] .patch-nav .pn-label b {
+  color: #9a6a1a !important;
+}
+[data-qingagent-doc-panel] .patch-nav .pn-dot {
+  background: #b59a63 !important;
+  box-shadow: 0 0 8px rgba(168, 130, 63, 0.4) !important;
+}
+[data-qingagent-doc-panel] .patch-nav .pn-jump,
+[data-qingagent-doc-panel] .patch-nav .pn-ghost {
+  color: var(--ink-2) !important;
+  border-color: rgba(120, 90, 50, 0.24) !important;
+}
+[data-qingagent-doc-panel] .patch-nav .pn-jump:hover,
+[data-qingagent-doc-panel] .patch-nav .pn-ghost:hover {
+  color: var(--ink-1) !important;
+  border-color: rgba(120, 90, 50, 0.4) !important;
+  background: var(--bg-hover) !important;
+}
+/* 提交钮:金色实心(对应 clip-221224 的「提交↵」高亮) */
+[data-qingagent-doc-panel] .patch-nav .pn-commit {
+  background: #b59a63 !important;
+  border-color: #b59a63 !important;
+  color: var(--ink-surface) !important;
+  font-weight: 600 !important;
+}
+[data-qingagent-doc-panel] .patch-nav .pn-commit:hover {
+  background: #c7af78 !important;
+}
+/* 整篇审:新旧版互斥选择器(暗条上,浅色 + 古铜金 thumb,与提交钮同语义) */
+[data-qingagent-doc-panel] .patch-nav .wdr-toggle {
+  background: rgba(120, 90, 50, 0.12) !important;
+  border-color: rgba(120, 90, 50, 0.22) !important;
+}
+[data-qingagent-doc-panel] .patch-nav .wdr-opt {
+  color: var(--ink-2) !important;
+}
+[data-qingagent-doc-panel] .patch-nav .wdr-opt.is-on {
+  color: var(--ink-surface) !important;
+}
+[data-qingagent-doc-panel] .patch-nav .wdr-thumb {
+  background: #b59a63 !important;
+}
+/* 审阅条(逐处审 + 整篇审)统一用产品衬线字体(与正文/品牌一致),比默认无衬线更稳重。
+   <button> 默认不继承 font-family(UA 强制无衬线),故对导航/提交/放弃各钮显式指定。 */
+[data-qingagent-doc-panel] .patch-nav,
+[data-qingagent-doc-panel] .patch-nav .pn-label,
+[data-qingagent-doc-panel] .patch-nav .pn-jump,
+[data-qingagent-doc-panel] .patch-nav .pn-commit,
+[data-qingagent-doc-panel] .patch-nav .pn-ghost,
+[data-qingagent-doc-panel] .patch-nav .wdr-opt {
+  font-family: var(--font-zh-serif);
+  letter-spacing: 0.02em;
+}
+/* 审批态:审批条 fixed 脱流后给右栏留底部安全区,避免文档尾/改动/hover 弹层被浮条遮住,
+   并让 scrollIntoView(block:center) 到末尾时有补偿空间 */
+[data-qingagent-doc-panel][data-content="pendingReview"] .ws-right {
+  padding-bottom: 0 !important;
+  scroll-padding-bottom: 104px;
+}
+[data-qingagent-doc-panel][data-content="pendingReview"] .wf-doc {
+  padding-bottom: 156px !important;
+}
+
+/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:1111-1220 */
+/* 审批操作条(patch-nav / 整篇审 wdr-nav)统一成深色风格,和问卷条(askuser-overlay)一致。
+   它挂在右侧文档区(.ws-right),原本走 base 浅色令牌(--bg-subtle 暖白 / --line-2 浅描边),
+   且 .ws-right 没有覆盖 --mark → 整条上的 var(--mark) 会落到 ui-kit base 的暗红 #b15059
+   (= 原「提交」按钮变红的根因)。这里把整组语义令牌按问卷条暗皮重定:
+   - 暗玻璃底 + 赭金 --mark(与 askuser-overlay 同一套 #b59a63 / line / ink 色阶)
+   - 提交 = 实心赭金主按钮(深字),放弃全部 / 上一处下一处 = 暗底描边次按钮
+   - 整篇审 wdr-nav 共用同壳,thumb/active 文字也跟着走暗皮。 */
+[data-qingagent-doc-panel] .patch-nav {
+  --mark: #b59a63;
+  --ink-1: #ece3d0;
+  --ink-2: rgba(236, 227, 208, 0.64);
+  --ink-3: rgba(236, 227, 208, 0.44);
+  --ink-4: rgba(236, 227, 208, 0.3);
+  --line-1: rgba(184, 169, 140, 0.16);
+  --line-2: rgba(184, 169, 140, 0.28);
+  --bg-subtle: rgba(255, 255, 255, 0.04);
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --ink-on-dark: var(--ink-surface);
+  background: var(--fx-workspace-input-glass-bg) !important;
+  backdrop-filter: var(--fx-workspace-backdrop-filter);
+  -webkit-backdrop-filter: var(--fx-workspace-backdrop-filter);
+  border-color: rgba(184, 169, 140, 0.28) !important;
+}
+/* dot / 计数高亮:base 用硬编码暖橙 #e8913a,在暗玻璃上偏跳;统一成赭金,与问卷条 au-dot 一致 */
+[data-qingagent-doc-panel] .patch-nav .pn-dot {
+  background: var(--mark) !important;
+  box-shadow: 0 0 0 3px rgba(181, 154, 99, 0.18) !important;
+}
+[data-qingagent-doc-panel] .patch-nav .pn-label {
+  color: var(--ink-1) !important;
+}
+[data-qingagent-doc-panel] .patch-nav .pn-label b {
+  color: var(--mark) !important;
+}
+/* 次按钮:上一处/下一处 + 放弃全部 —— 与 askuser-overlay .wf-btn.ghost 一个调性(暗底描边浅字) */
+[data-qingagent-doc-panel] .patch-nav .pn-jump,
+[data-qingagent-doc-panel] .patch-nav .pn-ghost {
+  background: transparent !important;
+  border: 1px solid rgba(184, 169, 140, 0.28) !important;
+  color: #cdbf9f !important;
+}
+[data-qingagent-doc-panel] .patch-nav .pn-jump:hover:not(:disabled),
+[data-qingagent-doc-panel] .patch-nav .pn-ghost:hover {
+  border-color: rgba(184, 169, 140, 0.42) !important;
+  background: rgba(184, 169, 140, 0.12) !important;
+  color: #f3ecdb !important;
+}
+/* 主按钮:提交 / 应用新版 —— 实心赭金 + 深字,醒目且与暗条同色系(修掉变红) */
+[data-qingagent-doc-panel] .patch-nav .pn-commit {
+  background: var(--mark) !important;
+  border-color: var(--mark) !important;
+  color: var(--ink-on-dark) !important;
+}
+[data-qingagent-doc-panel] .patch-nav .pn-commit:hover:not(:disabled) {
+  background: #c9ad75 !important;
+  border-color: #c9ad75 !important;
+}
+[data-qingagent-doc-panel] .patch-nav .pn-commit:disabled,
+[data-qingagent-doc-panel] .patch-nav .pn-jump:disabled,
+[data-qingagent-doc-panel] .patch-nav .pn-ghost:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+/* 放弃全部确认态直接替换底栏内容。使用单层实底暖纸，避免浮层与玻璃底栏叠色。 */
+[data-qingagent-doc-panel] .patch-nav.is-confirming {
+  background: var(--bg-paper-deep) !important;
+  border-color: rgba(120, 90, 50, 0.28) !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 16px 46px rgba(60, 45, 25, 0.18);
+}
+[data-qingagent-doc-panel] .patch-nav .pn-confirm-message {
+  color: var(--ink-surface) !important;
+}
+[data-qingagent-doc-panel] .patch-nav .pn-confirm-action {
+  background: var(--mark) !important;
+  border-color: var(--mark) !important;
+  color: var(--ink-surface) !important;
+  font-weight: 600;
+}
+[data-qingagent-doc-panel] .patch-nav .pn-confirm-action:hover {
+  background: #c9ad75 !important;
+  border-color: #c9ad75 !important;
+}
+[data-qingagent-doc-panel] .patch-nav .pn-confirm-cancel {
+  background: transparent !important;
+  border-color: rgba(120, 90, 50, 0.28) !important;
+  color: var(--ink-surface) !important;
+}
+[data-qingagent-doc-panel] .patch-nav .pn-confirm-cancel:hover,
+[data-qingagent-doc-panel] .patch-nav .pn-confirm-cancel:focus-visible {
+  background: var(--bg-hover) !important;
+  border-color: rgba(120, 90, 50, 0.42) !important;
+}
+/* 整篇审切换器(新版‖旧版):thumb 用 --ink-1(暗皮翻成浅奶白),active 文字用深字 */
+[data-qingagent-doc-panel] .patch-nav .wdr-toggle {
+  border-color: rgba(184, 169, 140, 0.28) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+[data-qingagent-doc-panel] .patch-nav .wdr-opt {
+  color: rgba(236, 227, 208, 0.44) !important;
+}
+[data-qingagent-doc-panel] .patch-nav .wdr-opt.is-on {
+  color: var(--ink-surface) !important;
+}
+[data-qingagent-doc-panel] .patch-nav .wdr-thumb {
+  /* thumb 用 --ink-1(暗皮翻成浅奶白 #ece3d0),让深色 active 文字(--ink-surface)
+     压在浅底上可见;曾误写成 --ink-on-dark(暗皮翻成 #1a1410 深)→ 深字压深底看不见 */
+  background: var(--ink-1) !important;
+}
+
+/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:1669-1802 */
+/* —— 右侧:玄青桌面留白,正文为奶白文档纸 —— */
+/* 画布贯通契约:从横向工作区到纸面内容之间不允许任何中间层另刷底色。
+   尤其 .ws-right 的 stable both-edges gutter 属于滚动容器绘制区；整条父链透明后，
+   左右预留槽会按原坐标直接露出 #view-workspace 的玄青色斑与暗角。 */
+[data-qingagent-doc-panel] .ws-body,
+[data-qingagent-doc-panel] .ws-right,
+[data-qingagent-doc-panel] .ws-document-content,
+[data-qingagent-doc-panel] .native-presentation-shell,
+[data-qingagent-doc-panel] .ws-paper-surface {
+  background: transparent !important;
+}
+/* 纸壳仍是唯一不透明层，但外投影会落入两侧透明 gutter，并被滚动容器裁成贯穿
+   全高的窄黑条。纸张与桌面的分界已由明暗材质本身建立，不再向纸外绘制阴影。 */
+[data-qingagent-doc-panel] .wf-doc,
+[data-qingagent-doc-panel] .ws-paper-shell,
+[data-qingagent-doc-panel] .ws-deriv-view,
+[data-qingagent-doc-panel] .fd-right-preview,
+[data-qingagent-doc-panel] .doc-empty,
+[data-qingagent-doc-panel] .bigplan-panel {
+  box-shadow: none !important;
+}
+[data-qingagent-doc-panel] .wf-doc,
+[data-qingagent-doc-panel] .ws-paper-shell {
+  /* !important:覆盖 editing/pendingReview 等态把纸改成 transparent 的规则,任何态都保持奶白 */
+  background: var(--bg-paper-deep) !important;
+  padding: 52px 64px !important;
+  border-radius: var(--ws-paper-radius);
+  /* 纸宽 = 右列扣除浏览器实际双侧 scrollbar-gutter 后的内容宽。首页探针复刻同一规则，
+     转场终帧直接采用实测值，不再把列宽上限误当成纸壳真实宽度。 */
+  width: 100% !important;
+  max-width: var(--ws-paper-column-width) !important;
+  box-sizing: border-box !important;
+  /* 铺满滚动容器内容区:短文档也撑到底、底部不露深墨黑;长文档随内容向下延伸。
+     顶部留白由 ws-right 的 padding-top 提供(深墨间隔),底部由 padding-bottom:0 贴到底 */
+  min-height: var(--ws-paper-min-height);
+  margin: 0;
+}
+[data-qingagent-doc-panel] .ws-paper-shell {
+  position: absolute;
+  top: var(--ws-paper-top-offset);
+  left: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+[data-qingagent-doc-panel] .ws-paper-surface {
+  position: relative;
+  width: 100%;
+  max-width: var(--ws-paper-column-width);
+  min-height: var(--ws-paper-min-height);
+  /* 审阅态纸面是 .ws-right(列 flex 容器)的直接弹性子项;默认 flex-shrink:1 会把纸面
+     从内容真实高压缩到 min-height(一屏),正文靠 overflow 溢出照常滚,但发光层 inset:0
+     只认被压扁的一屏高度 → 滚过一屏发光断裂出横切。锁死 flex-shrink,让纸面按内容撑满。 */
+  flex-shrink: 0;
+}
+[data-qingagent-doc-panel] .ws-paper-surface > .ws-editor-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  box-sizing: border-box;
+}
+[data-qingagent-doc-panel] .native-presentation-shell {
+  min-height: var(--ws-paper-min-height);
+}
+[data-qingagent-doc-panel] .native-presentation-shell .wf-doc.ProseMirror {
+  min-height: var(--ws-paper-min-height);
+}
+[data-qingagent-doc-panel] .doc-toolbar {
+  background: var(--ink-1) !important;
+  border-color: var(--ink-1) !important;
+}
+[data-qingagent-doc-panel] .doc-toolbar::after {
+  background: var(--ink-1) !important;
+  border-right-color: var(--ink-1) !important;
+  border-bottom-color: var(--ink-1) !important;
+}
+/* 下方弹出时 caret 朝上,暖墨皮肤下同样染成深墨色(用 top/left 边) */
+[data-qingagent-doc-panel] .doc-toolbar.is-below::after {
+  border-left-color: var(--ink-1) !important;
+  border-top-color: var(--ink-1) !important;
+}
+[data-qingagent-doc-panel] .doc-toolbar .dt-menu {
+  background: var(--ink-1) !important;
+  border-color: #3a3328 !important;
+}
+/* 代码块语言菜单通过 portal 挂到 body,不在 #view-workspace 作用域内。
+   这里单独抬高层级并锁住滚动,避免下半选项被正文层吃掉或 wheel 穿透。 */
+[data-qingagent-doc-panel] .code-block-language-menu {
+  z-index: 100120;
+  pointer-events: auto;
+  max-height: min(52vh, 280px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* 块手柄菜单(转换为 / 插入)暖化:它是 fixed/absolute 浮层,在 .wf-doc 暖作用域外,
+   基础 --bg-canvas 现已暖化为 #faf6ec(tokens.css)。这里给整套暖 token + 暖白底(比纸面略亮、
+   靠阴影分离),让面板/分组标题/列表项/图标/网格/hover 全部跟随暖墨纸面,不再白。 */
+[data-qingagent-doc-panel] .block-handle-menu,
+[data-qingagent-doc-panel] .bh-submenu-panel {
+  background: var(--bg-canvas) !important;
+  border-color: rgba(120, 90, 50, 0.22) !important;
+  --line-1: rgba(120, 90, 50, 0.14);
+  --line-2: rgba(120, 90, 50, 0.24);
+}
+/* 空/生成中态也是同一张奶白纸 —— 翻转落地即有纸接住,内容随后 settle 进来(接缝不断)。
+   原 .doc-empty 是 absolute inset:0(填满右列、top:0);改为 top:40 起,与纸落点 rect 对齐。 */
+[data-qingagent-doc-panel] .doc-empty {
+  top: 52px !important;
+  background: var(--bg-paper-deep) !important;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+[data-qingagent-doc-panel] .ws-deriv-view.is-generating > .doc-empty {
+  top: 0 !important;
+  box-shadow: none;
+}
+[data-qingagent-doc-panel] .doc-empty-title {
+  color: #2c2419;
+}
+[data-qingagent-doc-panel] .doc-empty-sub {
+  color: #8a7350;
+}
+/* 文档纸:无边框(纯净奶白纸面) */
+[data-qingagent-doc-panel] .wf-doc {
+  position: relative;
+}
+/* 文档纸内的语义令牌翻成「暖纸」系:ui-kit base token 是冷绿灰底 + 暗红 mark(#b15059),
+   表格/行内代码/链接/callout/公式默认走它,在奶白纸上格格不入。这里在纸作用域内统一暖化——
+   凡用 var(--mark / --line-* / --bg-subtle / --ink-*) 的元素自动跟随变暖。 */
+[data-qingagent-doc-panel] .wf-doc,
+[data-qingagent-doc-panel] /* 文件预览面板(AssetPreview)同样套暖色 token,
+[data-qingagent-doc-panel] 否则文字/标签会落到基础冷色(slate-blue)→ 白底青蓝字、与主题不搭。 */
+[data-qingagent-doc-panel] .fd-right-preview {
+  --bg-canvas: var(--bg-paper-deep);
+}
+
+/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:3178-3493 */
+/* 审阅态 diff 当前定位只保留 workspace.css 的绿色加深;不再加赭金描边 / 外发光。 */
+
+/* —— 文末落款:正文末尾续奶白纸,竖排两列「作于{干支年月初几} | 成文{中文数字}字+印章」——
+   position + z-index:1 保持纸内兄弟层级连续,正文+落款连成一张纸。 */
+[data-qingagent-doc-panel] .ws-colophon {
+  --ws-colophon-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 800px;
+  margin: 0;
+  box-sizing: border-box;
+  padding: 48px 64px 90px;
+  background: var(--bg-paper-deep);
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  align-items: flex-start;
+  /* 两列间距收小(左列「作于…」随之右移、更靠右列),字号 +2(18→20)。 */
+  gap: 5px;
+  /* 文末落款用书法艺术字型(子集 yanshi-colophon-subset 本就为落款字造),回落宋体 */
+  font-family: "QingYanShiSubset", var(--font-zh-serif);
+  font-size: 20px;
+  user-select: none;
+}
+/* 两列竖排:右列「成文X字」、左列「作于干支年月初几」——同字号同字色(用户要求一致)。 */
+[data-qingagent-doc-panel] .ws-colophon-count,
+[data-qingagent-doc-panel] .ws-colophon-date {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: "QingYanShiSubset", var(--font-zh-serif);
+  font-size: 1em;
+  font-weight: 400;
+  color: #2c2419;
+  letter-spacing: 0;
+  line-height: 1;
+  opacity: 0;
+  transform: translate3d(0, 10px, 0);
+  animation: wsColophonTextIn 520ms var(--ws-colophon-ease) forwards;
+  will-change: transform, opacity;
+}
+[data-qingagent-doc-panel] .ws-colophon-glyph {
+  display: grid;
+  place-items: center;
+  width: 1.18em;
+  height: 1.28em;
+  line-height: 1;
+  text-align: center;
+  transform: translateX(var(--ws-colophon-glyph-x, 0));
+}
+[data-qingagent-doc-panel] .ws-colophon-count {
+  animation-delay: 40ms;
+}
+[data-qingagent-doc-panel] .ws-colophon-date {
+  animation-delay: 120ms;
+}
+/* 右列:字数(竖排)+ 印章接其下面;列宽≈一列竖排字宽。 */
+[data-qingagent-doc-panel] .ws-colophon-countcol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  width: 1.6em;
+}
+[data-qingagent-doc-panel] .ws-colophon-seal {
+  width: 1.18em;
+  height: auto;
+  object-fit: contain;
+  opacity: 0;
+  flex-shrink: 0;
+  transform-origin: 50% 42%;
+  filter: blur(2px);
+  animation: wsColophonSealStamp 720ms var(--ws-colophon-ease) 420ms both;
+  will-change: transform, opacity, filter;
+}
+@keyframes wsColophonTextIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+@keyframes wsColophonSealStamp {
+  0% {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translate3d(0, -42px, 0) scale(1.58) rotate(-6deg);
+  }
+  48% {
+    opacity: 0.88;
+    filter: blur(0.8px);
+    transform: translate3d(0, -8px, 0) scale(1.22) rotate(-2deg);
+  }
+  68% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(0, 1px, 0) scale(0.92) rotate(1.5deg);
+  }
+  84% {
+    opacity: 0.96;
+    filter: blur(0);
+    transform: translate3d(0, 0, 0) scale(1.03) rotate(-0.6deg);
+  }
+  100% {
+    opacity: 0.95;
+    filter: blur(0);
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-qingagent-doc-panel] .ws-colophon-count,
+[data-qingagent-doc-panel] .ws-colophon-date,
+[data-qingagent-doc-panel] .ws-colophon-seal {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    animation: none;
+    will-change: auto;
+  }
+  [data-qingagent-doc-panel] .ws-colophon-seal {
+    opacity: 0.95;
+  }
+}
+
+/* 落款占位态(问题B):审阅/编辑过渡态的静态路径渲染 .ws-colophon.is-placeholder ——
+   奶白纸 + 完整 padding 照常占位、把那块约一屏的空间提前留好;但署名文字 / 印章
+   不显现(opacity:0、不跑入场动画),保留布局高度。提交结清 → 翻回可编辑路径,
+   那条渲染非占位真落款,文字 + 印章按既有 wsColophonTextIn / wsColophonSealStamp
+   入场动画"淡入显现"。于是空间一直在、只是内容显隐 → 消除提交后凭空蹦一块的跳动。 */
+[data-qingagent-doc-panel] .ws-colophon.is-placeholder .ws-colophon-count,
+[data-qingagent-doc-panel] .ws-colophon.is-placeholder .ws-colophon-date,
+[data-qingagent-doc-panel] .ws-colophon.is-placeholder .ws-colophon-seal {
+  opacity: 0;
+  animation: none;
+  transform: none;
+  filter: none;
+  will-change: auto;
+}
+
+/* ============================================================================
+   落款层级根因修复:.wf-doc.ProseMirror 在 workspace.css 里被
+   `.native-presentation-shell .wf-doc.ProseMirror{position:relative;z-index:1}`
+   无条件赋了 z-index:1(本意是放映态让纸盖在 vignette 之上)。z-index:1 让纸
+   形成层叠上下文,把纸内的高亮/callout 调色浮层(.pm-callout-theme-pop /
+   .pm-callout-emoji-pop,z-index:20)整体困死在纸的上下文里;而文末落款
+   .ws-colophon 是纸的兄弟、同样 z-index:1,DOM 在后 → 落款整体盖在纸(连同纸内
+   浮层)之上,浮层只要向下溢出到落款带就被切断。
+   非放映态根本没有 vignette,这个 z-index:1 纯属多余的"陷阱"。这里仅在
+   非 active(无 vignette)时把纸的 z-index 还原为 auto:纸不再成层叠上下文,
+   浮层 z-index:20 直接压过落款 z-index:1;落款(定位+z-index:1)继续维持纸内层级,
+   放映态(.native-presentation-active)
+   维持原 z-index:1,vignette 叠放不受影响。 */
+[data-qingagent-doc-panel]
+  .native-presentation-shell:not(.native-presentation-active)
+  .wf-doc.ProseMirror {
+  z-index: auto;
+}
+
+/* ============================================================================
+   生成/编辑期间的文档区编辑锁(问题1)
+   信号:复用现有 body[data-tool="agentBusy"|"imageProgress"] 与
+         body[data-patch-revealing="1"](青简正在改文档时由 WorkspacePage 落到 body)。
+   能滚不能点:遮罩层 .ws-edit-lock 自身 pointer-events:none,滚轮/触控板事件穿透
+   给 .ws-right 滚动容器(故"能滚");屏蔽点击/编辑则交给"忙时给 .wf-doc 加
+   pointer-events:none"——纸面所有点击/调色浮层/块手柄全部不可点(故"不能点"),
+   而滚动作用在 .ws-right 上、不受子级 pointer-events 影响。 */
+/* 遮罩/提示锚:portal 到 body 顶层,与 qa-toast 同一 fixed 层级。它不再属于
+   .ws-right 滚动流,因此不会被右侧滚动、sticky 或 transform/backdrop-filter 祖先带走。 */
+[data-qingagent-doc-panel] > .ws-edit-lock {
+  position: fixed;
+  /* 水平居中于文档纸(--doc-left/--doc-right 由 WorkspacePage 写=纸的真实左右边),而非视口右下角。
+     用户口径:"贴右侧底部"指右侧编辑面板的底部居中,不是右对齐。默认回退到视口中心。 */
+  left: calc((var(--doc-left, 0px) + var(--doc-right, 100vw)) / 2);
+  transform: translateX(-50%);
+  bottom: max(28px, env(safe-area-inset-bottom));
+  z-index: 9999;
+  height: auto;
+  pointer-events: none; /* 关键:遮罩不吃事件,滚轮穿透到 .ws-right */
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: visible;
+}
+[data-qingagent-doc-panel][data-tool="agentBusy"] > .ws-edit-lock,
+[data-qingagent-doc-panel][data-tool="imageProgress"] > .ws-edit-lock,
+[data-qingagent-doc-panel][data-patch-revealing="1"] > .ws-edit-lock {
+  opacity: 1;
+}
+/* 忙时屏蔽纸面所有点击/编辑(浮层、块手柄、调色钮),但 .ws-right 滚动不受影响 */
+[data-qingagent-doc-panel][data-tool="agentBusy"] .ws-right .wf-doc,
+[data-qingagent-doc-panel][data-tool="imageProgress"] .ws-right .wf-doc,
+[data-qingagent-doc-panel][data-patch-revealing="1"] .ws-right .wf-doc {
+  pointer-events: none;
+}
+
+/* hover 提示:不 hover 不显示;fixed 父层贴右下,提示自身只管样式与显隐过渡。 */
+[data-qingagent-doc-panel] > .ws-edit-lock .ws-edit-lock-hint {
+  position: relative;
+  pointer-events: none;
+  width: fit-content;
+  min-height: 38px;
+  box-sizing: border-box;
+  max-width: min(520px, calc(100vw - 48px));
+  padding: 9px 18px;
+  border-radius: 999px;
+  background: rgba(38, 32, 22, 0.9);
+  color: #f3ead6;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow:
+    0 10px 30px rgba(20, 14, 6, 0.4),
+    inset 0 0 0 1px rgba(200, 175, 130, 0.22);
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 0.22s ease,
+    transform 0.22s ease;
+}
+/* 仅在文档区(.ws-right) hover 且处于忙态时浮现提示。portal 在 body 下,
+   这里用 :has 连接右侧 hover 状态与顶层 fixed 提示。 */
+[data-qingagent-doc-panel][data-tool="agentBusy"]:has([data-qingagent-doc-panel] .ws-right:hover)
+  > .ws-edit-lock
+  .ws-edit-lock-hint,
+[data-qingagent-doc-panel][data-tool="imageProgress"]:has([data-qingagent-doc-panel] .ws-right:hover)
+  > .ws-edit-lock
+  .ws-edit-lock-hint,
+[data-qingagent-doc-panel][data-patch-revealing="1"]:has([data-qingagent-doc-panel] .ws-right:hover)
+  > .ws-edit-lock
+  .ws-edit-lock-hint {
+  opacity: 1;
+  transform: translateY(0);
+}
+[data-qingagent-doc-panel] > .ws-edit-lock .ws-edit-lock-hint-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d8b86a;
+  box-shadow: 0 0 0 0 rgba(216, 184, 106, 0.6);
+  animation: ws-edit-lock-dot 1.6s ease-in-out infinite;
+}
+@keyframes ws-edit-lock-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(216, 184, 106, 0.55);
+  }
+  60% {
+    box-shadow: 0 0 0 6px rgba(216, 184, 106, 0);
+  }
+}
+
+/* 编辑纸面环境发光:表示"正在编辑中"。发光层挂在 .ws-paper-surface 内,
+   随右侧滚动内容一起滚动,覆盖整张纸;patch-nav / body 级 .ws-edit-lock
+   保持独立浮层,不参与发光层布局裁剪。低端/reduced-motion 守卫见下方。 */
+[data-qingagent-doc-panel] .ws-right .wf-doc {
+  position: relative;
+}
+[data-qingagent-doc-panel][data-tool="agentBusy"] .ws-paper-surface > .ws-editor-glow,
+[data-qingagent-doc-panel][data-tool="imageProgress"] .ws-paper-surface > .ws-editor-glow,
+[data-qingagent-doc-panel][data-patch-revealing="1"] .ws-paper-surface > .ws-editor-glow {
+  opacity: 1;
+  animation: ws-paper-breathe 3.6s ease-in-out infinite;
+}
+/* 内发光呼吸:更明显 + 在风格内缓慢"流转"色相(金→琥珀→青→赭→金),
+   类 Apple Intelligence 的活感,但只取与玄青/赭金相搭的低饱和色,色差不跳。 */
+@keyframes ws-paper-breathe {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 42px 6px rgba(181, 154, 99, 0.32),
+      inset 0 0 100px 20px rgba(181, 154, 99, 0.16);
+  }
+  28% {
+    box-shadow:
+      inset 0 0 54px 11px rgba(203, 170, 108, 0.44),
+      inset 0 0 118px 26px rgba(203, 170, 108, 0.2);
+  }
+  55% {
+    box-shadow:
+      inset 0 0 54px 11px rgba(120, 156, 142, 0.4),
+      inset 0 0 118px 26px rgba(120, 156, 142, 0.18);
+  }
+  80% {
+    box-shadow:
+      inset 0 0 48px 9px rgba(178, 128, 104, 0.4),
+      inset 0 0 110px 22px rgba(178, 128, 104, 0.17);
+  }
+}
+
+/* 低端 / 减少动态:关掉呼吸与提示点动画,保留遮罩"能滚不能点"的纯功能态 */
+[data-qingagent-doc-panel][data-perf="low"][data-tool="agentBusy"] .ws-paper-surface > .ws-editor-glow,
+[data-qingagent-doc-panel][data-perf="low"][data-tool="imageProgress"] .ws-paper-surface > .ws-editor-glow,
+[data-qingagent-doc-panel][data-perf="low"][data-patch-revealing="1"] .ws-paper-surface > .ws-editor-glow,
+[data-qingagent-doc-panel][data-perf="low"] > .ws-edit-lock .ws-edit-lock-hint-dot {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-qingagent-doc-panel][data-tool="agentBusy"] .ws-paper-surface > .ws-editor-glow,
+[data-qingagent-doc-panel][data-tool="imageProgress"] .ws-paper-surface > .ws-editor-glow,
+[data-qingagent-doc-panel][data-patch-revealing="1"] .ws-paper-surface > .ws-editor-glow,
+[data-qingagent-doc-panel] > .ws-edit-lock .ws-edit-lock-hint-dot {
+    animation: none;
+  }
+  [data-qingagent-doc-panel] > .ws-edit-lock .ws-edit-lock-hint {
+    transition: opacity 0.22s ease;
+    transform: translateY(0);
+  }
+}
+
+/* source: apps/web/src/pages/workspace/workspace-responsive.css:1-30 */
+/*
+ * 窄桌面工作区降级。
+ *
+ * 完整桌面继续使用 400 / 800 双定宽列；产品从 768px 起进入桌面界面，
+ * Electron 主窗口又允许缩到 960px，因此 1024px 不能依赖横向滚动才能找到核心操作。
+ * 这里仅压缩框架留白与左栏，把剩余宽度全部交给纸列；1280px 起保持既有几何不变。
+ */
+@media (min-width: 768px) and (max-width: 1279px) {
+  [data-qingagent-doc-panel] {
+    --ws-paper-body-padding-inline: 24px;
+    --ws-paper-chat-column-width: 320px;
+    --ws-paper-column-gap: 24px;
+    --ws-paper-column-width: min(
+      800px,
+      calc(
+        100vw
+        - var(--ws-paper-body-padding-inline)
+        - var(--ws-paper-body-padding-inline)
+        - var(--ws-paper-chat-column-width)
+        - var(--ws-paper-column-gap)
+      )
+    );
+  }
+
+  [data-qingagent-doc-panel] .wf-doc,
+[data-qingagent-doc-panel] .ws-paper-shell {
+    padding-right: 48px !important;
+    padding-left: 48px !important;
+  }
+}

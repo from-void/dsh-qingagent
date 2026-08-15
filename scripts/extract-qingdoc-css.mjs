@@ -1,0 +1,250 @@
+import { readFile, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+
+const qingRoot = '/home/jimmy/proj/qingagent/main'
+const panelRoot = '[data-qingagent-doc-panel]'
+const bannedSelectors = [
+  '.web-page-frame--workspace',
+  '.ws-left',
+  '.ws-chat',
+  '.ws-input-',
+  '.ws-back-home',
+  '.ws-doc-topbar',
+]
+
+const sources = [
+  ['packages/ui-kit/src/tokens.css', [[4, 48]]],
+  // 清单写到 35；基线第 36 行才是 .font-mono 的闭合花括号，随段补齐以保持合法 CSS。
+  ['packages/ui-kit/src/base.css', [[5, 36]]],
+  ['packages/ui-kit/src/components.css', [[181, 274]]],
+  ['apps/web/src/app.css', [[1, 15]]],
+  ['apps/web/src/pages/workspace/workspace.css', [[197, 214], [304, 386], [1299, 3662]]],
+  ['apps/web/src/pages/workspace/workspace-ink-skin.css', [[20, 60], [119, 204], [592, 682], [1111, 1220], [1669, 1802], [3178, 3493]]],
+  ['apps/web/src/pages/workspace/workspace-responsive.css', [[1, 30]]],
+]
+
+const hostGlue = `/* dsh 面板薄胶水：只建立青简纸面所需的唯一根与原 DOM 骨架。 */
+${panelRoot} {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+${panelRoot} .ws-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+${panelRoot} .ws-document-content { display: contents; }
+${panelRoot} .ws-document-content > * { position: relative; z-index: 1; }
+${panelRoot} .qingdoc-stage-controls {
+  position: absolute;
+  z-index: 100200;
+  top: 10px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 5px 4px 10px;
+  color: rgba(236, 227, 208, .76);
+  border: 1px solid rgba(184, 169, 140, .28);
+  border-radius: 0;
+  background: rgba(8, 11, 15, .78);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .24);
+  font: 12px/1.4 var(--font-zh-serif);
+  transform: translateX(-50%);
+  backdrop-filter: blur(10px);
+}
+${panelRoot} .qingdoc-stage-title { white-space: nowrap; }
+${panelRoot} .qingdoc-mode-switch { display: flex; }
+${panelRoot} .qingdoc-mode-switch button,
+${panelRoot} .qingdoc-close {
+  min-height: 22px;
+  padding: 0 8px;
+  color: rgba(236, 227, 208, .64);
+  border: 1px solid rgba(184, 169, 140, .22);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+${panelRoot} .qingdoc-mode-switch button + button { border-left: 0; }
+${panelRoot} .qingdoc-mode-switch button.is-active {
+  color: #1a1410;
+  background: #b59a63;
+}
+${panelRoot} .qingdoc-close { width: 24px; padding: 0; font-size: 16px; }
+${panelRoot} .qingdoc-toast {
+  position: absolute;
+  z-index: 100210;
+  right: 16px;
+  bottom: 16px;
+  padding: 8px 12px;
+  color: #2f2a22;
+  border: 1px solid rgba(120, 90, 50, .28);
+  border-radius: 0;
+  background: #faf6ec;
+  font: 12px/1.5 var(--font-zh-serif);
+}
+`
+
+function lineRange(source, start, end) {
+  return source.split('\n').slice(start - 1, end).join('\n').replace(/[ \t]+$/gm, '')
+}
+
+function matchingBrace(source, openIndex) {
+  let depth = 0
+  let quote = null
+  let comment = false
+  for (let index = openIndex; index < source.length; index += 1) {
+    const char = source[index]
+    const next = source[index + 1]
+    if (comment) {
+      if (char === '*' && next === '/') {
+        comment = false
+        index += 1
+      }
+      continue
+    }
+    if (!quote && char === '/' && next === '*') {
+      comment = true
+      index += 1
+      continue
+    }
+    if (quote) {
+      if (char === '\\') index += 1
+      else if (char === quote) quote = null
+      continue
+    }
+    if (char === '"' || char === "'") {
+      quote = char
+      continue
+    }
+    if (char === '{') depth += 1
+    if (char === '}' && --depth === 0) return index
+  }
+  throw new Error(`CSS 花括号不平衡：${source.slice(openIndex, openIndex + 80)}`)
+}
+
+function findRuleOpen(source, start) {
+  let quote = null
+  let comment = false
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index]
+    const next = source[index + 1]
+    if (comment) {
+      if (char === '*' && next === '/') {
+        comment = false
+        index += 1
+      }
+      continue
+    }
+    if (!quote && char === '/' && next === '*') {
+      comment = true
+      index += 1
+      continue
+    }
+    if (quote) {
+      if (char === '\\') index += 1
+      else if (char === quote) quote = null
+      continue
+    }
+    if (char === '"' || char === "'") quote = char
+    else if (char === '{') return index
+  }
+  return -1
+}
+
+function splitSelectors(prelude) {
+  const selectors = []
+  let start = 0
+  let parens = 0
+  let brackets = 0
+  for (let index = 0; index < prelude.length; index += 1) {
+    const char = prelude[index]
+    if (char === '(') parens += 1
+    else if (char === ')') parens -= 1
+    else if (char === '[') brackets += 1
+    else if (char === ']') brackets -= 1
+    else if (char === ',' && parens === 0 && brackets === 0) {
+      selectors.push(prelude.slice(start, index).trim())
+      start = index + 1
+    }
+  }
+  selectors.push(prelude.slice(start).trim())
+  return selectors
+}
+
+function scopeSelector(rawSelector) {
+  if (bannedSelectors.some((needle) => rawSelector.includes(needle))) return null
+  let selector = rawSelector
+    .replace(/:root((?:\[[^\]]+\])*)[\t ]+body((?:\[[^\]]+\])*)[\t ]+#view-workspace/g, (_, rootAttrs, bodyAttrs) => `${panelRoot}${rootAttrs}${bodyAttrs}`)
+    .replace(/body((?:\[[^\]]+\])+)[\t ]+#view-workspace/g, (_, attrs) => `${panelRoot}${attrs}`)
+    .replace(/:root((?:\[[^\]]+\])+)[\t ]+#view-workspace/g, (_, attrs) => `${panelRoot}${attrs}`)
+    .replaceAll('#view-workspace', panelRoot)
+    .replace(/^:root\b/, panelRoot)
+    .replace(/^body\b/, panelRoot)
+    .replace(/^html\b/, panelRoot)
+  while (/\[data-qingagent-doc-panel\]((?:\[[^\]]+\])*)\s+\[data-qingagent-doc-panel\]((?:\[[^\]]+\])*)/.test(selector)) {
+    selector = selector.replace(
+      /\[data-qingagent-doc-panel\]((?:\[[^\]]+\])*)\s+\[data-qingagent-doc-panel\]((?:\[[^\]]+\])*)/g,
+      (_, firstAttrs, secondAttrs) => `${panelRoot}${firstAttrs}${secondAttrs}`,
+    )
+  }
+  selector = selector.replace(
+    /^(\[data-qingagent-doc-panel\](?:\[[^\]]+\])*)\s+body\b/,
+    '$1',
+  )
+  if (selector === '*') return `${panelRoot}, ${panelRoot} *`
+  if (selector.startsWith(panelRoot) || selector.startsWith('@')) return selector
+  return `${panelRoot} ${selector}`
+}
+
+function scopeStylesheet(source) {
+  let result = ''
+  let cursor = 0
+  while (cursor < source.length) {
+    const open = findRuleOpen(source, cursor)
+    if (open < 0) return result + source.slice(cursor)
+    const close = matchingBrace(source, open)
+    const rawPrelude = source.slice(cursor, open)
+    const leading = rawPrelude.match(/^(?:\s|\/\*[\s\S]*?\*\/)+/)?.[0] ?? ''
+    const prelude = rawPrelude.slice(leading.length).trim()
+    const body = source.slice(open + 1, close)
+    if (prelude.startsWith('@media') || prelude.startsWith('@supports') || prelude.startsWith('@container') || prelude.startsWith('@layer')) {
+      result += `${leading}${prelude} {${scopeStylesheet(body)}}`
+    } else if (prelude.startsWith('@')) {
+      result += `${leading}${prelude} {${body}}`
+    } else {
+      const selectors = splitSelectors(prelude).map(scopeSelector).filter(Boolean)
+      if (selectors.length > 0) result += `${leading}${selectors.join(',\n')} {${body}}`
+      else result += leading
+    }
+    cursor = close + 1
+  }
+  return result
+}
+
+const extracted = []
+for (const [relativePath, ranges] of sources) {
+  const absolutePath = resolve(qingRoot, relativePath)
+  const source = await readFile(absolutePath, 'utf8')
+  for (const [start, end] of ranges) {
+    extracted.push(`/* source: ${relativePath}:${start}-${end} */\n${lineRange(source, start, end)}`)
+  }
+}
+
+const output = [
+  '/* 由 scripts/extract-qingdoc-css.mjs 从青简 main@26ef9b19 机械提取；声明值不改。 */',
+  hostGlue,
+  scopeStylesheet(extracted.join('\n\n')),
+  '',
+].join('\n').replace(/[ \t]+$/gm, '')
+
+await writeFile(resolve('src/qingdoc/qingdoc.css'), output)
