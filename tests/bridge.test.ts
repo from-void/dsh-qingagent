@@ -11,12 +11,13 @@ import { EngineHttpError } from '../src/engine.js'
 
 interface CapturedResponse {
   status?: number
+  headers?: Record<string, unknown>
   headersSent: boolean
   destroyed: boolean
   ended: boolean
   body: string
   writes: string[]
-  writeHead(status: number): CapturedResponse
+  writeHead(status: number, headers?: Record<string, unknown>): CapturedResponse
   write(chunk: unknown): boolean
   end(chunk?: unknown): CapturedResponse
 }
@@ -28,7 +29,7 @@ function response(): CapturedResponse {
     ended: false,
     body: '',
     writes: [],
-    writeHead(status) { this.status = status; this.headersSent = true; return this },
+    writeHead(status, headers) { this.status = status; this.headers = headers; this.headersSent = true; return this },
     write(chunk) { this.writes.push(String(chunk)); return true },
     end(chunk) { if (chunk !== undefined) this.body += String(chunk); this.ended = true; return this },
   }
@@ -60,6 +61,10 @@ function fixture(bindingsBySession: Record<string, SessionBinding>) {
       sessionId: 'qing-a', docVersion: 1, state: 'editing', agentBusy: false,
       markdown: '', qingml: '<p>正文</p>', title: '文稿',
     } satisfies ExternalDoc)),
+    fetchAsset: vi.fn(async () => new Response('image-bytes', {
+      status: 200,
+      headers: { 'Content-Type': 'image/png', ETag: 'asset-v1' },
+    })),
   } as unknown as EngineService
   const bindings = {
     getBinding: (sessionId: string) => bindingsBySession[sessionId] ?? { docs: [] },
@@ -238,6 +243,71 @@ describe('BridgeHub', () => {
     expect(JSON.parse(res.body)).toMatchObject({
       ok: false, code: 'VERSION_CONFLICT', conflict: { expected: 7, actual: 8 },
     })
+    dispose()
+  })
+
+  it('资产上传以 base64 JSON 代理到绑定文稿的 external assets 端点', async () => {
+    const binding = {
+      docs: [{ engineSessionId: 'qing-a', title: 'A', createdAt: '2026-08-15T00:00:00.000Z' }],
+      activeEngineSessionId: 'qing-a',
+    }
+    const { handler, engine, dispose } = fixture({ 'dsh-a': binding })
+    const body = {
+      filename: '插图.png',
+      mimeType: 'image/png',
+      size: 3,
+      dataBase64: 'aW1n',
+    }
+    vi.mocked(engine.fetchJson).mockResolvedValueOnce({
+      fileId: 'asset-1',
+      reference: '/api/v1/files/550e8400-e29b-41d4-a716-446655440000/%E6%8F%92%E5%9B%BE.png',
+    })
+    const res = response()
+
+    await handler(
+      request(
+        'POST',
+        '/qingagent-bridge/assets?dshSessionId=dsh-a&engineSessionId=qing-a',
+        '127.0.0.1',
+        body,
+      ),
+      res as unknown as ServerResponse,
+    )
+
+    expect(res.status).toBe(200)
+    expect(engine.fetchJson).toHaveBeenCalledWith('/sessions/qing-a/assets', {
+      method: 'POST', body: JSON.stringify(body),
+    })
+    expect(JSON.parse(res.body)).toMatchObject({ fileId: 'asset-1' })
+    dispose()
+  })
+
+  it('资产读取只接受引擎资产路径，并由宿主携 token 取回二进制', async () => {
+    const binding = {
+      docs: [{ engineSessionId: 'qing-a', title: 'A', createdAt: '2026-08-15T00:00:00.000Z' }],
+      activeEngineSessionId: 'qing-a',
+    }
+    const { handler, engine, dispose } = fixture({ 'dsh-a': binding })
+    const reference = '/api/v1/files/550e8400-e29b-41d4-a716-446655440000/%E6%8F%92%E5%9B%BE.png'
+    const res = response()
+
+    await handler(
+      request('GET', `/qingagent-bridge/assets?dshSessionId=dsh-a&engineSessionId=qing-a&ref=${encodeURIComponent(reference)}`),
+      res as unknown as ServerResponse,
+    )
+
+    expect(engine.fetchAsset).toHaveBeenCalledWith(reference, { method: 'GET' })
+    expect(res.status).toBe(200)
+    expect(res.headers?.['Content-Type']).toBe('image/png')
+    expect(res.body).toBe('image-bytes')
+
+    const rejected = response()
+    await handler(
+      request('GET', '/qingagent-bridge/assets?dshSessionId=dsh-a&engineSessionId=qing-a&ref=https%3A%2F%2Fevil.example%2Fx'),
+      rejected as unknown as ServerResponse,
+    )
+    expect(rejected.status).toBe(400)
+    expect(engine.fetchAsset).toHaveBeenCalledOnce()
     dispose()
   })
 })

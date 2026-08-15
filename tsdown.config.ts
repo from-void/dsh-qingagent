@@ -24,6 +24,7 @@ const CSS_SUFFIX = '.mjs'
 const QING_ROOT = '/home/jimmy/proj/qingagent/wt/dsh-bridge'
 const QING_WEB_SOURCE = `${QING_ROOT}/apps/web/src`
 const QING_SYSTEM_SOURCE = `${QING_WEB_SOURCE}/system`
+const QING_UPLOAD_ASSET_SOURCE = `${QING_WEB_SOURCE}/pages/workspace/data/uploadAsset`
 const QING_PANEL_SELECTOR = '[data-qingagent-doc-panel]'
 const FFLATE_BROWSER = resolvePath(dirname(require.resolve('fflate/package.json')), 'esm/browser.js')
 const UUID_BROWSER = resolvePath(dirname(require.resolve('uuid/package.json')), 'dist/esm-browser/index.js')
@@ -54,6 +55,8 @@ function purityGate(): BuildPlugin {
 
 function qingSourceBridge(): BuildPlugin {
   const systemShim = resolvePath('src/qingdoc/shims/system.tsx')
+  const uploadAssetShim = resolvePath('src/qingdoc/shims/uploadAsset.ts')
+  const assetBridgeProvider = resolvePath('src/qingdoc/AssetBridgeProvider.tsx')
   const sealAsset = resolvePath('src/qingdoc/assets/seal-kongshengmiaoyou.png')
   let sealDataUri: string | undefined
   return {
@@ -61,6 +64,7 @@ function qingSourceBridge(): BuildPlugin {
     resolveId(source: string, importer?: string) {
       if (!importer?.startsWith(QING_WEB_SOURCE) || !source.startsWith('.')) return null
       const target = resolvePath(dirname(importer), source)
+      if (target === QING_UPLOAD_ASSET_SOURCE) return uploadAssetShim
       if (
         target === QING_SYSTEM_SOURCE ||
         target === `${QING_SYSTEM_SOURCE}/ConfirmProvider` ||
@@ -75,6 +79,18 @@ function qingSourceBridge(): BuildPlugin {
       let next = code
       if (id.endsWith('/DocumentSnapshotView.tsx')) {
         next = next.replace('import { chatInputBus } from "../../../system";\n', '')
+      }
+      if (id.endsWith('/ImageView.tsx')) {
+        next = `import { useAssetBridgeSource } from ${JSON.stringify(assetBridgeProvider)};\n${next}`
+          .replace(
+            'const src = String(node.attrs.src ?? "");',
+            'const src = String(node.attrs.src ?? "");\n  const renderedSrc = useAssetBridgeSource(src);',
+          )
+          .replace(
+            '  const normalizedAlign = normalizeImageAlign(align);',
+            '  const renderedSrc = useAssetBridgeSource(src);\n  const normalizedAlign = normalizeImageAlign(align);',
+          )
+          .replaceAll('src={src}', 'src={renderedSrc}')
       }
 
       next = next

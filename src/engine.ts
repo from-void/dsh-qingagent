@@ -217,19 +217,32 @@ export class EngineConnection {
   }
 
   async fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const response = await this.fetchExternalResponse(path, init)
+    const body = await response.json().catch(() => undefined) as unknown
+    if (!response.ok) throw new EngineHttpError(response.status, body)
+    return body as T
+  }
+
+  async fetchAsset(path: string, init: RequestInit = {}): Promise<Response> {
+    return this.fetchReadyResponse((token) => this.authorizedEngineFetch(path, init, token))
+  }
+
+  private async fetchExternalResponse(path: string, init: RequestInit): Promise<Response> {
+    return this.fetchReadyResponse((token) => this.authorizedFetch(path, init, token))
+  }
+
+  private async fetchReadyResponse(request: (token: string) => Promise<Response>): Promise<Response> {
     const ready = await this.ensureReady()
     if (ready.state !== 'online') {
       throw new Error(`青简当前离线：${ready.message ?? '请先启动引擎，或在插件配置中启用 autoLaunch。'}`)
     }
     let instance = this.instance ?? await this.reloadInstance()
-    let response = await this.authorizedFetch(path, init, instance.token)
+    let response = await request(instance.token)
     if (response.status === 401) {
       instance = await this.reloadInstance()
-      response = await this.authorizedFetch(path, init, instance.token)
+      response = await request(instance.token)
     }
-    const body = await response.json().catch(() => undefined) as unknown
-    if (!response.ok) throw new EngineHttpError(response.status, body)
-    return body as T
+    return response
   }
 
   private authorizedFetch(path: string, init: RequestInit, token: string): Promise<Response> {
@@ -237,6 +250,12 @@ export class EngineConnection {
     headers.set('Authorization', `Bearer ${token}`)
     if (init.body !== undefined && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
     return this.dependencies.fetch(`${this.config.engineUrl.replace(/\/$/, '')}/api/v1/external${path}`, { ...init, headers })
+  }
+
+  private authorizedEngineFetch(path: string, init: RequestInit, token: string): Promise<Response> {
+    const headers = new Headers(init.headers)
+    headers.set('Authorization', `Bearer ${token}`)
+    return this.dependencies.fetch(`${this.config.engineUrl.replace(/\/$/, '')}${path}`, { ...init, headers })
   }
 }
 
@@ -252,6 +271,7 @@ export class EngineService extends Service {
   status(): Promise<EngineStatusSnapshot> { return this.connection.status() }
   ensureReady(): Promise<EngineStatusSnapshot> { return this.connection.ensureReady() }
   fetchJson<T>(path: string, init?: RequestInit): Promise<T> { return this.connection.fetchJson<T>(path, init) }
+  fetchAsset(path: string, init?: RequestInit): Promise<Response> { return this.connection.fetchAsset(path, init) }
 }
 
 function readableError(error: unknown): string {

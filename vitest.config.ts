@@ -6,6 +6,9 @@ const qingRoot = '/home/jimmy/proj/qingagent/wt/dsh-bridge'
 const qingWebSource = `${qingRoot}/apps/web/src`
 const systemSource = `${qingWebSource}/system`
 const systemShim = resolve('src/qingdoc/shims/system.tsx')
+const uploadAssetSource = `${qingWebSource}/pages/workspace/data/uploadAsset`
+const uploadAssetShim = resolve('src/qingdoc/shims/uploadAsset.ts')
+const assetBridgeProvider = resolve('src/qingdoc/AssetBridgeProvider.tsx')
 const tiptapSpecifiers = [
   '@tiptap/core',
   '@tiptap/extension-code-block-lowlight',
@@ -54,13 +57,28 @@ export default defineConfig({
     resolveId(source, importer) {
       if (!importer?.startsWith(qingWebSource) || !source.startsWith('.')) return null
       const target = resolve(dirname(importer), source)
+      if (target === uploadAssetSource) return uploadAssetShim
       return target === systemSource || target === `${systemSource}/ConfirmProvider` || target === `${systemSource}/ToastProvider`
         ? systemShim
         : null
     },
     transform(code, id) {
-      if (!id.endsWith('/DocumentSnapshotView.tsx')) return null
-      return code.replace('import { chatInputBus } from "../../../system";\n', '')
+      if (id.endsWith('/DocumentSnapshotView.tsx')) {
+        return code.replace('import { chatInputBus } from "../../../system";\n', '')
+      }
+      if (id.endsWith('/ImageView.tsx')) {
+        return `import { useAssetBridgeSource } from ${JSON.stringify(assetBridgeProvider)};\n${code}`
+          .replace(
+            'const src = String(node.attrs.src ?? "");',
+            'const src = String(node.attrs.src ?? "");\n  const renderedSrc = useAssetBridgeSource(src);',
+          )
+          .replace(
+            '  const normalizedAlign = normalizeImageAlign(align);',
+            '  const renderedSrc = useAssetBridgeSource(src);\n  const normalizedAlign = normalizeImageAlign(align);',
+          )
+          .replaceAll('src={src}', 'src={renderedSrc}')
+      }
+      return null
     },
   }],
   test: {

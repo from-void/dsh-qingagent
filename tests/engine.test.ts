@@ -94,4 +94,32 @@ describe('EngineConnection', () => {
     await expect(engine.status()).resolves.toMatchObject({ state: 'online', version: '1.0.0' })
     expect(fetchMock).toHaveBeenCalledOnce()
   })
+
+  it('资产读取访问引擎内部路径并只在宿主侧附加 Bearer', async () => {
+    const seen: Array<{ url: string; authorization: string | null }> = []
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/api/v1/external/health')) return Response.json({ version: '1.0.0' })
+      seen.push({ url, authorization: new Headers(init?.headers).get('Authorization') })
+      return new Response('asset-bytes', { headers: { 'Content-Type': 'image/png' } })
+    })
+    const engine = new EngineConnection(
+      { engineUrl: 'http://127.0.0.1:8080', autoLaunch: false },
+      logger,
+      undefined,
+      dependencies({
+        fetch: fetchMock,
+        readInstance: async () => ({
+          port: 8080, pid: 42, version: 'test', token: 'asset-token', startedAt: '',
+        }),
+      }),
+    )
+
+    const response = await engine.fetchAsset('/api/v1/files/asset/image.png')
+    await expect(response.text()).resolves.toBe('asset-bytes')
+    expect(seen).toEqual([{
+      url: 'http://127.0.0.1:8080/api/v1/files/asset/image.png',
+      authorization: 'Bearer asset-token',
+    }])
+  })
 })
