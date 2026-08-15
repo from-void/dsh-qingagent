@@ -779,6 +779,6 @@ function panelStatus(input: {
   }
   if (input.saveState.kind === 'error') return input.saveState.transient ? '网络不稳 · 等待重存' : '保存失败'
   if (input.loading) return '正在读取文稿…'
-  if (input.version !== undefined) return `已保存 v${input.version}`
+  if (input.version !== undefined) return '已保存'
   return '准备写作'
 }
