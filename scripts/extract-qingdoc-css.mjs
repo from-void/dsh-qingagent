@@ -448,13 +448,18 @@ ${panelRoot} .qingdoc-conflict-reload:hover {
   background: rgba(230, 189, 134, .12);
 }
 ${panelRoot} .qingdoc-open-icon {
-  width: 18px;
-  height: 18px;
-  margin: 0 5px;
-  border-radius: 5px;
+  width: 15px;
+  height: 15px;
+  margin: 0 7px;
+  border-radius: 4px;
   /* 图标自带深蓝方章底,在墨条上须描一圈暖纸边才看得清 */
   box-shadow: 0 0 0 1px rgba(236, 227, 208, .45);
   flex: 0 0 auto;
+}
+${panelRoot} .qingdoc-open-arrow {
+  flex: 0 0 auto;
+  margin-left: 5px;
+  opacity: .8;
 }`
 
 const patchNavGlue = `/* PatchNav portal 到面板根直属子节点；保持 fixed 与青简的视口定位几何。

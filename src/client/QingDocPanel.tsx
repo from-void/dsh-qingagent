@@ -708,7 +708,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
             <a
               className="qingdoc-open"
               href={`qingjian://open?engineSessionId=${encodeURIComponent(activeEngineSessionId)}`}
-            >在青简<img className="qingdoc-open-icon" src={QINGJIAN_ICON_DATA_URI} alt="" />中打开 ↗</a>
+            >在青简<img className="qingdoc-open-icon" src={QINGJIAN_ICON_DATA_URI} alt="" />中打开
+              <svg className="qingdoc-open-arrow" viewBox="0 0 12 12" width="11" height="11" fill="none" aria-hidden="true">
+                <path d="M4.2 2.6 H9.4 V7.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M9.4 2.6 L2.8 9.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              </svg></a>
           ) : null}
           <button
             className="qingdoc-close"
