@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { BridgeEvent, BridgeState, ExternalDoc } from '../src/contracts.js'
+import type { BridgeEvent, BridgeState, ExternalDoc, PmDoc } from '../src/contracts.js'
 import { QingClientStore } from '../src/client/store.js'
 
 class FakeEventSource {
@@ -122,11 +122,11 @@ describe('QingClientStore 生成终态', () => {
   })
 
   it('权威 PM 刷新必须等 dirty guard 放行后才能替换 panelDoc', async () => {
-    const oldPm = { type: 'doc', attrs: { schemaVersion: 1 }, content: [] }
+    const oldPm = { type: 'doc', attrs: { schemaVersion: 1 }, content: [] } as PmDoc
     const incomingPm = {
       type: 'doc', attrs: { schemaVersion: 1 },
       content: [{ type: 'paragraph', attrs: { blockId: 'remote' }, content: [{ type: 'text', text: 'Agent 落稿' }] }],
-    }
+    } as PmDoc
     const store = new QingClientStore()
     let responsePm = oldPm
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({

@@ -37,6 +37,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const [streamingPmDoc, setStreamingPmDoc] = useState<PmDoc | null>(null)
   const [activeReviewTargetId, setActiveReviewTargetId] = useState<string | null>(null)
   const [reviewSubmitting, setReviewSubmitting] = useState(false)
+  const [reviewSettlementRetryPending, setReviewSettlementRetryPending] = useState(false)
   const rootRef = useRef<HTMLElement>(null)
   const docViewRef = useRef<DocumentSnapshotViewHandle | null>(null)
   const lastDocViewHandleRef = useRef<DocumentSnapshotViewHandle | null>(null)
@@ -44,6 +45,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const saveCoordinatorRef = useRef<DocumentSaveCoordinator | null>(null)
   const compileThrottleRef = useRef<QingmlCompileThrottle | null>(null)
   const autoCommitKeyRef = useRef<string | null>(null)
+  const reviewSubmittingRef = useRef(false)
   const snapshotRef = useRef(snapshot)
   snapshotRef.current = snapshot
 
@@ -318,7 +320,12 @@ export function QingDocPanel(props: QingDocPanelProps) {
     patchId: string,
     verdict: 'accepted' | 'rejected',
   ) => {
-    if (!activeEngineSessionId || !panelDoc || reviewSubmitting) return
+    if (!activeEngineSessionId || !panelDoc) return
+    if (reviewSubmittingRef.current) {
+      setToast('操作处理中 · 请稍候')
+      return
+    }
+    reviewSubmittingRef.current = true
     setReviewSubmitting(true)
     try {
       await qingClientStore.reviewVerdict(sessionId, activeEngineSessionId, {
@@ -333,34 +340,43 @@ export function QingDocPanel(props: QingDocPanelProps) {
       setToast('操作失败 · 请重试')
       void qingClientStore.refreshPanel(sessionId, activeEngineSessionId).catch(() => undefined)
     } finally {
+      reviewSubmittingRef.current = false
       setReviewSubmitting(false)
     }
-  }, [activeEngineSessionId, panelDoc, reviewSubmitting, sessionId])
+  }, [activeEngineSessionId, panelDoc, sessionId])
 
   const handleReviewCommit = useCallback(async (
     action: 'commit' | 'accept_all' | 'reject_all',
   ) => {
-    if (!activeEngineSessionId || !panelDoc || reviewSubmitting) return
+    if (!activeEngineSessionId || !panelDoc) return
+    if (reviewSubmittingRef.current) {
+      setToast('操作处理中 · 请稍候')
+      return
+    }
+    reviewSubmittingRef.current = true
     setReviewSubmitting(true)
+    if (action === 'commit') setReviewSettlementRetryPending(false)
     try {
       await qingClientStore.reviewCommit(sessionId, activeEngineSessionId, {
         expectedDocVersion: panelDoc.docVersion,
         action,
       })
       setToast(action === 'reject_all' ? '已放弃本轮修改' : '修改已提交')
+      setReviewSettlementRetryPending(false)
       await Promise.all([
         qingClientStore.refreshDoc(sessionId, activeEngineSessionId),
         qingClientStore.refreshPanel(sessionId, activeEngineSessionId),
       ])
     } catch (error) {
       console.error('[qingagent-panel] review commit failed', error)
-      autoCommitKeyRef.current = null
+      if (action === 'commit') setReviewSettlementRetryPending(true)
       setToast('提交失败 · 候选已保留，请重试')
       void qingClientStore.refreshPanel(sessionId, activeEngineSessionId).catch(() => undefined)
     } finally {
+      reviewSubmittingRef.current = false
       setReviewSubmitting(false)
     }
-  }, [activeEngineSessionId, panelDoc, reviewSubmitting, sessionId])
+  }, [activeEngineSessionId, panelDoc, sessionId])
 
   const reviewStatusKey = snapshot.reviewModel?.suggestions
     .map((suggestion) => `${suggestion.id}:${suggestion.status}`)
@@ -369,6 +385,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
     const suggestions = snapshot.reviewModel?.suggestions ?? []
     if (!pendingReview || suggestions.length === 0) {
       autoCommitKeyRef.current = null
+      setReviewSettlementRetryPending(false)
       return
     }
     if (reviewSubmitting || suggestions.some((suggestion) => suggestion.status === 'reviewing')) return
@@ -477,6 +494,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
                   ? visibleReviewTargetIds.indexOf(activeReviewTargetId)
                   : -1}
                 isSubmitting={reviewSubmitting}
+                retryOnly={reviewSettlementRetryPending}
                 unrenderableOnly={visibleReviewTargets.length === 0}
                 onJumpPrev={() => jumpReview(-1)}
                 onJumpNext={() => jumpReview(1)}

@@ -14,6 +14,7 @@ const viewHarness = vi.hoisted(() => ({
     baseHasSubstantiveContent: boolean
   } } | null,
 }))
+const patchNavHarness = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }))
 
 vi.mock('@qingweb/pages/workspace/components/DocumentSnapshotView', async () => {
   const React = await import('react')
@@ -39,9 +40,19 @@ vi.mock('@qingweb/pages/workspace/components/DocumentSnapshotView', async () => 
   }
 })
 
-vi.mock('@qingweb/pages/workspace/components/PatchNav', () => ({
-  PatchNav: () => null,
-}))
+vi.mock('@qingweb/pages/workspace/components/PatchNav', async () => {
+  const React = await import('react')
+  return {
+    PatchNav: (props: Record<string, unknown>) => {
+      patchNavHarness.props = props
+      return React.createElement('button', {
+        'data-testid': 'mock-patch-nav',
+        'data-retry-only': String(props.retryOnly === true),
+        onClick: props.onCommit as () => void,
+      })
+    },
+  }
+})
 
 class FakeEventSource {
   onerror: (() => void) | null = null
@@ -64,6 +75,7 @@ afterEach(() => {
   host?.remove()
   host = null
   viewHarness.pending = null
+  patchNavHarness.props = null
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -111,6 +123,21 @@ describe('QingDocPanel 保存生命周期', () => {
     expect(String(editedPuts[0]?.[0])).toContain('engineSessionId=qing-a')
     expect(String(editedPuts[0]?.[0])).not.toContain('engineSessionId=qing-b')
   })
+
+  it('自动提交失败后进入 retryOnly，且不会继续自动重发', async () => {
+    const fetchMock = installBridgeFetch('dsh-review-retry', ['qing-review'], {
+      pendingReview: true,
+      failReviewCommit: true,
+    })
+    renderPanel('dsh-review-retry')
+
+    await vi.waitFor(() => expect(reviewCommitCalls(fetchMock)).toBe(1))
+    await vi.waitFor(() => expect(
+      document.querySelector('[data-testid="mock-patch-nav"]')?.getAttribute('data-retry-only'),
+    ).toBe('true'))
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect(reviewCommitCalls(fetchMock)).toBe(1)
+  })
 })
 
 function renderPanel(sessionId: string): void {
@@ -124,7 +151,11 @@ function renderPanel(sessionId: string): void {
   act(() => root?.render(<QingDocPanel {...props} />))
 }
 
-function installBridgeFetch(dshSessionId: string, engineSessionIds: string[]) {
+function installBridgeFetch(
+  dshSessionId: string,
+  engineSessionIds: string[],
+  options: { pendingReview?: boolean; failReviewCommit?: boolean } = {},
+) {
   vi.stubGlobal('EventSource', FakeEventSource)
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
@@ -139,10 +170,12 @@ function installBridgeFetch(dshSessionId: string, engineSessionIds: string[]) {
         },
         docs: engineSessionIds.map((engineSessionId) => ({
           engineSessionId, title: engineSessionId, createdAt: '2026-08-15T00:00:00.000Z',
-          state: 'empty', docVersion: 0, agentBusy: false,
+          state: options.pendingReview ? 'pendingReview' : 'empty',
+          docVersion: options.pendingReview ? 3 : 0, agentBusy: false,
         })),
         activeDoc: {
-          sessionId: engineSessionIds[0], docVersion: 0, state: 'empty', agentBusy: false,
+          sessionId: engineSessionIds[0], docVersion: options.pendingReview ? 3 : 0,
+          state: options.pendingReview ? 'pendingReview' : 'empty', agentBusy: false,
           markdown: '', qingml: '', title: engineSessionIds[0],
         },
         engine: { state: 'online', engineUrl: 'http://127.0.0.1:8080' },
@@ -156,8 +189,33 @@ function installBridgeFetch(dshSessionId: string, engineSessionIds: string[]) {
     if (url.startsWith('/qingagent-bridge/doc-pm?')) {
       const engineSessionId = new URL(url, 'http://local').searchParams.get('engineSessionId')!
       return Response.json({
-        sessionId: engineSessionId, docVersion: 0, contentHash: 'hash-0', state: 'empty',
+        sessionId: engineSessionId, docVersion: options.pendingReview ? 3 : 0,
+        contentHash: options.pendingReview ? 'hash-3' : 'hash-0',
+        state: options.pendingReview ? 'pendingReview' : 'empty',
         agentBusy: false, title: engineSessionId, ts: 't0', pmDoc: EMPTY_PM,
+      })
+    }
+    if (url.startsWith('/qingagent-bridge/review-render-model?')) {
+      return Response.json({
+        sessionId: engineSessionIds[0], docVersion: 3, state: 'pendingReview', agentBusy: false,
+        baseVersion: 3, previewDoc: EMPTY_PM,
+        suggestions: [{
+          id: 'patch-reviewed', reviewBatchId: 'batch-1', groupMode: 'independent',
+          docId: engineSessionIds[0], baseVersion: 3, baseSchemaVersion: 1, status: 'accepted',
+          anchor: { blockId: 'missing', pmFrom: 1, pmTo: 1, quote: '', textHash: 'hash' },
+          patch: { kind: 'prosemirror_steps', steps: [] },
+          preview: { insertText: '落稿' }, summary: '测试候选',
+        }],
+      })
+    }
+    if (url.startsWith('/qingagent-bridge/review-commit?') && init?.method === 'POST') {
+      if (options.failReviewCommit) {
+        return Response.json({ error: 'commit failed' }, { status: 502 })
+      }
+      return Response.json({
+        status: 'reviewed', docVersion: 4, acceptedCount: 1, rejectedCount: 0,
+        remainingCount: 0, outcomeQueued: false,
+        outcome: { acceptedCount: 1, rejectedCount: 0, hunks: [] }, seq: null,
       })
     }
     if (url === '/qingagent-bridge/focus' && init?.method === 'POST') return Response.json({ ok: true })
@@ -165,4 +223,9 @@ function installBridgeFetch(dshSessionId: string, engineSessionIds: string[]) {
   })
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
+}
+
+function reviewCommitCalls(fetchMock: ReturnType<typeof installBridgeFetch>): number {
+  return fetchMock.mock.calls.filter(([url, init]) =>
+    String(url).startsWith('/qingagent-bridge/review-commit?') && init?.method === 'POST').length
 }
