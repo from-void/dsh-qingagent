@@ -39,6 +39,8 @@ const textBlock = (text: string) => [{ type: 'text' as const, text }]
 const REVIEW_END_MESSAGE = '改动已提交审阅，右侧面板等待用户逐处裁决。本回合结束——不要重写、不要读稿复核、不要自动裁决'
 const REVIEW_REPEAT_ERROR = '本回合已裁决过一次，禁止连环裁决；等待用户指示'
 const REVIEW_PENDING_ERROR = '文稿正在审阅中。收到新的修改指令时，先用 ask_user 征询用户接受、放弃或继续逐处裁决当前待审稿。'
+const STR_REPLACE_PLAIN_TEXT_ERROR = 'old 必须是纯文本内容,不要带 ## 等 markdown 标记'
+const STR_REPLACE_LINES_NOTICE = '注意:strReplace 的 old 用纯文本,不要带行首 ## - 等标记。'
 
 const outlineSchema = {
   type: 'array' as const,
@@ -223,13 +225,13 @@ function writeDraftTool(services: ToolServices) {
 function editDraftTool(services: ToolServices) {
   return defineTool({
     name: 'qing_edit_draft',
-    description: '对已有青简文稿做结构化局部修改。改标题、改一句、插入一段或追加一节必须用本工具，严禁用 qing_write_draft 整篇重写。insertAfterLine 前先调用 qing_read_draft(mode:"lines") 取得当前 Markdown 行号。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
+    description: '对已有青简文稿做结构化局部修改。改标题、改一句、插入一段或追加一节必须用本工具，严禁用 qing_write_draft 整篇重写。strReplace 的 old/new 必须是纯文本内容，不含 ##、-、** 等 Markdown 语法标记。多处修改必须放进同一次调用的 ops 数组一次提交；逐条调用会因首条进入审阅态而被 REVIEW_PENDING 拒绝。insertAfterLine 前先调用 qing_read_draft(mode:"lines") 取得当前 Markdown 行号。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
     parameters: {
       docRef: { type: 'string', description: '要局部修改的青简会话 ID；省略时使用当前激活文稿。' },
       ops: {
         type: 'array',
         required: true,
-        description: '按顺序执行的局部操作；strReplace 的 nth 为从 1 开始的命中序号。',
+        description: '同一次调用中按顺序原子提交的局部操作（最多 50 条）；多处修改必须全部放在本数组中。strReplace 的 nth 为从 1 开始的命中序号。',
         items: {
           oneOf: [
             {
@@ -237,8 +239,8 @@ function editDraftTool(services: ToolServices) {
               additionalProperties: false,
               properties: {
                 kind: { type: 'string', const: 'strReplace', required: true },
-                old: { type: 'string', required: true },
-                new: { type: 'string', required: true },
+                old: { type: 'string', required: true, description: '要匹配的纯文本内容，不含行首 ##、-、数字. 或包裹性 **/__ 等 Markdown 标记。' },
+                new: { type: 'string', required: true, description: '替换后的纯文本内容，不含行首 ##、-、数字. 或包裹性 **/__ 等 Markdown 标记。' },
                 nth: { type: 'integer' },
               },
             },
@@ -300,11 +302,12 @@ function editDraftTool(services: ToolServices) {
         const before = await readDocWithLines(services.engine, engineSessionId)
         if (before.state === 'pendingReview') throw new Error(REVIEW_PENDING_ERROR)
         if (before.state === 'empty') throw new Error('文稿尚无正文；请先用 qing_write_draft 起草完整文稿。')
-        const proposal = await proposeOps(
+        const ops = args.ops as ExternalEditProposalOp[]
+        const proposal = await proposeEditOpsWithPlainTextRetry(
           services.engine,
           engineSessionId,
           before.docVersion,
-          args.ops as ExternalEditProposalOp[],
+          ops,
         )
         const official = await readDoc(services.engine, engineSessionId)
         const renderedQingml = proposal.status === 'review'
@@ -470,9 +473,9 @@ function readDraftTool(services: ToolServices) {
       if (mode === 'lines') {
         const lined = await readDocWithLines(services.engine, engineSessionId)
         const outline = outlineOf(doc.qingml, doc.title)
-        const notice = doc.state === 'pendingReview'
+        const notice = `${STR_REPLACE_LINES_NOTICE}\n${doc.state === 'pendingReview'
           ? '以下行号对应已提交基线（不含待审候选）。\n'
-          : ''
+          : ''}`
         return {
           title: outline.title,
           words: outline.words,
@@ -640,6 +643,65 @@ async function streamQingml(
 
 async function propose(engine: EngineService, engineSessionId: string, expectedDocVersion: number, qingml: string): Promise<ExternalProposalResponse> {
   return proposeOps(engine, engineSessionId, expectedDocVersion, [{ kind: 'qingmlDraft', qingml }])
+}
+
+async function proposeEditOpsWithPlainTextRetry(
+  engine: EngineService,
+  engineSessionId: string,
+  expectedDocVersion: number,
+  ops: ExternalEditProposalOp[],
+): Promise<ExternalProposalResponse> {
+  try {
+    return await proposeOps(engine, engineSessionId, expectedDocVersion, ops)
+  } catch (error) {
+    if (!isStrReplaceNoMatch(error, ops)) throw error
+    const normalizedOps = ops.map(normalizeEditOp)
+    try {
+      return await proposeOps(engine, engineSessionId, expectedDocVersion, normalizedOps)
+    } catch (retryError) {
+      if (isStrReplaceNoMatch(retryError, normalizedOps)) throw plainTextStrReplaceError(retryError)
+      throw retryError
+    }
+  }
+}
+
+function normalizeEditOp(op: ExternalEditProposalOp): ExternalEditProposalOp {
+  if (op.kind !== 'strReplace') return op
+  return {
+    ...op,
+    old: normalizeStrReplaceText(op.old),
+    new: normalizeStrReplaceText(op.new),
+  }
+}
+
+function normalizeStrReplaceText(text: string): string {
+  const withoutLinePrefixes = text.split('\n').map((line) => {
+    const plain = line.replace(
+      /^[ \t]*(?:#{1,6}[ \t]+|[-*+][ \t]+(?:\[[ xX]\][ \t]+)?|\d+[.)][ \t]+|>[ \t]+)/,
+      '',
+    )
+    return unwrapMarkdownEmphasis(plain)
+  }).join('\n')
+  return unwrapMarkdownEmphasis(withoutLinePrefixes)
+}
+
+function unwrapMarkdownEmphasis(text: string): string {
+  let normalized = text
+  while (true) {
+    const wrapped = /^(\*\*|__)([\s\S]+)\1$/.exec(normalized)
+    if (!wrapped) return normalized
+    normalized = wrapped[2]!
+  }
+}
+
+function isStrReplaceNoMatch(error: unknown, ops: ExternalEditProposalOp[]): error is EngineHttpError {
+  if (!(error instanceof EngineHttpError) || error.status !== 400 || !ops.some((op) => op.kind === 'strReplace')) return false
+  const body = error.body as { error?: unknown } | null
+  return typeof body?.error === 'string' && body.error.includes('未命中')
+}
+
+function plainTextStrReplaceError(error: EngineHttpError): EngineHttpError {
+  return new EngineHttpError(error.status, error.body, `${error.message}；${STR_REPLACE_PLAIN_TEXT_ERROR}`)
 }
 
 function proposeOps(

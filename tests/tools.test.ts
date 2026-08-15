@@ -373,11 +373,105 @@ describe('qing_read_draft', () => {
       exec(undefined, 'read-lines', 'qing_read_draft'),
     )
 
+    expect((result as { content: string }).content.startsWith('注意:strReplace 的 old 用纯文本,不要带行首 ## - 等标记。\n')).toBe(true)
     expect((result as { content: string }).content).toContain('   3 | 第一版正文。')
   })
 })
 
 describe('qing_edit_draft', () => {
+  it('strReplace 原样未命中时规范化 Markdown 前缀与包裹标记后重试一次', async () => {
+    const proposalBodies: Array<{ expectedDocVersion: number; ops: unknown[] }> = []
+    const fixture = harness([], async (path, init) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '## 第三步:香料别堆砌', markdownWithLineNumbers: '   1 | ## 第三步:香料别堆砌', title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposalBodies.push(JSON.parse(String(init?.body)))
+        if (proposalBodies.length === 1) {
+          throw new EngineHttpError(400, { error: '未命中,请重读文档', code: 'VALIDATION' })
+        }
+        return { status: 'committed', docVersion: 3 }
+      }
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({ docVersion: 3, state: 'editing', qingml: '<h2>第三步:少量点香</h2>', title: '测试稿' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    const result = await fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'strReplace', old: '## **第三步:香料别堆砌**', new: '## __第三步:少量点香__' }],
+    }, exec(undefined, 'edit-normalized', 'qing_edit_draft'))
+
+    expect(result).toMatchObject({ status: 'committed', reviewCount: 0 })
+    expect(proposalBodies).toHaveLength(2)
+    expect(proposalBodies[0]).toMatchObject({
+      expectedDocVersion: 2,
+      ops: [{ kind: 'strReplace', old: '## **第三步:香料别堆砌**', new: '## __第三步:少量点香__' }],
+    })
+    expect(proposalBodies[1]).toMatchObject({
+      expectedDocVersion: 2,
+      ops: [{ kind: 'strReplace', old: '第三步:香料别堆砌', new: '第三步:少量点香' }],
+    })
+  })
+
+  it('多条 strReplace 在同一次 proposals 请求中按原数组透传', async () => {
+    const ops = [
+      { kind: 'strReplace' as const, old: '第一处旧文', new: '第一处新文' },
+      { kind: 'strReplace' as const, old: '第二处旧文', new: '第二处新文', nth: 1 },
+    ]
+    let proposals = 0
+    const fixture = harness([], async (path, init) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 4, state: 'editing', agentBusy: false,
+          markdown: '第一处旧文\n\n第二处旧文', title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposals += 1
+        expect(JSON.parse(String(init?.body))).toMatchObject({ expectedDocVersion: 4, ops })
+        return { status: 'committed', docVersion: 5 }
+      }
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({ docVersion: 5, state: 'editing', qingml: '<p>第一处新文</p><p>第二处新文</p>', title: '测试稿' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    await fixture.tools.get('qing_edit_draft')!.execute(
+      { ops },
+      exec(undefined, 'edit-multi-op', 'qing_edit_draft'),
+    )
+
+    expect(proposals).toBe(1)
+  })
+
+  it('原样与规范化后的 strReplace 都未命中时提示 old 使用纯文本', async () => {
+    let proposals = 0
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '## 现有标题', title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposals += 1
+        throw new EngineHttpError(400, { error: '未命中,请重读文档', code: 'VALIDATION' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    await expect(fixture.tools.get('qing_edit_draft')!.execute(
+      { ops: [{ kind: 'strReplace', old: '## 不存在标题', new: '## 新标题' }] },
+      exec(undefined, 'edit-no-match', 'qing_edit_draft'),
+    )).rejects.toThrow('old 必须是纯文本内容,不要带 ## 等 markdown 标记')
+    expect(proposals).toBe(2)
+  })
+
   it('直接映射三类局部 op，review 后结束回合并清选段', async () => {
     let proposed = false
     const ops = [
