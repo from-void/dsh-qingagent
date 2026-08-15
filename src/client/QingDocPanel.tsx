@@ -3,7 +3,10 @@ import type { CSSProperties } from 'react'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
-import { DocumentSnapshotView } from '@qingweb/pages/workspace/components/DocumentSnapshotView'
+import {
+  DocumentSnapshotView,
+  type DocumentSnapshotViewHandle,
+} from '@qingweb/pages/workspace/components/DocumentSnapshotView'
 import { PatchNav } from '@qingweb/pages/workspace/components/PatchNav'
 import { EMPTY_PM_DOC, type DocWriteBaseline } from '@qingweb/pages/workspace/data/docWriteBaseline'
 import { pmDocToViewDocumentSnapshot } from '@qingweb/pages/workspace/data/protocol'
@@ -34,6 +37,9 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const [activeReviewTargetId, setActiveReviewTargetId] = useState<string | null>(null)
   const [reviewSubmitting, setReviewSubmitting] = useState(false)
   const rootRef = useRef<HTMLElement>(null)
+  const docViewRef = useRef<DocumentSnapshotViewHandle | null>(null)
+  const lastDocViewHandleRef = useRef<DocumentSnapshotViewHandle | null>(null)
+  const editorEngineSessionIdRef = useRef<string | null>(null)
   const saveCoordinatorRef = useRef<DocumentSaveCoordinator | null>(null)
   const compileThrottleRef = useRef<QingmlCompileThrottle | null>(null)
   const autoCommitKeyRef = useRef<string | null>(null)
@@ -54,6 +60,26 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const activeBound = docs.find((doc) => doc.engineSessionId === activeEngineSessionId)
   const observedVersion = snapshot.activeDoc?.docVersion ?? activeBound?.docVersion
   const observedState = snapshot.activeDoc?.state ?? activeBound?.state
+
+  const setDocViewHandle = useCallback((handle: DocumentSnapshotViewHandle | null) => {
+    docViewRef.current = handle
+    if (handle) lastDocViewHandleRef.current = handle
+  }, [])
+
+  const flushPendingDocSave = useCallback(async () => {
+    await (docViewRef.current ?? lastDocViewHandleRef.current)?.flushPendingDocSave()
+  }, [])
+
+  const previousActiveEngineSessionIdRef = useRef<string | undefined>(activeEngineSessionId)
+  useEffect(() => {
+    const previous = previousActiveEngineSessionIdRef.current
+    previousActiveEngineSessionIdRef.current = activeEngineSessionId
+    if (!previous || previous === activeEngineSessionId) return
+    void flushPendingDocSave().catch((error) => {
+      console.error('[qingagent-panel] switch flush failed', error)
+      setToast('保存失败 · 已保留当前文稿')
+    })
+  }, [activeEngineSessionId, flushPendingDocSave])
 
   useEffect(() => {
     if (!activeEngineSessionId) return
@@ -88,18 +114,16 @@ export function QingDocPanel(props: QingDocPanelProps) {
   }, [snapshot.qingml, snapshot.streaming])
 
   useEffect(() => {
-    saveCoordinatorRef.current?.dispose()
-    saveCoordinatorRef.current = null
-    if (!activeEngineSessionId) return
     const coordinator = new DocumentSaveCoordinator({
-      send: (request) => qingClientStore.replaceDocument(sessionId, activeEngineSessionId, request),
-      onCommitted: (doc, response) => {
-        qingClientStore.applySavedDocument(sessionId, activeEngineSessionId, doc, response)
+      send: (engineSessionId, request) => qingClientStore.replaceDocument(sessionId, engineSessionId, request),
+      onCommitted: (engineSessionId, doc, response) => {
+        qingClientStore.applySavedDocument(sessionId, engineSessionId, doc, response)
       },
       onStateChange: (state) => {
         qingClientStore.setSaveState(sessionId, state)
-        if (state.kind === 'blocked') {
-          void qingClientStore.refreshPanel(sessionId, activeEngineSessionId).catch(() => undefined)
+        const engineSessionId = editorEngineSessionIdRef.current
+        if (state.kind === 'blocked' && engineSessionId) {
+          void qingClientStore.refreshPanel(sessionId, engineSessionId).catch(() => undefined)
         }
       },
     })
@@ -108,10 +132,16 @@ export function QingDocPanel(props: QingDocPanelProps) {
     window.addEventListener('online', retryOnline)
     return () => {
       window.removeEventListener('online', retryOnline)
-      coordinator.dispose()
-      if (saveCoordinatorRef.current === coordinator) saveCoordinatorRef.current = null
+      const pendingFlush = (docViewRef.current ?? lastDocViewHandleRef.current)
+        ?.flushPendingDocSave() ?? Promise.resolve()
+      void pendingFlush.catch((error) => {
+        console.error('[qingagent-panel] unmount flush failed', error)
+      }).finally(() => {
+        coordinator.dispose()
+        if (saveCoordinatorRef.current === coordinator) saveCoordinatorRef.current = null
+      })
     }
-  }, [activeEngineSessionId, sessionId])
+  }, [sessionId])
 
   useEffect(() => {
     const handleToast = (event: Event) => setToast((event as CustomEvent<string>).detail)
@@ -158,6 +188,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const panelDoc = snapshot.panelEngineSessionId === activeEngineSessionId
     ? snapshot.panelDoc
     : undefined
+  if (panelDoc && activeEngineSessionId) editorEngineSessionIdRef.current = activeEngineSessionId
   const pendingReview = panelDoc?.state === 'pendingReview'
   const busy = snapshot.streaming || panelDoc?.agentBusy === true || activeBound?.agentBusy === true
   const saveState = snapshot.saveState ?? ({ kind: 'idle' } satisfies DocumentSaveState)
@@ -186,9 +217,30 @@ export function QingDocPanel(props: QingDocPanelProps) {
   )
 
   const handleEditorChange = useCallback((doc: PmDoc, baseline?: DocWriteBaseline) => {
-    if (!baseline || !saveCoordinatorRef.current) return Promise.resolve()
-    return saveCoordinatorRef.current.enqueue(doc, baseline)
+    const engineSessionId = editorEngineSessionIdRef.current
+    if (!baseline || !engineSessionId || !saveCoordinatorRef.current) return Promise.resolve()
+    return saveCoordinatorRef.current.enqueue(engineSessionId, doc, baseline)
   }, [])
+
+  const handleFocusDocument = useCallback(async (engineSessionId: string) => {
+    try {
+      await flushPendingDocSave()
+      await qingClientStore.focus(sessionId, engineSessionId)
+    } catch (error) {
+      console.error('[qingagent-panel] focus flush failed', error)
+      setToast('保存失败 · 未切换文稿')
+    }
+  }, [flushPendingDocSave, sessionId])
+
+  const handleClose = useCallback(async () => {
+    try {
+      await flushPendingDocSave()
+      props.qingLayout.closeDetails()
+    } catch (error) {
+      console.error('[qingagent-panel] close flush failed', error)
+      setToast('保存失败 · 文稿面板保持打开')
+    }
+  }, [flushPendingDocSave, props.qingLayout])
 
   const visibleReviewTargets = reviewPresentation?.visibleReviewTargets ?? []
   const visibleReviewTargetIds = useMemo(
@@ -351,7 +403,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
               className="qingdoc-doc-select"
               aria-label="切换青简文稿"
               value={activeEngineSessionId ?? ''}
-              onChange={(event) => void qingClientStore.focus(sessionId, event.currentTarget.value)}
+              onChange={(event) => void handleFocusDocument(event.currentTarget.value)}
             >
               {docs.map((doc) => (
                 <option key={doc.engineSessionId} value={doc.engineSessionId}>{doc.title}</option>
@@ -362,7 +414,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
           <button
             className="qingdoc-close"
             type="button"
-            onClick={() => props.qingLayout.closeDetails()}
+            onClick={() => { void handleClose() }}
             aria-label="关闭青简文档"
           >×</button>
         </div>
@@ -387,6 +439,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
               />
             ) : null}
             <DocumentSnapshotView
+              ref={setDocViewHandle}
               doc={surfaceDoc}
               docId={activeEngineSessionId ? `dsh:${activeEngineSessionId}` : `dsh:${sessionId}:empty`}
               editable

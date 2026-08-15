@@ -12,6 +12,7 @@ export type DocumentSaveState =
   | { kind: 'error'; message: string; transient: boolean }
 
 interface PendingWrite {
+  engineSessionId: string
   doc: PmDoc
   baseline: DocWriteBaseline
   mutationId: string
@@ -27,8 +28,12 @@ interface KnownVersion {
 }
 
 export interface DocumentSaveCoordinatorOptions {
-  send: (request: ExternalDocReplaceRequest) => Promise<ExternalDocReplaceResponse>
-  onCommitted: (doc: PmDoc, response: Extract<ExternalDocReplaceResponse, { ok: true }>) => void
+  send: (engineSessionId: string, request: ExternalDocReplaceRequest) => Promise<ExternalDocReplaceResponse>
+  onCommitted: (
+    engineSessionId: string,
+    doc: PmDoc,
+    response: Extract<ExternalDocReplaceResponse, { ok: true }>,
+  ) => void
   onStateChange?: (state: DocumentSaveState) => void
   createMutationId?: () => string
   schedule?: (callback: () => void, milliseconds: number) => ReturnType<typeof setTimeout>
@@ -69,7 +74,7 @@ export class DocumentSaveCoordinator {
 
   getState(): DocumentSaveState { return this.state }
 
-  enqueue(doc: PmDoc, baseline: DocWriteBaseline): Promise<void> {
+  enqueue(engineSessionId: string, doc: PmDoc, baseline: DocWriteBaseline): Promise<void> {
     if (this.disposed) return Promise.reject(new Error('保存协调器已释放'))
     const promise = new Promise<void>((resolve, reject) => {
       const waiter = { resolve, reject }
@@ -79,11 +84,11 @@ export class DocumentSaveCoordinator {
           this.queued.baseline = baseline
           this.queued.waiters.push(waiter)
         } else {
-          this.queued = this.pending(doc, baseline, [waiter])
+          this.queued = this.pending(engineSessionId, doc, baseline, [waiter])
         }
         return
       }
-      this.current = this.pending(doc, baseline, [waiter])
+      this.current = this.pending(engineSessionId, doc, baseline, [waiter])
       this.publish({ kind: 'saving' })
       this.sendCurrent(0)
     })
@@ -113,11 +118,13 @@ export class DocumentSaveCoordinator {
   }
 
   private pending(
+    engineSessionId: string,
     doc: PmDoc,
     baseline: DocWriteBaseline,
     waiters: PendingWrite['waiters'],
   ): PendingWrite {
     return {
+      engineSessionId,
       doc,
       baseline,
       mutationId: this.createMutationId(),
@@ -136,7 +143,7 @@ export class DocumentSaveCoordinator {
       clientMutationId: write.mutationId,
       doc: write.doc,
     }
-    this.options.send(request).then(
+    this.options.send(write.engineSessionId, request).then(
       (response) => this.handleResponse(write, response),
       (error) => this.handleError(write, error, attempt),
     )
@@ -154,7 +161,7 @@ export class DocumentSaveCoordinator {
       baseHasSubstantiveContent: pmDocHasSubstantiveContent(write.doc),
     }
     this.rememberVersion(baseline)
-    this.options.onCommitted(write.doc, response)
+    this.options.onCommitted(write.engineSessionId, write.doc, response)
     this.resolveWrite(write)
     this.current = null
     this.failedTransient = null
@@ -162,7 +169,7 @@ export class DocumentSaveCoordinator {
     if (this.queued) {
       const next = this.queued
       this.queued = null
-      next.baseline = baseline
+      if (next.engineSessionId === write.engineSessionId) next.baseline = baseline
       this.current = next
       this.publish({ kind: 'saving' })
       this.retryTimer = this.schedule(() => {
