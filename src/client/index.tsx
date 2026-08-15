@@ -1,4 +1,5 @@
 import type { ClientContext, ISessions } from '@deepseek-ai/dsh-client-runtime/client'
+import { createScope } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
@@ -35,7 +36,6 @@ export function apply(ctx: ClientContext): void {
               // conversation 是作用域寻址服务:sessions.scope() 返回的 AgentContext 挂在运行时
               // 根 fiber 下,不带本插件的 inject 声明会被 cordis 拒绝。用本插件 ctx 铸造同
               // 会话标签的临时作用域,属性链访问即携带 inject 与会话寻址。
-              const { createScope } = await import('@deepseek-ai/dsh-client-runtime/client')
               const handle = createScope(
                 ctx as unknown as Parameters<typeof createScope>[0],
                 dshSessionId as Parameters<typeof createScope>[1],

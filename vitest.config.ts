@@ -38,6 +38,7 @@ export default defineConfig({
   resolve: {
     dedupe: ['react', 'react-dom', '@tiptap/core', '@tiptap/pm', '@tiptap/react'],
     alias: [
+      { find: /^@deepseek-ai\/dsh-client-runtime\/client$/, replacement: resolve('tests/stubs/dsh-client-runtime-client.ts') },
       { find: /^react$/, replacement: resolve('node_modules/react/index.js') },
       { find: /^react\/jsx-runtime$/, replacement: resolve('node_modules/react/jsx-runtime.js') },
       { find: /^react-dom$/, replacement: resolve('node_modules/react-dom/index.js') },
