@@ -74,16 +74,8 @@ export function QingPaperPanel(props: QingPaperPanelProps) {
           <div className={styles.empty}>这张宣纸还是空的。</div>
         )}
         {snapshot.streaming ? <span className={styles.inkCursor} aria-label="正在写作" /> : null}
-        {snapshot.reviewCount ? (
-          <div className={styles.reviewNotice} role="status">
-            审阅待处理 · {snapshot.reviewCount} 处变更。请在青简中处理；DSH 审阅界面将在后续批次提供。
-          </div>
-        ) : null}
-        {snapshot.draftFailure ? (
-          <div className={styles.failureNotice} role="status">
-            写作未完成 · {snapshot.draftFailure}
-          </div>
-        ) : null}
+        {/* 纸面内只放文档本身。审阅/失败等状态一律走顶栏状态行(dsh 外壳),
+            青简里不存在的 UI 元素不得出现在纸面上。 */}
       </div>
     </section>
   )
