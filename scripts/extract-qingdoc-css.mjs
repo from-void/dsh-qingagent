@@ -3,6 +3,10 @@ import { resolve } from 'node:path'
 
 const qingRoot = '/home/jimmy/proj/qingagent/wt/dsh-bridge'
 const panelRoot = '[data-qingagent-doc-panel]'
+// :is() takes the specificity of its strongest arm. The never-matching ID arm
+// keeps #view-workspace's original ID specificity while the attribute arm keeps
+// the plugin isolated from the host page.
+const workspaceRoot = `:is(${panelRoot}, #qingagent-doc-panel-specificity)`
 const bannedSelectors = [
   '.web-page-frame--workspace',
   '.ws-left',
@@ -164,10 +168,10 @@ function splitSelectors(prelude) {
 function scopeSelector(rawSelector) {
   if (bannedSelectors.some((needle) => rawSelector.includes(needle))) return null
   let selector = rawSelector
-    .replace(/:root((?:\[[^\]]+\])*)[\t ]+body((?:\[[^\]]+\])*)[\t ]+#view-workspace/g, (_, rootAttrs, bodyAttrs) => `${panelRoot}${rootAttrs}${bodyAttrs}`)
-    .replace(/body((?:\[[^\]]+\])+)[\t ]+#view-workspace/g, (_, attrs) => `${panelRoot}${attrs}`)
-    .replace(/:root((?:\[[^\]]+\])+)[\t ]+#view-workspace/g, (_, attrs) => `${panelRoot}${attrs}`)
-    .replaceAll('#view-workspace', panelRoot)
+    .replace(/:root((?:\[[^\]]+\])*)[\t ]+body((?:\[[^\]]+\])*)[\t ]+#view-workspace/g, (_, rootAttrs, bodyAttrs) => `:is(${panelRoot}${rootAttrs}${bodyAttrs}, #qingagent-doc-panel-specificity)`)
+    .replace(/body((?:\[[^\]]+\])+)[\t ]+#view-workspace/g, (_, attrs) => `:is(${panelRoot}${attrs}, #qingagent-doc-panel-specificity)`)
+    .replace(/:root((?:\[[^\]]+\])+)[\t ]+#view-workspace/g, (_, attrs) => `:is(${panelRoot}${attrs}, #qingagent-doc-panel-specificity)`)
+    .replaceAll('#view-workspace', workspaceRoot)
     .replace(/^:root\b/, panelRoot)
     .replace(/^body\b/, panelRoot)
     .replace(/^html\b/, panelRoot)
@@ -182,7 +186,7 @@ function scopeSelector(rawSelector) {
     '$1',
   )
   if (selector === '*') return `${panelRoot}, ${panelRoot} *`
-  if (selector.startsWith(panelRoot) || selector.startsWith('@')) return selector
+  if (selector.startsWith(panelRoot) || selector.startsWith(workspaceRoot) || selector.startsWith('@')) return selector
   return `${panelRoot} ${selector}`
 }
 
@@ -220,11 +224,147 @@ for (const [relativePath, ranges] of sources) {
   }
 }
 
-const output = [
+let output = [
   '/* 由 scripts/extract-qingdoc-css.mjs 从青简 wt/dsh-bridge@dc1a0baf 机械提取；声明值不改。 */',
   hostGlue,
   scopeStylesheet(extracted.join('\n\n')),
   '',
 ].join('\n').replace(/[ \t]+$/gm, '')
 
-await writeFile(resolve('src/qingdoc/qingdoc.css'), output)
+function replaceLast(source, search, replacement) {
+  const index = source.lastIndexOf(search)
+  if (index < 0) throw new Error(`找不到待替换的生成片段：${search}`)
+  return source.slice(0, index) + replacement + source.slice(index + search.length)
+}
+
+// Preserve the dsh host adaptations that intentionally sit on top of the
+// mechanically scoped Qingjian source. Keeping them here makes extraction
+// deterministic and allows --check to audit every copied range.
+const detailsGlue = `
+/* dsh AppFrame 的内建 preference 把 details 钳在 300–520；青简纸面打开时由同一个
+   CSS 变量接管第三轨，center 保持 minmax(0,1fr) 弹性收缩。!important 只覆盖
+   AppFrame 的普通 inline grid-template-columns，不改其 React store，卸载即自动复原。 */
+[class*="detailsCol"]:has(${panelRoot}) {
+  width: var(--qing-details-width, clamp(560px, 46vw, 920px)) !important;
+  min-width: 0 !important;
+}
+[class*="frame"]:has(> [class*="detailsCol"] ${panelRoot}) {
+  grid-template-columns:
+    var(--qing-sidebar-width, 280px)
+    minmax(0, 1fr)
+    var(--qing-details-width, clamp(560px, 46vw, 920px)) !important;
+}
+[class*="frame"]:has(> [class*="detailsCol"] ${panelRoot})
+  > [class*="centerCol"] {
+  min-width: 0 !important;
+  width: auto !important;
+  flex: 1 1 auto !important;
+}
+[class*="frame"]:has(> [class*="detailsCol"] ${panelRoot})
+  > [class*="handle"][data-side="details"] {
+  display: none !important;
+}
+${panelRoot} .qingdoc-details-resizer {
+  position: absolute;
+  z-index: 100300;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+${panelRoot} .qingdoc-details-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: rgba(181, 154, 99, 0);
+  transition: background .15s ease;
+}
+${panelRoot} .qingdoc-details-resizer:hover::after,
+${panelRoot}[data-qing-details-resizing="1"] .qingdoc-details-resizer::after {
+  background: rgba(181, 154, 99, .68);
+}
+`
+
+const controlsGlue = `${panelRoot} .qingdoc-heading,
+${panelRoot} .qingdoc-host-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+${panelRoot} .qingdoc-heading { flex: 1 1 auto; }
+${panelRoot} .qingdoc-host-actions { flex: 0 1 auto; }
+${panelRoot} .qingdoc-brand {
+  color: #cfb477;
+  letter-spacing: .12em;
+  white-space: nowrap;
+}
+${panelRoot} .qingdoc-stage-title {
+  min-width: 0;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+${panelRoot} .qingdoc-status {
+  min-width: 0;
+  color: rgba(236, 227, 208, .58);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+${panelRoot} .qingdoc-status[data-kind="conflict"],
+${panelRoot} .qingdoc-status[data-kind="blocked"],
+${panelRoot} .qingdoc-status[data-kind="error"] { color: #e6bd86; }
+${panelRoot} .qingdoc-doc-select,
+${panelRoot} .qingdoc-open {
+  min-height: 28px;
+  box-sizing: border-box;
+  color: rgba(236, 227, 208, .66);
+  border: 1px solid rgba(184, 169, 140, .22);
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+}
+${panelRoot} .qingdoc-doc-select { max-width: 170px; padding: 0 6px; }
+${panelRoot} .qingdoc-open {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  text-decoration: none;
+  white-space: nowrap;
+}`
+
+const patchNavGlue = `/* dsh 的外层可能建立 transform/contain 坐标系。PatchNav 提升为面板根直接子节点后，
+   只把定位参照改为面板可视区；审阅条自身的尺寸与视觉声明仍沿用青简。 */
+${workspaceRoot} > .patch-nav {
+  position: absolute !important;
+  left: max(12px, calc(var(--panel-doc-left, 0px) + 64px));
+  right: max(12px, calc(var(--panel-doc-right, 0px) + 64px));
+  top: auto !important;
+  bottom: var(--ws-float-bar-bottom);
+}`
+
+output = output
+  .replace(`${panelRoot} .ws-body {`, `${detailsGlue}${panelRoot} .ws-body {`)
+  .replace(`${panelRoot} .qingdoc-stage-title { white-space: nowrap; }`, controlsGlue)
+  .replace('--ws-paper-min-height: calc(100vh - var(--ws-paper-top-offset));', '--ws-paper-min-height: 100%;')
+output = replaceLast(
+  output,
+  `${workspaceRoot} .patch-nav .pn-label {`,
+  `${patchNavGlue}\n${workspaceRoot} .patch-nav .pn-label {`,
+)
+
+const target = resolve('src/qingdoc/qingdoc.css')
+if (process.argv.includes('--check')) {
+  const actual = await readFile(target, 'utf8')
+  if (actual !== output) throw new Error('qingdoc.css 与青简源行段/作用域生成结果不一致，请运行 npm run extract:qingdoc-css')
+} else {
+  await writeFile(target, output)
+}

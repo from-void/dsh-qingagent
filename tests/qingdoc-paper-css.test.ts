@@ -1,10 +1,18 @@
 import { readFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
 import { resolve } from 'node:path'
+import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
 
 const qingRoot = '/home/jimmy/proj/qingagent/wt/dsh-bridge'
+const execFileAsync = promisify(execFile)
 
 describe('青简纸面移植契约', () => {
+  it('§3.2 全部源行段与作用域生成结果保持一致', async () => {
+    await expect(execFileAsync(process.execPath, ['scripts/extract-qingdoc-css.mjs', '--check']))
+      .resolves.toMatchObject({ stderr: '' })
+  })
+
   it('固定 800px、52/64 padding、宋体、直角和暖纸，并只作用于面板根', async () => {
     const [css, panelSource] = await Promise.all([
       readFile(resolve('src/qingdoc/qingdoc.css'), 'utf8'),
@@ -21,7 +29,7 @@ describe('青简纸面移植契约', () => {
     expect(css).not.toContain('.qingdoc-toast')
     expect(panelSource).not.toContain('className="qingdoc-toast"')
     expect(panelSource).toContain('qingjian://open?engineSessionId=')
-    expect(css).toMatch(/\[data-qingagent-doc-panel\] > \.patch-nav \{[\s\S]*?position: absolute !important;/)
+    expect(css).toMatch(/:is\(\[data-qingagent-doc-panel\], #qingagent-doc-panel-specificity\) > \.patch-nav \{[\s\S]*?position: absolute !important;/)
     expect(css).toContain('--panel-doc-left')
     expect(css).toContain('--panel-doc-right')
     expect(css).toContain('padding-bottom: 156px !important;')
@@ -67,6 +75,17 @@ describe('青简纸面移植契约', () => {
     expect(headerRule).not.toMatch(/position:\s*(?:absolute|fixed)|left:|right:|transform:|backdrop-filter:/)
     expect(generator).not.toContain('width: min(860px, calc(100% - 28px))')
     expect(panelSource).toContain("'--ws-paper-top-offset': '0px'")
-    expect(css).toMatch(/\[data-qingagent-doc-panel\] \.ws-right \{[\s\S]*?overflow-y: auto;/)
+    expect(css).toMatch(/:is\(\[data-qingagent-doc-panel\], #qingagent-doc-panel-specificity\) \.ws-right \{[\s\S]*?overflow-y: auto;/)
+  })
+
+  it('workspace scope 保留青简 #view-workspace 的 ID 权重', async () => {
+    const [css, generator] = await Promise.all([
+      readFile(resolve('src/qingdoc/qingdoc.css'), 'utf8'),
+      readFile(resolve('scripts/extract-qingdoc-css.mjs'), 'utf8'),
+    ])
+
+    expect(generator).toContain('const workspaceRoot = `:is(${panelRoot}, #qingagent-doc-panel-specificity)`')
+    expect(css).toContain(':is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) :is(.wf-doc,.doc-typography) table {')
+    expect(css).toContain(':is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) :is(.wf-doc,.doc-typography) td {')
   })
 })

@@ -44,11 +44,13 @@
     "LICENSE"
   ],
   "scripts": {
+    "extract:qingdoc-css": "node scripts/extract-qingdoc-css.mjs",
+    "check:qingdoc-css": "node scripts/extract-qingdoc-css.mjs --check",
     "build": "rm -rf lib && tsc -p tsconfig.build.json && tsdown",
     "bundle": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "npm run typecheck && npm test && npm run build",
+    "check": "npm run check:qingdoc-css && npm run typecheck && npm test && npm run build",
     "prepack": "npm run check"
   },
   "peerDependencies": {

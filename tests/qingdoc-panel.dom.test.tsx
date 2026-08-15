@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act } from 'react'
+import { readFile } from 'node:fs/promises'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DocumentSnapshotView } from '@qingweb/pages/workspace/components/DocumentSnapshotView'
@@ -34,8 +35,12 @@ polyfillLayout()
 
 let host: HTMLElement
 let root: Root
+let paperStyle: HTMLStyleElement
 
-beforeEach(() => {
+beforeEach(async () => {
+  paperStyle = document.createElement('style')
+  paperStyle.textContent = await readFile('src/qingdoc/qingdoc.css', 'utf8')
+  document.head.append(paperStyle)
   host = document.createElement('section')
   host.dataset.qingagentDocPanel = ''
   host.innerHTML = '<div class="ws-right"><div id="mount"></div></div>'
@@ -46,6 +51,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount())
   host.remove()
+  paperStyle.remove()
   window.localStorage.clear()
   vi.restoreAllMocks()
   vi.useRealTimers()
@@ -77,6 +83,10 @@ function renderFixture(interactiveEditable: boolean): void {
 }
 
 describe('青简 DocumentSnapshotView fixture', () => {
+  it('面板根建立独立 stacking context，内部浮层不越过 dsh 兄弟层', () => {
+    expect(getComputedStyle(host).isolation).toBe('isolate')
+  })
+
   it('编辑与只读复用同一 .wf-doc.ProseMirror，并保真挂出结构 NodeView', async () => {
     renderFixture(true)
     await flushEditor()
@@ -90,6 +100,11 @@ describe('青简 DocumentSnapshotView fixture', () => {
     expect(editablePaper?.querySelector('.pm-column-list')).not.toBeNull()
     expect(editablePaper?.querySelectorAll('.pm-column')).toHaveLength(2)
     expect(editablePaper?.querySelector('pre code')).not.toBeNull()
+
+    const rightmostCell = editablePaper!.querySelector<HTMLTableCellElement>('tbody tr:last-child td:last-child')!
+    const bottomCell = editablePaper!.querySelector<HTMLTableCellElement>('tbody tr:last-child td:first-child')!
+    expect(getComputedStyle(rightmostCell).borderRightStyle).not.toBe('none')
+    expect(getComputedStyle(bottomCell).borderBottomStyle).not.toBe('none')
 
     renderFixture(false)
     await flushEditor()
