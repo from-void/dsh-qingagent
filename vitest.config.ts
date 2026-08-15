@@ -49,6 +49,7 @@ export default defineConfig({
       { find: '@qingagent/contract-ts', replacement: `${qingRoot}/packages/contract-ts/src/index.ts` },
       { find: '@qingagent/diagram-engine', replacement: `${qingRoot}/packages/diagram-engine/src/index.ts` },
       { find: '@qingweb', replacement: qingWebSource },
+      { find: '@qingcore', replacement: `${qingRoot}/packages/core/src` },
     ],
   },
   plugins: [{

@@ -203,3 +203,10 @@ export interface TemplateStarterPreset {
   prompt: string
 }
 export const REVIEW_STARTER_PRESETS: Record<string, readonly TemplateStarterPreset[]>
+
+/** @qingcore/doc-engine/reviewOutcome 的构建期声明(运行时 tsdown 直连青简 core 源码)。 */
+export function serializeReviewOutcome(outcome: {
+  acceptedCount: number
+  rejectedCount: number
+  hunks: Array<{ verdict: 'accepted' | 'rejected'; blockSummary: string; beforeText: string; afterText: string }>
+}): string

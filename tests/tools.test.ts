@@ -283,7 +283,7 @@ describe('qing_review_commit', () => {
     })
 
     await expect(fixture.tools.get('qing_review_commit')!.execute({ action: 'reject_all' }, exec()))
-      .resolves.toMatchObject({ status: 'no_pending_review', message: '无待审变更' })
+      .resolves.toMatchObject({ status: 'no_pending_review', message: expect.stringContaining('当前无待审稿') })
   })
 
   it('同一 agent 回合第二次调用在访问引擎前硬拦截', async () => {
@@ -508,7 +508,7 @@ describe('qing_edit_draft', () => {
 
     expect(result).toMatchObject({
       status: 'review', reviewCount: 3,
-      message: '改动已提交审阅，右侧面板等待用户逐处裁决。本回合结束——不要重写、不要读稿复核、不要自动裁决',
+      message: expect.stringContaining('改动已提交审阅，右侧面板等待用户逐处裁决'),
     })
     expect(context.concludeTurn).toHaveBeenCalledOnce()
     expect(fixture.bridge.clearSelection).toHaveBeenCalledWith('dsh-1')
@@ -555,5 +555,61 @@ describe('qing_list_docs', () => {
     })
     const schema = tool.output?.schema as { properties?: { docs?: { items?: { properties?: Record<string, unknown> } } } }
     expect(schema.properties?.docs?.items?.properties).toHaveProperty('createdAt')
+  })
+})
+
+describe('局部 op 原始标签防线', () => {
+  it('strReplace new 含 QingML 标签被拒绝且不发提案', async () => {
+    let proposalCalls = 0
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '逃出来', markdownWithLineNumbers: '   1 | 逃出来', title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) { proposalCalls += 1; return { status: 'committed', docVersion: 3 } }
+      throw new Error(`unexpected path: ${path}`)
+    })
+    await expect(fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'strReplace', old: '逃出来', new: '<mark color="yellow">逃出来</mark>' }],
+    }, exec(undefined, 'edit-rawtag', 'qing_edit_draft'))).rejects.toThrow(/QingML\/HTML 标签/)
+    expect(proposalCalls).toBe(0)
+  })
+
+  it('insertAfterLine markdown 含 color 标签同样拒绝', async () => {
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '正文', markdownWithLineNumbers: '   1 | 正文', title: '测试稿',
+        }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+    await expect(fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'insertAfterLine', line: 1, markdown: '<color name="red">警示</color>' }],
+    }, exec(undefined, 'edit-rawtag2', 'qing_edit_draft'))).rejects.toThrow(/QingML\/HTML 标签/)
+  })
+
+  it('纯文本数学小于号不误伤(a<b 且 3 < 5)', async () => {
+    let proposalCalls = 0
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '对比', markdownWithLineNumbers: '   1 | 对比', title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) { proposalCalls += 1; return { status: 'committed', docVersion: 3 } }
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({ docVersion: 3, state: 'editing', qingml: '<p>对比:a<b 且 3 < 5</p>', title: '测试稿' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+    await fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'strReplace', old: '对比', new: '对比:a<b 且 3 < 5' }],
+    }, exec(undefined, 'edit-lt', 'qing_edit_draft'))
+    expect(proposalCalls).toBe(1)
   })
 })

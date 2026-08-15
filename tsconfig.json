@@ -20,7 +20,8 @@
       "@qingagent/pm-schema/*": ["/home/jimmy/proj/qingagent/wt/dsh-bridge/packages/pm-schema/src/*"],
       "@qingagent/diagram-engine": ["/home/jimmy/proj/qingagent/wt/dsh-bridge/packages/diagram-engine/src/index.ts"],
       "@qingagent/diagram-engine/*": ["/home/jimmy/proj/qingagent/wt/dsh-bridge/packages/diagram-engine/src/*"],
-      "@qingweb/*": ["/home/jimmy/proj/qingagent/wt/dsh-bridge/apps/web/src/*"]
+      "@qingweb/*": ["/home/jimmy/proj/qingagent/wt/dsh-bridge/apps/web/src/*"],
+      "@qingcore/*": ["/home/jimmy/proj/qingagent/wt/dsh-bridge/packages/core/src/*"]
     }
   },
   "include": ["src", "tests"]

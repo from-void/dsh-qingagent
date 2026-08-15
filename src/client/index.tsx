@@ -8,7 +8,7 @@ import { QingWriteToolCard } from './QingWriteToolCard.js'
 import { qingClientStore } from './store.js'
 
 export const name = 'dsh-qingagent-client'
-export const inject = ['slots', 'layout', 'sessions']
+export const inject = ['slots', 'layout', 'sessions', 'conversation']
 
 export function apply(ctx: ClientContext): void {
   // Cordis 的 get() 在类型上允许服务未就绪；本插件的 inject 已把三者声明为启动前置。

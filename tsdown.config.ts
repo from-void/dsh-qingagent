@@ -37,6 +37,7 @@ const QING_SOURCE_ALIASES = {
   '@qingagent/pm-schema/tiptap': `${QING_ROOT}/packages/pm-schema/src/tiptap/createQingagentExtensions.ts`,
   '@qingagent/pm-schema': `${QING_ROOT}/packages/pm-schema/src/index.ts`,
   '@qingweb': QING_WEB_SOURCE,
+  '@qingcore': `${QING_ROOT}/packages/core/src`,
 }
 
 type BuildPlugin = NonNullable<UserConfig['plugins']>

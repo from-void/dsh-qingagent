@@ -33,6 +33,7 @@ import { createQingmlCompileThrottle, type QingmlCompileThrottle } from './strea
 import { buildReviewPresentationModel } from './reviewPresentation.js'
 import { installDetailsColumnWidth } from './detailsWidth.js'
 import { decideIncomingPanelDocument } from './incomingPanelDocument.js'
+import { serializeReviewOutcome } from '@qingcore/doc-engine/reviewOutcome'
 import { QINGJIAN_ICON_DATA_URI } from './qingjianIcon.js'
 import { ensureQingdocRuntimeCss } from './runtimeCss.js'
 import { BridgeHttpError, qingClientStore } from './store.js'
@@ -60,6 +61,8 @@ const EMPTY_PATCH_IDS = new Set<string>()
 export function QingDocPanel(props: QingDocPanelProps) {
   ensureQingdocRuntimeCss()
   const sessionId = String(props.useSession((session) => session.sessionId))
+  // 用户拍板:agent 回合进行中(含思考与工具调用间隙)禁止用户在纸面输入,防并发覆盖。
+  const turnRunning = Boolean(props.useSession((session) => session.running))
   const snapshot = useSyncExternalStore(
     (listener) => qingClientStore.subscribe(sessionId, listener),
     () => qingClientStore.getSnapshot(sessionId),
@@ -358,6 +361,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const interactiveEditable = Boolean(
     panelDoc &&
     !busy &&
+    !turnRunning &&
     !pendingReview &&
     !saveLocked &&
     (panelDoc.state === 'editing' || panelDoc.state === 'empty'),
@@ -548,11 +552,37 @@ export function QingDocPanel(props: QingDocPanelProps) {
     }
     reviewSubmittingRef.current = true
     setReviewSubmitting(true)
+    // 结算前抓取当前批次明细:成功后按青简原交互向对话流回流结果,驱动模型知晓采纳/拒绝。
+    const settledSuggestions = (snapshotRef.current.reviewModel?.suggestions ?? [])
+      .filter((suggestion) => suggestion.status === 'reviewing' || suggestion.status === 'accepted' || suggestion.status === 'rejected')
+    const pushOutcomeToConversation = () => {
+      if (!props.qingSendMessage || settledSuggestions.length === 0) return
+      const hunks = settledSuggestions.map((suggestion) => ({
+        verdict: (action === 'reject_all'
+          ? 'rejected'
+          : action === 'accept_all'
+            ? 'accepted'
+            : suggestion.status === 'rejected' ? 'rejected' : 'accepted') as 'accepted' | 'rejected',
+        blockSummary: suggestion.summary ?? '',
+        beforeText: suggestion.preview?.deleteText ?? '',
+        afterText: suggestion.preview?.insertText ?? '',
+      }))
+      const outcome = {
+        acceptedCount: hunks.filter((hunk) => hunk.verdict === 'accepted').length,
+        rejectedCount: hunks.filter((hunk) => hunk.verdict === 'rejected').length,
+        hunks,
+      }
+      void props.qingSendMessage(sessionId, serializeReviewOutcome(outcome)).catch((error) => {
+        console.error('[qingagent-panel] review outcome push failed', error)
+        setToast('审阅结果回流对话失败')
+      })
+    }
     const settleAsSuccess = async (docVersion: number, refreshDoc: boolean) => {
       qingClientStore.applyReviewCommit(sessionId, activeEngineSessionId, docVersion)
       reviewSettlementRetryPendingRef.current = false
       setReviewSettlementRetryPending(false)
       setToast(action === 'reject_all' ? '已放弃本轮修改' : '修改已提交')
+      pushOutcomeToConversation()
       const refreshPanel = async () => {
         await qingClientStore.refreshPanel(sessionId, activeEngineSessionId)
         const refreshed = qingClientStore.getSnapshot(sessionId)
@@ -603,7 +633,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
       reviewSubmittingRef.current = false
       setReviewSubmitting(false)
     }
-  }, [activeEngineSessionId, panelDoc, reviewCommitKey, sessionId])
+  }, [activeEngineSessionId, panelDoc, props, reviewCommitKey, sessionId])
 
   useEffect(() => {
     const suggestions = snapshot.reviewModel?.suggestions ?? []

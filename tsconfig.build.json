@@ -14,7 +14,8 @@
       "@qingagent/contract-ts/*": ["./src/qingdoc/shims/pm-schema.build.d.ts"],
       "@qingagent/diagram-engine": ["./src/qingdoc/shims/pm-schema.build.d.ts"],
       "@qingagent/diagram-engine/*": ["./src/qingdoc/shims/pm-schema.build.d.ts"],
-      "@qingweb/*": ["./src/qingdoc/shims/DocumentSnapshotView.build.d.ts"]
+      "@qingweb/*": ["./src/qingdoc/shims/DocumentSnapshotView.build.d.ts"],
+      "@qingcore/*": ["./src/qingdoc/shims/DocumentSnapshotView.build.d.ts"]
     }
   },
   "include": ["src"]

@@ -41,6 +41,18 @@ const REVIEW_REPEAT_ERROR = '本回合已裁决过一次，禁止连环裁决；
 const REVIEW_PENDING_ERROR = '文稿正在审阅中。收到新的修改指令时，先用 ask_user 征询用户接受、放弃或继续逐处裁决当前待审稿。'
 const STR_REPLACE_PLAIN_TEXT_ERROR = 'old 必须是纯文本内容,不要带 ## 等 markdown 标记'
 const STR_REPLACE_LINES_NOTICE = '注意:strReplace 的 old 用纯文本,不要带行首 ## - 等标记。'
+// 局部 op 只接受纯文本/Markdown;QingML/HTML 原始标签会被当普通文字刻进正文(用户实测颜色事故)。
+const RAW_TAG_PATTERN = /<\/?\s*(article|title|h[1-6]|p|ul|ol|li|tasks?|blockquote|hr|pre|table|tr|td|th|callout|columns?|mermaid|drawio|math(?:-block)?|img|file|pennote|b|strong|i|em|u|s|del|code|a|mark|color|footnote|br|span|div)\b[^>]*>/i
+const RAW_TAG_ERROR = '检测到 QingML/HTML 标签:局部操作(strReplace/insertAfterLine/appendSection)只接受纯文本或 Markdown,不支持 <mark>/<color> 等行内标记——直接写入会把标签当普通文字刻进正文。样式类修改请如实告知用户当前局部编辑不支持,如用户明确同意整篇重构可用 qing_write_draft(携 docRef)。'
+
+function assertNoRawTags(ops: ExternalEditProposalOp[]): void {
+  for (const op of ops) {
+    const payloads = op.kind === 'strReplace' ? [op.new] : 'markdown' in op ? [op.markdown] : []
+    for (const payload of payloads) {
+      if (typeof payload === 'string' && RAW_TAG_PATTERN.test(payload)) throw new Error(RAW_TAG_ERROR)
+    }
+  }
+}
 
 const outlineSchema = {
   type: 'array' as const,
@@ -90,7 +102,7 @@ function writeDraftTool(services: ToolServices) {
           // 反幻觉锚点:committed 必须明确否定审阅态,防模型把审阅纪律泛化脑补(实测幻觉案例)。
           `文稿已直接落库生效,当前不在审阅态,没有任何待审稿,可以立即继续修改。`,
           `文稿引用：${value.engineSessionId}`,
-          `共 ${value.blocks} 个块，约 ${value.words} 字。`,
+          `全文约 ${value.words} 字。`,
           ...(typeof value.warning === 'string' ? [`⚠ ${value.warning}`] : []),
           value.outline.length ? `提纲：\n${value.outline.map((line) => `- ${line}`).join('\n')}` : '提纲：暂无标题层级。',
         ].join('\n')),
@@ -303,6 +315,7 @@ function editDraftTool(services: ToolServices) {
         if (before.state === 'pendingReview') throw new Error(REVIEW_PENDING_ERROR)
         if (before.state === 'empty') throw new Error('文稿尚无正文；请先用 qing_write_draft 起草完整文稿。')
         const ops = args.ops as ExternalEditProposalOp[]
+        assertNoRawTags(ops)
         const proposal = await proposeEditOpsWithPlainTextRetry(
           services.engine,
           engineSessionId,
@@ -337,8 +350,8 @@ function editDraftTool(services: ToolServices) {
         return {
           status: proposal.status,
           message: proposal.status === 'review'
-            ? REVIEW_END_MESSAGE
-            : `局部修改已提交到《${outline.title}》。`,
+            ? `【文稿状态】审阅中·${proposal.count} 处待用户裁决(基线 v${official.docVersion})。\n${REVIEW_END_MESSAGE}`
+            : `【文稿状态】已落库生效 v${official.docVersion},无待审稿。\n局部修改已提交到《${outline.title}》。`,
           engineSessionId,
           title: outline.title,
           blocks: outline.blocks,
@@ -402,7 +415,7 @@ function reviewCommitTool(services: ToolServices, reviewTurns: ReviewTurnTracker
       if (before.state !== 'pendingReview') {
         return {
           status: 'no_pending_review' as const,
-          message: '无待审变更',
+          message: `【文稿状态】已落库 v${before.docVersion},当前无待审稿——此前的审阅已由用户在面板处理完毕。不要再次询问如何处置待审稿,直接按用户最新指令继续。`,
           engineSessionId,
           title: beforeTitle,
           acceptedCount: 0,
@@ -430,7 +443,7 @@ function reviewCommitTool(services: ToolServices, reviewTurns: ReviewTurnTracker
       })
       return {
         status: 'reviewed' as const,
-        message: `${args.action === 'accept_all' ? '已接受' : '已拒绝'}全部待审变更（接受 ${reviewed.acceptedCount} 处，拒绝 ${reviewed.rejectedCount} 处）。`,
+        message: `${args.action === 'accept_all' ? '已接受' : '已拒绝'}全部待审变更（接受 ${reviewed.acceptedCount} 处，拒绝 ${reviewed.rejectedCount} 处）。文稿现已落库生效,无待审稿。`,
         engineSessionId,
         title: outline.title,
         acceptedCount: reviewed.acceptedCount,
