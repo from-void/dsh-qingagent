@@ -151,6 +151,9 @@ export class QingClientStore {
         panelDoc,
         reviewModel,
         panelLoading: false,
+        // 面板权威刷新完成 = 生成流必然已结束;防御迟到的 draft-chunk(如坏块重试流的首块)
+        // 把状态卡在「写作中」。
+        streaming: false,
         reviewCount: reviewModel
           ? reviewModel.suggestions.filter((suggestion) => suggestion.status === 'reviewing').length
           : undefined,
