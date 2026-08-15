@@ -443,7 +443,7 @@ function reviewCommitTool(services: ToolServices, reviewTurns: ReviewTurnTracker
       })
       return {
         status: 'reviewed' as const,
-        message: `${args.action === 'accept_all' ? '已接受' : '已拒绝'}全部待审变更（接受 ${reviewed.acceptedCount} 处，拒绝 ${reviewed.rejectedCount} 处）。文稿现已落库生效,无待审稿。`,
+        message: `【文稿状态】已落库生效,无待审稿。\n${args.action === 'accept_all' ? '已接受' : '已拒绝'}全部待审变更（接受 ${reviewed.acceptedCount} 处，拒绝 ${reviewed.rejectedCount} 处）。`,
         engineSessionId,
         title: outline.title,
         acceptedCount: reviewed.acceptedCount,

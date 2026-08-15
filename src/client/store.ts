@@ -55,6 +55,8 @@ interface SessionEntry {
   panelLoadToken: number
   panelRefreshGuard?: PanelRefreshGuard
   activeDraftGeneration?: string
+  /** 已终结(失败/落库)的世代,防收养逻辑把旧世代迟到帧当新流。 */
+  endedDraftGenerations?: Set<string>
 }
 
 export interface QingLibraryDoc {
@@ -424,6 +426,9 @@ export class QingClientStore {
   ): void {
     const entry = this.entry(sessionId)
     if (entry.snapshot.panelEngineSessionId !== engineSessionId || !entry.snapshot.panelDoc) return
+    if (entry.activeDraftGeneration !== undefined) {
+      (entry.endedDraftGenerations ??= new Set()).add(entry.activeDraftGeneration)
+    }
     entry.activeDraftGeneration = undefined
     const activeDoc = entry.snapshot.activeEngineSessionId === engineSessionId && entry.snapshot.activeDoc
       ? {
@@ -511,6 +516,16 @@ export class QingClientStore {
       return
     }
     if (event.type === 'draft-chunk') {
+      // 首稿竞态收养:新会话的 draft-started 可能在 SSE 建连前发出而永久丢失,
+      // 若此时无活跃世代,把首个到达的 chunk 世代收养为活跃世代(等效隐式 draft-started);
+      // 仅在"无活跃世代"时收养,不放松对旧世代迟到帧的丢弃(评测 P7 首稿白纸根因)。
+      if (
+        entry.activeDraftGeneration === undefined &&
+        !entry.endedDraftGenerations?.has(event.generation)
+      ) {
+        entry.activeDraftGeneration = event.generation
+        console.info('[qingagent] draft-chunk 世代收养(疑丢失 draft-started)', event.generation)
+      }
       if (entry.activeDraftGeneration !== event.generation) return
       this.update(entry, {
         ...entry.snapshot,
@@ -528,6 +543,9 @@ export class QingClientStore {
     }
     if (event.type === 'draft-failed') {
       if (entry.activeDraftGeneration !== event.generation) return
+      if (entry.activeDraftGeneration !== undefined) {
+        (entry.endedDraftGenerations ??= new Set()).add(entry.activeDraftGeneration)
+      }
       entry.activeDraftGeneration = undefined
       this.update(entry, {
         ...entry.snapshot,
@@ -541,6 +559,9 @@ export class QingClientStore {
     }
     if (event.type === 'doc-committed') {
       if (event.generation !== undefined && entry.activeDraftGeneration !== event.generation) return
+      if (entry.activeDraftGeneration !== undefined) {
+        (entry.endedDraftGenerations ??= new Set()).add(entry.activeDraftGeneration)
+      }
       entry.activeDraftGeneration = undefined
       const hadSelection = entry.snapshot.selection !== undefined
       const optimisticPanelDoc = committedPanelDoc(entry.snapshot, event.engineSessionId, event.doc)
@@ -575,6 +596,9 @@ export class QingClientStore {
     }
     if (event.type === 'doc-review-pending') {
       if (event.generation !== undefined && entry.activeDraftGeneration !== event.generation) return
+      if (entry.activeDraftGeneration !== undefined) {
+        (entry.endedDraftGenerations ??= new Set()).add(entry.activeDraftGeneration)
+      }
       entry.activeDraftGeneration = undefined
       this.update(entry, {
         ...entry.snapshot,

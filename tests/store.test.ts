@@ -435,3 +435,29 @@ function deferred<T>() {
     expect(store.getSnapshot('dsh-t14').conflicts?.['qing-a']).toBeUndefined()
     expect(store.getSnapshot('dsh-t14').panelDoc?.pmDoc).toEqual(remotePm)
   })
+
+  it('P7 收养:draft-started 丢失时首个 chunk 世代被收养并渲染,已终结世代不收养', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(bridgeState())))
+    const store = new QingClientStore()
+    const release = store.retain('dsh-adopt')
+    await vi.waitFor(() => expect(store.getSnapshot('dsh-adopt').state).toBeDefined())
+    const source = FakeEventSource.instances.at(-1)!
+
+    // 无 draft-started,直接来 chunk → 收养
+    source.emit({
+      type: 'draft-chunk', engineSessionId: 'qing-1', generation: 'draft-lost-start',
+      chunkQingml: '<p>首块</p>', accumulatedBlocks: ['<p>首块</p>'], title: '稿', blocks: 1, words: 2,
+    })
+    expect(store.getSnapshot('dsh-adopt')).toMatchObject({ streaming: true, qingml: '<p>首块</p>' })
+
+    // 世代终结后,同世代迟到 chunk 不得复活
+    source.emit({ type: 'draft-failed', engineSessionId: 'qing-1', generation: 'draft-lost-start', message: '中止' })
+    source.emit({
+      type: 'draft-chunk', engineSessionId: 'qing-1', generation: 'draft-lost-start',
+      chunkQingml: '<p>迟到</p>', accumulatedBlocks: ['<p>迟到</p>'], title: '稿', blocks: 1, words: 2,
+    })
+    expect(store.getSnapshot('dsh-adopt').streaming).toBe(false)
+    expect(store.getSnapshot('dsh-adopt').qingml).toBe('<p>首块</p>')
+    release()
+  })

@@ -3,6 +3,7 @@ import {
   decideBroadcastDocumentFrame,
   type DocumentFrameDecision,
 } from '@qingweb/pages/workspace/data/docWriteResultOwnership'
+import { pmDocHasSubstantiveContent } from '@qingweb/pages/workspace/data/pageExitSave'
 import type { ExternalPmDocReadResponse } from '../contracts.js'
 
 export interface DocumentWriteActivity {
@@ -19,6 +20,15 @@ export async function decideIncomingPanelDocument(input: {
   afterFlush?: () => Promise<void>
 }): Promise<DocumentFrameDecision> {
   const frame = panelDocGenerationFrame(input.panelDoc)
+  // P1 首稿宽容(K3 定案):来稿有实质内容而编辑器可见文本为空(脚手架自愈的假 dirty
+  // 不应算用户内容)时直接应用,不进 defer/conflict;用户真输入过内容则照旧走冲突保护。
+  if (
+    input.panelDoc.pmDoc &&
+    pmDocHasSubstantiveContent(input.panelDoc.pmDoc) &&
+    editorVisiblyEmpty(input.handle)
+  ) {
+    return { kind: 'apply' } as DocumentFrameDecision
+  }
   const decide = (afterDeferredDrain: boolean) => {
     const activity = input.activity()
     const comparison = input.panelDoc.pmDoc
@@ -61,4 +71,17 @@ function panelDocGenerationFrame(panelDoc: ExternalPmDocReadResponse) {
       },
     },
   } as const
+}
+
+
+function editorVisiblyEmpty(handle: DocumentSnapshotViewHandle): boolean {
+  try {
+    const text = handle.getInnerHtml()
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .trim()
+    return text.length === 0
+  } catch {
+    return false
+  }
 }

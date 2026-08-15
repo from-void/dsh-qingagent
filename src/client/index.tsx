@@ -32,10 +32,20 @@ export function apply(ctx: ClientContext): void {
             qingLayout: layout,
             // 审查按钮闭环:把组装好的审查 query 作为用户消息发进对应 dsh 会话(排队一轮)。
             qingSendMessage: async (dshSessionId: string, text: string) => {
-              const scoped = sessions.scope(dshSessionId as Parameters<ISessions['scope']>[0])
-              if (!scoped) throw new Error('会话不可用,无法发送审查请求。')
-              await (scoped as unknown as { conversation: { send(text: string): Promise<void> } })
-                .conversation.send(text)
+              // conversation 是作用域寻址服务:sessions.scope() 返回的 AgentContext 挂在运行时
+              // 根 fiber 下,不带本插件的 inject 声明会被 cordis 拒绝。用本插件 ctx 铸造同
+              // 会话标签的临时作用域,属性链访问即携带 inject 与会话寻址。
+              const { createScope } = await import('@deepseek-ai/dsh-client-runtime/client')
+              const handle = createScope(
+                ctx as unknown as Parameters<typeof createScope>[0],
+                dshSessionId as Parameters<typeof createScope>[1],
+              )
+              try {
+                await (handle.ctx as unknown as { conversation: { send(text: string): Promise<void> } })
+                  .conversation.send(text)
+              } finally {
+                handle.fiber.dispose()
+              }
             },
           }),
         }, QingDocPanel)

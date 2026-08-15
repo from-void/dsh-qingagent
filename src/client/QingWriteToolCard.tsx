@@ -29,8 +29,9 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
   const failure = failed ? failureSummary(settledBlock?.content ?? []) : ''
   const state = failed ? 'failed' : settled ? 'complete' : 'running'
   // 「块」是内部概念不暴露;运行态无字数时摘要留空(标题「正在写作」已足够,避免「正在写作·写作中」废话)。
+  // 标题已表达「未完成」,摘要只留失败原因,避免单卡内重复(评测 P5,K3 定案)。
   const summaryText = failed
-    ? `未完成${failure ? ` · ${failure}` : ''}`
+    ? failure
     : [
         title ? `《${title}》` : '',
         words > 0 ? `约 ${words} 字` : '',

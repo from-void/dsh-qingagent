@@ -46,6 +46,8 @@ export function createQingmlCompileThrottle(options: QingmlCompileThrottleOption
 
   return {
     push(qingml) {
+      // 空首帧无可编译内容,静默跳过(评测 P8)。
+      if (!qingml.trim()) return
       latest = qingml
       if (timer) return
       const remaining = Math.max(0, interval - (now() - lastRun))
