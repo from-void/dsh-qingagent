@@ -441,7 +441,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
     const inConflict = Boolean(current.conflicts?.[currentDoc])
     if (editor && (inConflict || dirty)) {
       try {
-        qingClientStore.stashConflictDoc(sessionId, currentDoc, editor.getJSON() as PmDoc)
+        qingClientStore.stashConflictDoc(sessionId, currentDoc, editor.getJSON() as unknown as PmDoc)
       } catch (error) {
         console.warn('[qingagent-panel] conflict stash failed', error)
       }
