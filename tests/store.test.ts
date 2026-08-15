@@ -83,4 +83,41 @@ describe('QingClientStore 生成终态', () => {
     release()
     expect(source.closed).toBe(true)
   })
+
+  it('按活跃文稿从 doc-pm 初始化，并在 pendingReview 冷启动补拉 render-model', async () => {
+    const pmDoc = {
+      type: 'doc', attrs: { schemaVersion: 1 },
+      content: [{ type: 'paragraph', attrs: { blockId: 'p-1' }, content: [{ type: 'text', text: '真实正文' }] }],
+    }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/qingagent-bridge/doc-pm?')) {
+        return Response.json({
+          sessionId: 'qing-1', docVersion: 3, contentHash: 'hash-3', state: 'pendingReview',
+          agentBusy: false, title: '真实文稿', ts: '2026-08-15T01:00:00.000Z', pmDoc,
+        })
+      }
+      if (url.startsWith('/qingagent-bridge/review-render-model?')) {
+        return Response.json({
+          sessionId: 'qing-1', docVersion: 3, state: 'pendingReview', agentBusy: false,
+          baseVersion: 3, previewDoc: pmDoc, suggestions: [{ id: 'patch-1', status: 'reviewing' }],
+        })
+      }
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const store = new QingClientStore()
+
+    await store.refreshPanel('dsh-1', 'qing-1')
+
+    const snapshot = store.getSnapshot('dsh-1')
+    expect(snapshot.panelEngineSessionId).toBe('qing-1')
+    expect(snapshot.panelDoc).toMatchObject({ docVersion: 3, contentHash: 'hash-3', pmDoc })
+    expect(snapshot.reviewModel).toMatchObject({ baseVersion: 3, suggestions: [{ id: 'patch-1' }] })
+    expect(snapshot.reviewCount).toBe(1)
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      '/qingagent-bridge/doc-pm?dshSessionId=dsh-1&engineSessionId=qing-1',
+      '/qingagent-bridge/review-render-model?dshSessionId=dsh-1&engineSessionId=qing-1',
+    ])
+  })
 })

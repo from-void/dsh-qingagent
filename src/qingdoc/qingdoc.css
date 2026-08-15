@@ -37,8 +37,59 @@
   font: 12px/1.4 var(--font-zh-serif);
   transform: translateX(-50%);
   backdrop-filter: blur(10px);
+  width: min(860px, calc(100% - 28px));
+  box-sizing: border-box;
+  justify-content: space-between;
 }
-[data-qingagent-doc-panel] .qingdoc-stage-title { white-space: nowrap; }
+[data-qingagent-doc-panel] .qingdoc-heading,
+[data-qingagent-doc-panel] .qingdoc-host-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+[data-qingagent-doc-panel] .qingdoc-heading { flex: 1 1 auto; }
+[data-qingagent-doc-panel] .qingdoc-host-actions { flex: 0 1 auto; }
+[data-qingagent-doc-panel] .qingdoc-brand {
+  color: #cfb477;
+  letter-spacing: .12em;
+  white-space: nowrap;
+}
+[data-qingagent-doc-panel] .qingdoc-stage-title {
+  min-width: 0;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-qingagent-doc-panel] .qingdoc-status {
+  min-width: 0;
+  color: rgba(236, 227, 208, .58);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+[data-qingagent-doc-panel] .qingdoc-status[data-kind="conflict"],
+[data-qingagent-doc-panel] .qingdoc-status[data-kind="blocked"],
+[data-qingagent-doc-panel] .qingdoc-status[data-kind="error"] { color: #e6bd86; }
+[data-qingagent-doc-panel] .qingdoc-doc-select,
+[data-qingagent-doc-panel] .qingdoc-open {
+  min-height: 22px;
+  box-sizing: border-box;
+  color: rgba(236, 227, 208, .66);
+  border: 1px solid rgba(184, 169, 140, .22);
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+}
+[data-qingagent-doc-panel] .qingdoc-doc-select { max-width: 170px; padding: 0 6px; }
+[data-qingagent-doc-panel] .qingdoc-open {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  text-decoration: none;
+  white-space: nowrap;
+}
 [data-qingagent-doc-panel] .qingdoc-mode-switch { display: flex; }
 [data-qingagent-doc-panel] .qingdoc-mode-switch button,
 [data-qingagent-doc-panel] .qingdoc-close {

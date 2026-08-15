@@ -4,6 +4,9 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DocumentSnapshotView } from '@qingweb/pages/workspace/components/DocumentSnapshotView'
+import type { DocWriteBaseline } from '@qingweb/pages/workspace/data/docWriteBaseline'
+import type { PmDoc } from '@qingagent/pm-schema'
+import type { Editor } from '@tiptap/react'
 import { QINGDOC_FIXTURE_SNAPSHOT } from '../src/qingdoc/fixture.js'
 
 vi.mock('mermaid', () => ({
@@ -45,6 +48,7 @@ afterEach(() => {
   host.remove()
   window.localStorage.clear()
   vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 
 async function flushEditor(): Promise<void> {
@@ -94,5 +98,44 @@ describe('青简 DocumentSnapshotView fixture', () => {
     expect(readonlyPaper).toBe(editablePaper)
     expect(readonlyPaper?.getAttribute('contenteditable')).toBe('false')
     expect(host.querySelectorAll('.wf-doc.ProseMirror')).toHaveLength(1)
+  })
+
+  it('本地快打字按 400ms trailing 合并，baseline 冻结在第一笔事务发生时', async () => {
+    let editor: Editor | null = null
+    const onEditorChange = vi.fn(async (_doc: PmDoc, _baseline?: DocWriteBaseline) => undefined)
+    act(() => {
+      root.render(
+        <DocumentSnapshotView
+          doc={QINGDOC_FIXTURE_SNAPSHOT}
+          docId="dsh-real:debounce"
+          editable
+          interactiveEditable
+          showPatches={false}
+          acceptedPatches={new Set()}
+          rejectedPatches={new Set()}
+          onEditorReady={(next) => { editor = next }}
+          onEditorChange={onEditorChange}
+        />,
+      )
+    })
+    await flushEditor()
+    expect(editor).not.toBeNull()
+    vi.useFakeTimers()
+
+    act(() => {
+      editor!.commands.setContent({
+        type: 'doc', attrs: { schemaVersion: 1 },
+        content: [{ type: 'paragraph', attrs: { blockId: 'fast' }, content: [{ type: 'text', text: '第一笔' }] }],
+      })
+      editor!.commands.insertContent('，第二笔')
+    })
+    await vi.advanceTimersByTimeAsync(399)
+    expect(onEditorChange).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(onEditorChange).toHaveBeenCalledTimes(1)
+    const [savedDoc, frozenBaseline] = onEditorChange.mock.calls[0]!
+    expect(JSON.stringify(savedDoc)).toContain('第二笔')
+    expect(frozenBaseline).toMatchObject({ expectedDocumentSnapshot: 1 })
   })
 })

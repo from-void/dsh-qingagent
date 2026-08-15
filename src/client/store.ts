@@ -1,4 +1,19 @@
-import type { BridgeEvent, BridgeState, ExternalDoc } from '../contracts.js'
+import type {
+  BridgeEvent,
+  BridgeState,
+  ExternalDoc,
+  ExternalDocReplaceRequest,
+  ExternalDocReplaceResponse,
+  ExternalErrorResponse,
+  ExternalPmDocReadResponse,
+  ExternalReviewCommitPanelRequest,
+  ExternalReviewCommitResponse,
+  ExternalReviewRenderModelResponse,
+  ExternalReviewVerdictRequest,
+  ExternalReviewVerdictResponse,
+  PmDoc,
+} from '../contracts.js'
+import type { DocumentSaveState } from './documentSaveCoordinator.js'
 
 export interface QingClientSnapshot {
   state?: BridgeState
@@ -11,6 +26,11 @@ export interface QingClientSnapshot {
   bindingCount: number
   reviewCount?: number
   draftFailure?: string
+  panelEngineSessionId?: string
+  panelDoc?: ExternalPmDocReadResponse
+  reviewModel?: ExternalReviewRenderModelResponse
+  panelLoading?: boolean
+  saveState?: DocumentSaveState
   error?: string
 }
 
@@ -21,6 +41,7 @@ interface SessionEntry {
   refs: number
   openers: Set<() => void>
   loading?: Promise<void>
+  panelLoadToken: number
 }
 
 const EMPTY: QingClientSnapshot = {
@@ -72,6 +93,16 @@ export class QingClientStore {
       body: JSON.stringify({ dshSessionId: sessionId, engineSessionId }),
     })
     if (!response.ok) throw new Error(await responseError(response))
+    const entry = this.entry(sessionId)
+    this.update(entry, {
+      ...entry.snapshot,
+      activeEngineSessionId: engineSessionId,
+      panelEngineSessionId: undefined,
+      panelDoc: undefined,
+      reviewModel: undefined,
+      panelLoading: true,
+    })
+    void this.refreshPanel(sessionId, engineSessionId)
   }
 
   async refreshDoc(sessionId: string, engineSessionId: string): Promise<void> {
@@ -92,10 +123,142 @@ export class QingClientStore {
     })
   }
 
+  async refreshPanel(sessionId: string, engineSessionId: string): Promise<void> {
+    const entry = this.entry(sessionId)
+    const token = ++entry.panelLoadToken
+    const switching = entry.snapshot.panelEngineSessionId !== engineSessionId
+    this.update(entry, {
+      ...entry.snapshot,
+      activeEngineSessionId: engineSessionId,
+      ...(switching ? { panelDoc: undefined, reviewModel: undefined } : {}),
+      panelLoading: true,
+      error: undefined,
+    })
+    try {
+      const panelDoc = await bridgeJson<ExternalPmDocReadResponse>(
+        panelUrl('/qingagent-bridge/doc-pm', sessionId, engineSessionId),
+      )
+      const reviewModel = panelDoc.state === 'pendingReview'
+        ? await bridgeJson<ExternalReviewRenderModelResponse>(
+            panelUrl('/qingagent-bridge/review-render-model', sessionId, engineSessionId),
+          )
+        : undefined
+      if (entry.panelLoadToken !== token) return
+      this.update(entry, {
+        ...entry.snapshot,
+        activeEngineSessionId: engineSessionId,
+        panelEngineSessionId: engineSessionId,
+        panelDoc,
+        reviewModel,
+        panelLoading: false,
+        reviewCount: reviewModel
+          ? reviewModel.suggestions.filter((suggestion) => suggestion.status === 'reviewing').length
+          : undefined,
+        saveState: { kind: 'idle' },
+        error: undefined,
+      })
+    } catch (error) {
+      if (entry.panelLoadToken !== token) return
+      this.update(entry, {
+        ...entry.snapshot,
+        panelLoading: false,
+        error: readableError(error),
+      })
+      throw error
+    }
+  }
+
+  replaceDocument(
+    sessionId: string,
+    engineSessionId: string,
+    request: ExternalDocReplaceRequest,
+  ): Promise<ExternalDocReplaceResponse> {
+    return bridgeJson(panelUrl('/qingagent-bridge/doc-pm', sessionId, engineSessionId), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+  }
+
+  reviewVerdict(
+    sessionId: string,
+    engineSessionId: string,
+    request: ExternalReviewVerdictRequest,
+  ): Promise<ExternalReviewVerdictResponse> {
+    return bridgeJson(panelUrl('/qingagent-bridge/review-verdicts', sessionId, engineSessionId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+  }
+
+  reviewCommit(
+    sessionId: string,
+    engineSessionId: string,
+    request: ExternalReviewCommitPanelRequest,
+  ): Promise<ExternalReviewCommitResponse> {
+    return bridgeJson(panelUrl('/qingagent-bridge/review-commit', sessionId, engineSessionId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+  }
+
+  setSaveState(sessionId: string, state: DocumentSaveState): void {
+    const entry = this.entry(sessionId)
+    this.update(entry, { ...entry.snapshot, saveState: state })
+  }
+
+  applySavedDocument(
+    sessionId: string,
+    engineSessionId: string,
+    doc: PmDoc,
+    response: Extract<ExternalDocReplaceResponse, { ok: true }>,
+  ): void {
+    const entry = this.entry(sessionId)
+    if (entry.snapshot.panelEngineSessionId !== engineSessionId || !entry.snapshot.panelDoc) return
+    const panelDoc: ExternalPmDocReadResponse = {
+      ...entry.snapshot.panelDoc,
+      docVersion: response.docVersion,
+      contentHash: response.contentHash,
+      ts: response.ts,
+      state: 'editing',
+      agentBusy: false,
+      pmDoc: doc,
+    }
+    this.update(entry, {
+      ...entry.snapshot,
+      panelDoc,
+      reviewModel: undefined,
+      reviewCount: undefined,
+    })
+  }
+
+  applyReviewVerdict(
+    sessionId: string,
+    engineSessionId: string,
+    patchId: string,
+    verdict: 'accepted' | 'rejected',
+  ): void {
+    const entry = this.entry(sessionId)
+    const model = entry.snapshot.reviewModel
+    if (entry.snapshot.panelEngineSessionId !== engineSessionId || !model) return
+    const reviewModel: ExternalReviewRenderModelResponse = {
+      ...model,
+      suggestions: model.suggestions.map((suggestion) =>
+        suggestion.id === patchId ? { ...suggestion, status: verdict } : suggestion),
+    }
+    this.update(entry, {
+      ...entry.snapshot,
+      reviewModel,
+      reviewCount: reviewModel.suggestions.filter((suggestion) => suggestion.status === 'reviewing').length,
+    })
+  }
+
   private entry(sessionId: string): SessionEntry {
     let entry = this.entries.get(sessionId)
     if (!entry) {
-      entry = { snapshot: EMPTY, listeners: new Set(), refs: 0, openers: new Set() }
+      entry = { snapshot: EMPTY, listeners: new Set(), refs: 0, openers: new Set(), panelLoadToken: 0 }
       this.entries.set(sessionId, entry)
     }
     return entry
@@ -192,6 +355,7 @@ export class QingClientStore {
       void this.refreshDoc(sessionId, event.engineSessionId).catch((error) => {
         this.update(entry, { ...entry.snapshot, error: readableError(error) })
       })
+      void this.refreshPanel(sessionId, event.engineSessionId).catch(() => undefined)
       return
     }
     if (event.type === 'binding-changed') {
@@ -231,6 +395,9 @@ export class QingClientStore {
           activeDoc: state.activeDoc,
           qingml: keepDraft ? entry.snapshot.qingml : state.activeDoc?.qingml ?? '',
           streaming: keepStreaming,
+          ...(entry.snapshot.panelEngineSessionId === activeEngineSessionId
+            ? {}
+            : { panelEngineSessionId: undefined, panelDoc: undefined, reviewModel: undefined }),
           error: undefined,
         })
         if (state.binding.docs.length) this.open(entry)
@@ -253,9 +420,40 @@ export class QingClientStore {
   }
 }
 
+export class BridgeHttpError extends Error {
+  constructor(readonly status: number, readonly body: ExternalErrorResponse | Record<string, unknown>) {
+    super(errorMessage(status, body))
+    this.name = 'BridgeHttpError'
+  }
+}
+
+async function bridgeJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init)
+  const body = await response.json().catch(() => undefined) as T | ExternalErrorResponse | undefined
+  if (!response.ok) {
+    throw new BridgeHttpError(response.status, isRecord(body) ? body : { error: `HTTP ${response.status}` })
+  }
+  return body as T
+}
+
+function panelUrl(path: string, dshSessionId: string, engineSessionId: string): string {
+  const query = new URLSearchParams({ dshSessionId, engineSessionId })
+  return `${path}?${query}`
+}
+
 async function responseError(response: Response): Promise<string> {
   const body = await response.json().catch(() => undefined) as { error?: string } | undefined
   return body?.error ?? `HTTP ${response.status}`
+}
+
+function errorMessage(status: number, body: ExternalErrorResponse | Record<string, unknown>): string {
+  const error = typeof body.error === 'string' ? body.error : `HTTP ${status}`
+  const nextStep = typeof body.nextStep === 'string' ? body.nextStep : ''
+  return nextStep ? `${error}（${nextStep}）` : error
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
 function readableError(error: unknown): string {

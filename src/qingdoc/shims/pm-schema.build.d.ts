@@ -4,6 +4,13 @@ export interface PmDoc {
   content: Array<Record<string, unknown>>
 }
 
+export function qingmlParse(text: string): {
+  title: string | null
+  blocks: Array<Record<string, unknown>>
+  warnings: Array<Record<string, unknown>>
+}
+export function aiIrToPm(input: { blocks: Array<Record<string, unknown>> }): PmDoc
+
 export interface DocSuggestion {
   id: string
   batchId?: string
