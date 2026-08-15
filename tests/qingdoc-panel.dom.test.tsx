@@ -85,6 +85,10 @@ function renderFixture(interactiveEditable: boolean): void {
 describe('青简 DocumentSnapshotView fixture', () => {
   it('面板根建立独立 stacking context，内部浮层不越过 dsh 兄弟层', () => {
     expect(getComputedStyle(host).isolation).toBe('isolate')
+    const patchNav = document.createElement('nav')
+    patchNav.className = 'patch-nav'
+    host.append(patchNav)
+    expect(getComputedStyle(patchNav).position).toBe('fixed')
   })
 
   it('编辑与只读复用同一 .wf-doc.ProseMirror，并保真挂出结构 NodeView', async () => {

@@ -342,12 +342,12 @@ ${panelRoot} .qingdoc-open {
   white-space: nowrap;
 }`
 
-const patchNavGlue = `/* dsh 的外层可能建立 transform/contain 坐标系。PatchNav 提升为面板根直接子节点后，
-   只把定位参照改为面板可视区；审阅条自身的尺寸与视觉声明仍沿用青简。 */
+const patchNavGlue = `/* PatchNav portal 到面板根直属子节点；保持 fixed 与青简的视口定位几何。
+   面板根的 isolation 只限定层级，不应改变 fixed 的 containing block。 */
 ${workspaceRoot} > .patch-nav {
-  position: absolute !important;
-  left: max(12px, calc(var(--panel-doc-left, 0px) + 64px));
-  right: max(12px, calc(var(--panel-doc-right, 0px) + 64px));
+  position: fixed !important;
+  left: max(12px, calc(var(--doc-left, 0px) + 64px));
+  right: max(12px, calc(100vw - var(--doc-right, 100%) + 64px));
   top: auto !important;
   bottom: var(--ws-float-bar-bottom);
 }`

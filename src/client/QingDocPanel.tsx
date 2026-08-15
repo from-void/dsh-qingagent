@@ -254,11 +254,8 @@ export function QingDocPanel(props: QingDocPanelProps) {
       ?? root?.querySelector<HTMLElement>('.ws-paper-shell')
     if (!root || !paper) return
     const rect = paper.getBoundingClientRect()
-    const rootRect = root.getBoundingClientRect()
     root.style.setProperty('--doc-left', `${rect.left}px`)
     root.style.setProperty('--doc-right', `${rect.right}px`)
-    root.style.setProperty('--panel-doc-left', `${Math.max(0, rect.left - rootRect.left)}px`)
-    root.style.setProperty('--panel-doc-right', `${Math.max(0, rootRect.right - rect.right)}px`)
   }, [])
 
   useEffect(() => {
