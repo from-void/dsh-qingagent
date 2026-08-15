@@ -4,11 +4,13 @@ import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
 import { DocumentSnapshotView } from '@qingweb/pages/workspace/components/DocumentSnapshotView'
+import { PatchNav } from '@qingweb/pages/workspace/components/PatchNav'
 import { EMPTY_PM_DOC, type DocWriteBaseline } from '@qingweb/pages/workspace/data/docWriteBaseline'
 import { pmDocToViewDocumentSnapshot } from '@qingweb/pages/workspace/data/protocol'
 import type { PmDoc } from '@qingagent/pm-schema'
 import { DocumentSaveCoordinator, type DocumentSaveState } from './documentSaveCoordinator.js'
 import { createQingmlCompileThrottle, type QingmlCompileThrottle } from './streamingDocument.js'
+import { buildReviewPresentationModel } from './reviewPresentation.js'
 import { qingClientStore } from './store.js'
 import '../qingdoc/qingdoc.css'
 
@@ -28,9 +30,12 @@ export function QingDocPanel(props: QingDocPanelProps) {
   )
   const [toast, setToast] = useState<string | null>(null)
   const [streamingPmDoc, setStreamingPmDoc] = useState<PmDoc | null>(null)
+  const [activeReviewTargetId, setActiveReviewTargetId] = useState<string | null>(null)
+  const [reviewSubmitting, setReviewSubmitting] = useState(false)
   const rootRef = useRef<HTMLElement>(null)
   const saveCoordinatorRef = useRef<DocumentSaveCoordinator | null>(null)
   const compileThrottleRef = useRef<QingmlCompileThrottle | null>(null)
+  const autoCommitKeyRef = useRef<string | null>(null)
 
   useEffect(
     () => qingClientStore.retain(sessionId, () => props.qingLayout.openDetails()),
@@ -152,16 +157,20 @@ export function QingDocPanel(props: QingDocPanelProps) {
     !saveLocked &&
     (panelDoc.state === 'editing' || panelDoc.state === 'empty'),
   )
-  const surfacePmDoc = streamingPmDoc
-    ?? (pendingReview ? snapshot.reviewModel?.previewDoc : undefined)
-    ?? panelDoc?.pmDoc
-    ?? EMPTY_PM_DOC
+  const reviewPresentation = useMemo(
+    () => panelDoc && snapshot.reviewModel
+      ? buildReviewPresentationModel(panelDoc, snapshot.reviewModel)
+      : null,
+    [panelDoc, snapshot.reviewModel],
+  )
+  const surfacePmDoc = streamingPmDoc ?? panelDoc?.pmDoc ?? EMPTY_PM_DOC
   const surfaceVersion = pendingReview
     ? snapshot.reviewModel?.baseVersion ?? panelDoc?.docVersion ?? 0
     : panelDoc?.docVersion ?? 0
   const surfaceDoc = useMemo(
-    () => pmDocToViewDocumentSnapshot(surfacePmDoc, surfaceVersion, panelDoc?.ts ?? ''),
-    [panelDoc?.ts, surfacePmDoc, surfaceVersion],
+    () => reviewPresentation?.doc
+      ?? pmDocToViewDocumentSnapshot(surfacePmDoc, surfaceVersion, panelDoc?.ts ?? ''),
+    [panelDoc?.ts, reviewPresentation?.doc, surfacePmDoc, surfaceVersion],
   )
 
   const handleEditorChange = useCallback((doc: PmDoc, baseline?: DocWriteBaseline) => {
@@ -169,7 +178,108 @@ export function QingDocPanel(props: QingDocPanelProps) {
     return saveCoordinatorRef.current.enqueue(doc, baseline)
   }, [])
 
-  const reviewCount = snapshot.reviewCount ?? 0
+  const visibleReviewTargets = reviewPresentation?.visibleReviewTargets ?? []
+  const visibleReviewTargetIds = useMemo(
+    () => visibleReviewTargets.map((target) => target.id),
+    [visibleReviewTargets],
+  )
+  useEffect(() => {
+    if (!pendingReview || visibleReviewTargetIds.length === 0) {
+      setActiveReviewTargetId(null)
+      return
+    }
+    if (activeReviewTargetId && visibleReviewTargetIds.includes(activeReviewTargetId)) return
+    setActiveReviewTargetId(visibleReviewTargetIds[0] ?? null)
+  }, [activeReviewTargetId, pendingReview, visibleReviewTargetIds])
+
+  const jumpReview = useCallback((direction: -1 | 1) => {
+    if (!visibleReviewTargetIds.length) return
+    const current = activeReviewTargetId ? visibleReviewTargetIds.indexOf(activeReviewTargetId) : -1
+    const next = direction > 0
+      ? visibleReviewTargetIds[Math.min(current + 1, visibleReviewTargetIds.length - 1)]
+      : visibleReviewTargetIds[Math.max(0, current < 0 ? 0 : current - 1)]
+    if (!next) return
+    setActiveReviewTargetId(next)
+    const root = rootRef.current
+    const element = root?.querySelector(reviewTargetSelector(next))
+    element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [activeReviewTargetId, visibleReviewTargetIds])
+
+  const handleReviewVerdict = useCallback(async (
+    patchId: string,
+    verdict: 'accepted' | 'rejected',
+  ) => {
+    if (!activeEngineSessionId || !panelDoc || reviewSubmitting) return
+    setReviewSubmitting(true)
+    try {
+      await qingClientStore.reviewVerdict(sessionId, activeEngineSessionId, {
+        expectedDocVersion: panelDoc.docVersion,
+        patchId,
+        verdict,
+      })
+      qingClientStore.applyReviewVerdict(sessionId, activeEngineSessionId, patchId, verdict)
+      setToast(verdict === 'accepted' ? '已保留这处改动' : '已取消这处改动')
+    } catch (error) {
+      console.error('[qingagent-panel] review verdict failed', error)
+      setToast('操作失败 · 请重试')
+      void qingClientStore.refreshPanel(sessionId, activeEngineSessionId).catch(() => undefined)
+    } finally {
+      setReviewSubmitting(false)
+    }
+  }, [activeEngineSessionId, panelDoc, reviewSubmitting, sessionId])
+
+  const handleReviewCommit = useCallback(async (
+    action: 'commit' | 'accept_all' | 'reject_all',
+  ) => {
+    if (!activeEngineSessionId || !panelDoc || reviewSubmitting) return
+    setReviewSubmitting(true)
+    try {
+      await qingClientStore.reviewCommit(sessionId, activeEngineSessionId, {
+        expectedDocVersion: panelDoc.docVersion,
+        action,
+      })
+      setToast(action === 'reject_all' ? '已放弃本轮修改' : '修改已提交')
+      await Promise.all([
+        qingClientStore.refreshDoc(sessionId, activeEngineSessionId),
+        qingClientStore.refreshPanel(sessionId, activeEngineSessionId),
+      ])
+    } catch (error) {
+      console.error('[qingagent-panel] review commit failed', error)
+      autoCommitKeyRef.current = null
+      setToast('提交失败 · 候选已保留，请重试')
+      void qingClientStore.refreshPanel(sessionId, activeEngineSessionId).catch(() => undefined)
+    } finally {
+      setReviewSubmitting(false)
+    }
+  }, [activeEngineSessionId, panelDoc, reviewSubmitting, sessionId])
+
+  const reviewStatusKey = snapshot.reviewModel?.suggestions
+    .map((suggestion) => `${suggestion.id}:${suggestion.status}`)
+    .join('|') ?? ''
+  useEffect(() => {
+    const suggestions = snapshot.reviewModel?.suggestions ?? []
+    if (!pendingReview || suggestions.length === 0) {
+      autoCommitKeyRef.current = null
+      return
+    }
+    if (reviewSubmitting || suggestions.some((suggestion) => suggestion.status === 'reviewing')) return
+    const key = `${activeEngineSessionId ?? ''}:${panelDoc?.docVersion ?? -1}:${reviewStatusKey}`
+    if (autoCommitKeyRef.current === key) return
+    autoCommitKeyRef.current = key
+    void handleReviewCommit('commit')
+  }, [
+    activeEngineSessionId,
+    handleReviewCommit,
+    panelDoc?.docVersion,
+    pendingReview,
+    reviewStatusKey,
+    reviewSubmitting,
+    snapshot.reviewModel?.suggestions,
+  ])
+
+  const reviewCount = reviewPresentation
+    ? visibleReviewTargets.length
+    : snapshot.reviewCount ?? 0
   const title = panelDoc?.title || snapshot.activeDoc?.title || activeBound?.title || '未命名文稿'
   const status = panelStatus({
     busy,
@@ -242,15 +352,43 @@ export function QingDocPanel(props: QingDocPanelProps) {
         <main className="ws-right">
           <div className="ws-paper-shell" data-wf="WorkspacePaperShell" aria-hidden="true" />
           <div className="ws-document-content" data-wf="WorkspaceHydrationDocumentContent">
+            {pendingReview && snapshot.reviewModel?.suggestions.length ? (
+              <PatchNav
+                remainingCount={visibleReviewTargets.length}
+                totalCount={visibleReviewTargets.length}
+                activePatchIndex={activeReviewTargetId
+                  ? visibleReviewTargetIds.indexOf(activeReviewTargetId)
+                  : -1}
+                isSubmitting={reviewSubmitting}
+                unrenderableOnly={visibleReviewTargets.length === 0}
+                onJumpPrev={() => jumpReview(-1)}
+                onJumpNext={() => jumpReview(1)}
+                onRejectAll={() => { void handleReviewCommit('reject_all') }}
+                onCommit={() => handleReviewCommit('commit')}
+              />
+            ) : null}
             <DocumentSnapshotView
               doc={surfaceDoc}
               docId={activeEngineSessionId ? `dsh:${activeEngineSessionId}` : `dsh:${sessionId}:empty`}
               editable
               interactiveEditable={interactiveEditable}
               deferBlockIdNormalization={pendingReview}
-              showPatches={false}
-              acceptedPatches={EMPTY_PATCH_IDS}
-              rejectedPatches={EMPTY_PATCH_IDS}
+              showPatches={pendingReview && Boolean(reviewPresentation?.applied.length)}
+              acceptedPatches={reviewPresentation?.acceptedIds ?? EMPTY_PATCH_IDS}
+              rejectedPatches={reviewPresentation?.rejectedIds ?? EMPTY_PATCH_IDS}
+              onPatchVerdict={(patchId: string, verdict: 'accepted' | 'rejected') => {
+                void handleReviewVerdict(patchId, verdict)
+              }}
+              patchMeta={reviewPresentation?.patchMeta}
+              activePatchId={reviewPresentation?.visibleReviewTargets.find(
+                (target) => target.id === activeReviewTargetId,
+              )?.patchId ?? null}
+              reviewSuggestions={reviewPresentation?.suggestions}
+              reviewOverlayInputs={reviewPresentation?.overlayInputs}
+              reviewBlockPatches={reviewPresentation?.blockPatchInputs}
+              reviewAppliedPatches={reviewPresentation?.applied}
+              reviewTargets={reviewPresentation?.reviewTargets}
+              activeReviewTargetId={activeReviewTargetId}
               onEditorChange={interactiveEditable ? handleEditorChange : undefined}
               onToast={setToast}
             />
@@ -260,6 +398,13 @@ export function QingDocPanel(props: QingDocPanelProps) {
       {toast ? <div className="qingdoc-toast" role="status">{toast}</div> : null}
     </section>
   )
+}
+
+function reviewTargetSelector(targetId: string): string {
+  const escape = typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+    ? CSS.escape
+    : (value: string) => value.replace(/["\\]/g, '\\$&')
+  return `[data-review-target-id="${escape(targetId)}"],[data-patch-id="${escape(targetId)}"]:not(.wf-patch-del)`
 }
 
 function panelStatus(input: {

@@ -34,6 +34,7 @@ export interface DocSuggestion {
   diffHunk?: Record<string, unknown>
   summary: string
   conflict?: Record<string, unknown>
+  kind?: 'revision' | 'annotation'
 }
 
 export interface ExternalPmDocReadResponse {
