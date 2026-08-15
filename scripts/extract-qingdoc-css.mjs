@@ -437,10 +437,12 @@ ${panelRoot} .qingdoc-open {
   white-space: nowrap;
 }
 ${panelRoot} .qingdoc-open-icon {
-  width: 14px;
-  height: 14px;
-  margin: 0 4px;
-  border-radius: 4px;
+  width: 18px;
+  height: 18px;
+  margin: 0 5px;
+  border-radius: 5px;
+  /* 图标自带深蓝方章底,在墨条上须描一圈暖纸边才看得清 */
+  box-shadow: 0 0 0 1px rgba(236, 227, 208, .45);
   flex: 0 0 auto;
 }`
 
