@@ -29,6 +29,7 @@ const sources = [
 
 const hostGlue = `/* dsh 面板薄胶水：只建立青简纸面所需的唯一根与原 DOM 骨架。 */
 ${panelRoot} {
+  isolation: isolate;
   position: relative;
   display: flex;
   flex-direction: column;
