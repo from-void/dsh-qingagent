@@ -435,6 +435,13 @@ ${panelRoot} .qingdoc-open {
   padding: 0 8px;
   text-decoration: none;
   white-space: nowrap;
+}
+${panelRoot} .qingdoc-open-icon {
+  width: 14px;
+  height: 14px;
+  margin: 0 4px;
+  border-radius: 4px;
+  flex: 0 0 auto;
 }`
 
 const patchNavGlue = `/* PatchNav portal 到面板根直属子节点；保持 fixed 与青简的视口定位几何。

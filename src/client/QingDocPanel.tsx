@@ -33,6 +33,7 @@ import { createQingmlCompileThrottle, type QingmlCompileThrottle } from './strea
 import { buildReviewPresentationModel } from './reviewPresentation.js'
 import { installDetailsColumnWidth } from './detailsWidth.js'
 import { decideIncomingPanelDocument } from './incomingPanelDocument.js'
+import { QINGJIAN_ICON_DATA_URI } from './qingjianIcon.js'
 import { BridgeHttpError, qingClientStore } from './store.js'
 import '../qingdoc/qingdoc.css'
 
@@ -667,7 +668,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
             <a
               className="qingdoc-open"
               href={`qingjian://open?engineSessionId=${encodeURIComponent(activeEngineSessionId)}`}
-            >在青简中打开 ↗</a>
+            >在青简<img className="qingdoc-open-icon" src={QINGJIAN_ICON_DATA_URI} alt="" />中打开 ↗</a>
           ) : null}
           <button
             className="qingdoc-close"

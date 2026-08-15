@@ -231,6 +231,13 @@
   text-decoration: none;
   white-space: nowrap;
 }
+[data-qingagent-doc-panel] .qingdoc-open-icon {
+  width: 14px;
+  height: 14px;
+  margin: 0 4px;
+  border-radius: 4px;
+  flex: 0 0 auto;
+}
 [data-qingagent-doc-panel] .qingdoc-close {
   min-height: 28px;
   padding: 0 8px;
