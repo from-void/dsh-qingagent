@@ -74,6 +74,16 @@ export class DocumentSaveCoordinator {
 
   getState(): DocumentSaveState { return this.state }
 
+  getWriteActivity(engineSessionId: string): {
+    pendingDocWrite: boolean
+    queuedDocWrite: boolean
+  } {
+    return {
+      pendingDocWrite: this.current?.engineSessionId === engineSessionId,
+      queuedDocWrite: this.queued?.engineSessionId === engineSessionId,
+    }
+  }
+
   enqueue(engineSessionId: string, doc: PmDoc, baseline: DocWriteBaseline): Promise<void> {
     if (this.disposed) return Promise.reject(new Error('保存协调器已释放'))
     const promise = new Promise<void>((resolve, reject) => {

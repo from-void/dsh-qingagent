@@ -13,6 +13,7 @@ describe('青简纸面移植契约', () => {
     const declarations = css.replace(/\/\*[\s\S]*?\*\//g, '')
 
     expect(panelSource).toContain("'--ws-paper-column-width': '800px'")
+    expect(panelSource).toContain('id="view-workspace"')
     expect(css).toContain('--bg-paper-deep: #efe7d6;')
     expect(css).toContain('--font-zh-serif: "Noto Serif SC"')
     expect(css).toContain('--r: 0;')

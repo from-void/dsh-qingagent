@@ -15,6 +15,7 @@ import { DocumentSaveCoordinator, type DocumentSaveState } from './documentSaveC
 import { createQingmlCompileThrottle, type QingmlCompileThrottle } from './streamingDocument.js'
 import { buildReviewPresentationModel } from './reviewPresentation.js'
 import { installDetailsColumnWidth } from './detailsWidth.js'
+import { decideIncomingPanelDocument } from './incomingPanelDocument.js'
 import { qingClientStore } from './store.js'
 import '../qingdoc/qingdoc.css'
 
@@ -43,6 +44,8 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const saveCoordinatorRef = useRef<DocumentSaveCoordinator | null>(null)
   const compileThrottleRef = useRef<QingmlCompileThrottle | null>(null)
   const autoCommitKeyRef = useRef<string | null>(null)
+  const snapshotRef = useRef(snapshot)
+  snapshotRef.current = snapshot
 
   useEffect(
     () => qingClientStore.retain(sessionId, () => props.qingLayout.openDetails()),
@@ -142,6 +145,48 @@ export function QingDocPanel(props: QingDocPanelProps) {
       })
     }
   }, [sessionId])
+
+  useEffect(() => qingClientStore.registerPanelRefreshGuard(sessionId, {
+    beforeApply: async (engineSessionId, incomingPanelDoc) => {
+      const currentSnapshot = snapshotRef.current
+      if (currentSnapshot.saveState?.kind === 'conflict') return false
+      const mountedEngineSessionId = editorEngineSessionIdRef.current
+      if (!mountedEngineSessionId || mountedEngineSessionId !== engineSessionId) {
+        await flushPendingDocSave()
+        return true
+      }
+      const handle = docViewRef.current ?? lastDocViewHandleRef.current
+      if (!handle || !incomingPanelDoc.pmDoc) return true
+      let decision
+      try {
+        decision = await decideIncomingPanelDocument({
+          handle,
+          panelDoc: incomingPanelDoc,
+          activity: () => saveCoordinatorRef.current?.getWriteActivity(engineSessionId) ?? {
+            pendingDocWrite: false,
+            queuedDocWrite: false,
+          },
+          reviewActive: currentSnapshot.panelDoc?.state === 'pendingReview',
+          reviewBaseVersion: currentSnapshot.reviewModel?.baseVersion,
+          afterFlush: () => new Promise((resolve) => window.setTimeout(resolve, 0)),
+        })
+      } catch (error) {
+        console.warn('[qingagent-panel] local save failed before authoritative refresh', error)
+        return false
+      }
+      if (decision.kind === 'apply') return true
+      if (decision.kind === 'reconcile') return false
+      if (decision.kind === 'conflict') {
+        const expected = currentSnapshot.panelDoc?.docVersion ?? 0
+        const actual = incomingPanelDoc.docVersion
+        const message = `保存冲突：文稿已从 v${expected} 更新到 v${actual}，已暂停编辑以保护两边内容。`
+        qingClientStore.setSaveState(sessionId, { kind: 'conflict', expected, actual, message })
+        setToast('文档已被更新 · 已暂停编辑')
+        return false
+      }
+      return false
+    },
+  }), [flushPendingDocSave, sessionId])
 
   useEffect(() => {
     const handleToast = (event: Event) => setToast((event as CustomEvent<string>).detail)
@@ -373,6 +418,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
   return (
     <section
       ref={rootRef}
+      id="view-workspace"
       data-qingagent-doc-panel
       data-view="workspace"
       data-wf="WorkspacePage"

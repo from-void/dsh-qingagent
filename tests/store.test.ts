@@ -120,4 +120,40 @@ describe('QingClientStore 生成终态', () => {
       '/qingagent-bridge/review-render-model?dshSessionId=dsh-1&engineSessionId=qing-1',
     ])
   })
+
+  it('权威 PM 刷新必须等 dirty guard 放行后才能替换 panelDoc', async () => {
+    const oldPm = { type: 'doc', attrs: { schemaVersion: 1 }, content: [] }
+    const incomingPm = {
+      type: 'doc', attrs: { schemaVersion: 1 },
+      content: [{ type: 'paragraph', attrs: { blockId: 'remote' }, content: [{ type: 'text', text: 'Agent 落稿' }] }],
+    }
+    const store = new QingClientStore()
+    let responsePm = oldPm
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      sessionId: 'qing-1', docVersion: responsePm === oldPm ? 1 : 2,
+      contentHash: responsePm === oldPm ? 'hash-1' : 'hash-2', state: 'editing',
+      agentBusy: false, title: 'Agent 稿', ts: 't2', pmDoc: responsePm,
+    })))
+    await store.refreshPanel('dsh-dirty', 'qing-1')
+
+    const release = deferred<boolean>()
+    const beforeApply = vi.fn(() => release.promise)
+    store.registerPanelRefreshGuard('dsh-dirty', { beforeApply })
+    responsePm = incomingPm
+
+    const loading = store.refreshPanel('dsh-dirty', 'qing-1')
+    await vi.waitFor(() => expect(beforeApply).toHaveBeenCalledTimes(1))
+    expect(store.getSnapshot('dsh-dirty').panelDoc?.pmDoc).toEqual(oldPm)
+    expect(store.getSnapshot('dsh-dirty').panelLoading).toBe(true)
+
+    release.resolve(true)
+    await loading
+    expect(store.getSnapshot('dsh-dirty').panelDoc?.pmDoc).toEqual(incomingPm)
+  })
 })
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise })
+  return { promise, resolve }
+}

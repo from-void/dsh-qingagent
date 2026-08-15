@@ -42,6 +42,12 @@ interface SessionEntry {
   openers: Set<() => void>
   loading?: Promise<void>
   panelLoadToken: number
+  panelRefreshGuard?: PanelRefreshGuard
+}
+
+export interface PanelRefreshGuard {
+  beforeApply(engineSessionId: string, panelDoc: ExternalPmDocReadResponse): Promise<boolean>
+  afterApply?(engineSessionId: string, panelDoc: ExternalPmDocReadResponse): void
 }
 
 const EMPTY: QingClientSnapshot = {
@@ -83,6 +89,14 @@ export class QingClientStore {
         entry.source?.close()
         entry.source = undefined
       }
+    }
+  }
+
+  registerPanelRefreshGuard(sessionId: string, guard: PanelRefreshGuard): () => void {
+    const entry = this.entry(sessionId)
+    entry.panelRefreshGuard = guard
+    return () => {
+      if (entry.panelRefreshGuard === guard) entry.panelRefreshGuard = undefined
     }
   }
 
@@ -144,6 +158,17 @@ export class QingClientStore {
           )
         : undefined
       if (entry.panelLoadToken !== token) return
+      const shouldApply = await (entry.panelRefreshGuard?.beforeApply(engineSessionId, panelDoc)
+        ?? Promise.resolve(true))
+      if (entry.panelLoadToken !== token) return
+      if (!shouldApply) {
+        this.update(entry, {
+          ...entry.snapshot,
+          panelLoading: false,
+          error: undefined,
+        })
+        return
+      }
       this.update(entry, {
         ...entry.snapshot,
         activeEngineSessionId: engineSessionId,
@@ -160,6 +185,7 @@ export class QingClientStore {
         saveState: { kind: 'idle' },
         error: undefined,
       })
+      entry.panelRefreshGuard?.afterApply?.(engineSessionId, panelDoc)
     } catch (error) {
       if (entry.panelLoadToken !== token) return
       this.update(entry, {

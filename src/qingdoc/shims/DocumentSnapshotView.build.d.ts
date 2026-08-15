@@ -1,8 +1,18 @@
-import type { ComponentType } from 'react'
+import type { ComponentType, ForwardRefExoticComponent, RefAttributes } from 'react'
 import type { DocSuggestion, PmDoc } from '@qingagent/contract-ts'
 
 /** declaration-only facade；运行时由 tsdown alias 直连青简源码。 */
-export const DocumentSnapshotView: ComponentType<Record<string, unknown>>
+export interface DocumentSnapshotViewHandle {
+  getInnerHtml(): string
+  getLastPresentationRun(): unknown
+  hasLocalDocumentChanges(): boolean
+  canSafelyApplyIncomingDocument(doc: PmDoc): boolean
+  compareIncomingDocument(doc: PmDoc): 'equivalent' | 'different' | 'unavailable'
+  flushPendingDocSave(): Promise<void>
+}
+export const DocumentSnapshotView: ForwardRefExoticComponent<
+  Record<string, unknown> & RefAttributes<DocumentSnapshotViewHandle>
+>
 export interface PatchNavProps {
   remainingCount: number
   totalCount: number
@@ -31,6 +41,23 @@ export function classifyDocSaveError(error: unknown): 'transient' | 'fatal'
 export const TRANSIENT_DOC_SAVE_TOAST: string
 export function createClientMutationId(): string
 export function pmDocHasSubstantiveContent(doc: PmDoc): boolean
+export type DocumentFrameDecision =
+  | { kind: 'apply' }
+  | { kind: 'reconcile'; reason: string }
+  | { kind: 'defer'; reason: string }
+  | { kind: 'conflict'; reason: string }
+export function decideBroadcastDocumentFrame(input: {
+  frame: unknown
+  editorDirty: boolean
+  pendingDocWrite: boolean
+  queuedDocWrite: boolean
+  scheduledDocWrite: boolean
+  incomingDocumentMatchesEditor?: boolean
+  incomingDocumentComparisonUnavailable?: boolean
+  reviewActive?: boolean
+  reviewBaseVersion?: number | null
+  afterDeferredDrain?: boolean
+}): DocumentFrameDecision
 
 export interface ViewDocumentSnapshot {
   version: number
