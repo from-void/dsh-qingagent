@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DocWriteBaseline } from '@qingweb/pages/workspace/data/docWriteBaseline'
 import type { PmDoc } from '../src/contracts.js'
-import { QingDocPanel, type QingDocPanelProps } from '../src/client/QingDocPanel.js'
+import { panelStatus, QingDocPanel, type QingDocPanelProps } from '../src/client/QingDocPanel.js'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -163,24 +163,84 @@ describe('QingDocPanel 保存生命周期', () => {
   it('切换文稿会先 flush 旧 timer，旧正文不得写入新文稿', async () => {
     const fetchMock = installBridgeFetch('dsh-switch', ['qing-a', 'qing-b'])
     renderPanel('dsh-switch')
-    await vi.waitFor(() => expect(document.querySelector<HTMLSelectElement>('.qingdoc-doc-select')).not.toBeNull())
+    await vi.waitFor(() => expect(
+      document.querySelector<HTMLButtonElement>('.qingdoc-doc-trigger')?.textContent,
+    ).toContain('qing-a'))
 
     viewHarness.pending = {
       doc: EDITED_PM,
       baseline: { expectedDocumentSnapshot: 0, baseContentHash: 'hash-0', baseHasSubstantiveContent: false },
     }
-    const select = document.querySelector<HTMLSelectElement>('.qingdoc-doc-select')!
     await act(async () => {
-      select.value = 'qing-b'
-      select.dispatchEvent(new Event('change', { bubbles: true }))
+      document.querySelector<HTMLButtonElement>('.qingdoc-doc-trigger')?.click()
+    })
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[role="option"][aria-label^="qing-b"]')?.click()
     })
 
     await vi.waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true))
+    await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([, init]) =>
+      init?.method === 'PUT' && String(init.body).includes('刚输入的正文'))).toHaveLength(1))
     const editedPuts = fetchMock.mock.calls.filter(([, init]) =>
       init?.method === 'PUT' && String(init.body).includes('刚输入的正文'))
     expect(editedPuts).toHaveLength(1)
     expect(String(editedPuts[0]?.[0])).toContain('engineSessionId=qing-a')
     expect(String(editedPuts[0]?.[0])).not.toContain('engineSessionId=qing-b')
+  })
+
+  it('文稿标题触发器恒显，并支持打开、Esc 与外点关闭', async () => {
+    installBridgeFetch('dsh-switcher-close', ['唯一文稿'])
+    renderPanel('dsh-switcher-close')
+    const trigger = await vi.waitFor(() => {
+      const candidate = document.querySelector<HTMLButtonElement>('.qingdoc-doc-trigger')
+      expect(candidate?.textContent).toContain('唯一文稿▾')
+      return candidate!
+    })
+
+    await act(async () => { trigger.click() })
+    expect(trigger.getAttribute('aria-haspopup')).toBe('listbox')
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    expect(document.querySelector('[role="listbox"]')).not.toBeNull()
+
+    await act(async () => {
+      trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(document.querySelector('[role="listbox"]')).toBeNull()
+
+    await act(async () => { trigger.click() })
+    await act(async () => {
+      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    })
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(document.querySelector('[role="listbox"]')).toBeNull()
+  })
+
+  it('上下键移动文稿选项，回车调用既有 focus', async () => {
+    const fetchMock = installBridgeFetch('dsh-switcher-keyboard', ['qing-a', 'qing-b'])
+    renderPanel('dsh-switcher-keyboard')
+    const trigger = await vi.waitFor(() => {
+      const candidate = document.querySelector<HTMLButtonElement>('.qingdoc-doc-trigger')
+      expect(candidate?.textContent).toContain('qing-a')
+      return candidate!
+    })
+
+    await act(async () => {
+      trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    })
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    await act(async () => {
+      trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    })
+    expect(document.querySelector('[role="option"][aria-label^="qing-b"]')?.getAttribute('data-focused'))
+      .toBe('true')
+    await act(async () => {
+      trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    })
+
+    await vi.waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) =>
+      url === '/qingagent-bridge/focus' && init?.method === 'POST' && String(init.body).includes('qing-b'),
+    )).toBe(true))
   })
 
   it('自动提交失败后进入 retryOnly，且不会继续自动重发', async () => {
@@ -312,6 +372,37 @@ describe('QingDocPanel 保存生命周期', () => {
     })
 
     await vi.waitFor(() => expect(panelReadCalls(fetchMock)).toBeGreaterThan(before))
+  })
+})
+
+describe('QingDocPanel 顶栏状态', () => {
+  const base = {
+    busy: false,
+    blocks: 3,
+    words: 128,
+    pendingReview: false,
+    reviewCount: 2,
+    showSaving: false,
+  }
+
+  it('稳态静默，保存中超过 500ms 后才显示', () => {
+    expect(panelStatus({ ...base, saveState: { kind: 'idle' } })).toBe('')
+    expect(panelStatus({ ...base, saveState: { kind: 'saved', version: 4 } })).toBe('')
+    expect(panelStatus({ ...base, saveState: { kind: 'saving' } })).toBe('')
+    expect(panelStatus({ ...base, saveState: { kind: 'saving' }, showSaving: true })).toBe('保存中…')
+  })
+
+  it('只报告写作、审阅和保存异常', () => {
+    expect(panelStatus({ ...base, busy: true, saveState: { kind: 'idle' } })).toBe('写作中·3块·约128字')
+    expect(panelStatus({ ...base, pendingReview: true, saveState: { kind: 'idle' } })).toBe('审阅中·2处')
+    expect(panelStatus({ ...base, saveState: { kind: 'conflict', expected: 1, actual: 2, message: '' } }))
+      .toBe('保存冲突·已暂停编辑')
+    expect(panelStatus({ ...base, saveState: { kind: 'blocked', code: 'AGENT_BUSY', message: '' } }))
+      .toBe('青简处理中')
+    expect(panelStatus({ ...base, saveState: { kind: 'error', message: '', transient: true } }))
+      .toBe('网络不稳·等待重存')
+    expect(panelStatus({ ...base, saveState: { kind: 'error', message: '', transient: false } }))
+      .toBe('保存失败')
   })
 })
 

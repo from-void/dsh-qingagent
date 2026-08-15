@@ -78,6 +78,27 @@ describe('青简纸面移植契约', () => {
     expect(css).toMatch(/:is\(\[data-qingagent-doc-panel\], #qingagent-doc-panel-specificity\) \.ws-right \{[\s\S]*?overflow-y: auto;/)
   })
 
+  it('文稿切换器使用自定义 listbox 与 dsh 语义色', async () => {
+    const [css, panelSource] = await Promise.all([
+      readFile(resolve('src/qingdoc/qingdoc.css'), 'utf8'),
+      readFile(resolve('src/client/QingDocPanel.tsx'), 'utf8'),
+    ])
+    const switcherStyles = css.slice(
+      css.indexOf('[data-qingagent-doc-panel] .qingdoc-doc-switcher'),
+      css.indexOf('[data-qingagent-doc-panel] .qingdoc-status'),
+    )
+
+    expect(panelSource).not.toContain('<select')
+    expect(panelSource).toContain('aria-haspopup="listbox"')
+    expect(panelSource).toContain('aria-expanded={open}')
+    expect(panelSource).toContain('role="option"')
+    expect(css).not.toContain('.qingdoc-doc-select')
+    expect(switcherStyles).not.toMatch(/#[\da-f]{3,8}\b|rgba?\s*\(/i)
+    const variables = [...switcherStyles.matchAll(/var\(\s*(--[\w-]+)/g)].map((match) => match[1])
+    expect(variables.length).toBeGreaterThan(0)
+    expect(variables.every((variable) => variable?.startsWith('--dsw-alias-'))).toBe(true)
+  })
+
   it('workspace scope 保留青简 #view-workspace 的 ID 权重', async () => {
     const [css, generator] = await Promise.all([
       readFile(resolve('src/qingdoc/qingdoc.css'), 'utf8'),

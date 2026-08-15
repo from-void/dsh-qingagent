@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties } from 'react'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
 import type { Editor } from '@tiptap/react'
+import type { BridgeDocument } from '../contracts.js'
 import {
   DocumentSnapshotView,
   type DocumentSnapshotViewHandle,
@@ -50,6 +51,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
     () => qingClientStore.getSnapshot(sessionId),
   )
   const [toast, setToast] = useState<string | null>(null)
+  const [showSavingStatus, setShowSavingStatus] = useState(false)
   const [streamingPmDoc, setStreamingPmDoc] = useState<PmDoc | null>(null)
   const [activeReviewTargetId, setActiveReviewTargetId] = useState<string | null>(null)
   const [reviewSubmitting, setReviewSubmitting] = useState(false)
@@ -150,7 +152,6 @@ export function QingDocPanel(props: QingDocPanelProps) {
       },
       onStateChange: (state) => {
         qingClientStore.setSaveState(sessionId, state)
-        if (state.kind === 'conflict') setToast('文档已被更新 · 已暂停编辑')
         const engineSessionId = editorEngineSessionIdRef.current
         if (state.kind === 'blocked' && engineSessionId) {
           void qingClientStore.refreshPanel(sessionId, engineSessionId).catch(() => undefined)
@@ -217,7 +218,6 @@ export function QingDocPanel(props: QingDocPanelProps) {
           'streamConflict',
         )
         qingClientStore.setSaveState(sessionId, { kind: 'conflict', expected, actual, message })
-        setToast('文档已被更新 · 已暂停编辑')
         return false
       }
       return false
@@ -299,6 +299,14 @@ export function QingDocPanel(props: QingDocPanelProps) {
   ))
   const busy = snapshot.streaming || panelDoc?.agentBusy === true || activeBound?.agentBusy === true
   const saveState = snapshot.saveState ?? ({ kind: 'idle' } satisfies DocumentSaveState)
+  useEffect(() => {
+    if (saveState.kind !== 'saving') {
+      setShowSavingStatus(false)
+      return
+    }
+    const timer = window.setTimeout(() => setShowSavingStatus(true), 500)
+    return () => window.clearTimeout(timer)
+  }, [saveState.kind])
   const saveLocked = saveState.kind === 'conflict' || saveState.kind === 'blocked'
   const interactiveEditable = Boolean(
     panelDoc &&
@@ -575,8 +583,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
     pendingReview,
     reviewCount,
     saveState,
-    version: panelDoc?.docVersion,
-    loading: snapshot.panelLoading === true && !panelDoc,
+    showSaving: showSavingStatus,
   })
   const openUrl = activeEngineSessionId
     ? `qingjian://open?engineSessionId=${encodeURIComponent(activeEngineSessionId)}`
@@ -645,22 +652,17 @@ export function QingDocPanel(props: QingDocPanelProps) {
       <header className="qingdoc-stage-controls">
         <div className="qingdoc-heading">
           <span className="qingdoc-brand">青简</span>
-          <strong className="qingdoc-stage-title" title={title}>{title}</strong>
+          <QingDocSwitcher
+            docs={docs}
+            activeEngineSessionId={activeEngineSessionId}
+            title={title}
+            activeBusy={busy}
+            activePendingReview={pendingReview}
+            onSelect={handleFocusDocument}
+          />
           <span className="qingdoc-status" data-kind={saveState.kind} role="status">{toast ?? statusLabel}</span>
         </div>
         <div className="qingdoc-host-actions">
-          {docs.length > 1 ? (
-            <select
-              className="qingdoc-doc-select"
-              aria-label="切换青简文稿"
-              value={activeEngineSessionId ?? ''}
-              onChange={(event) => void handleFocusDocument(event.currentTarget.value)}
-            >
-              {docs.map((doc) => (
-                <option key={doc.engineSessionId} value={doc.engineSessionId}>{doc.title}</option>
-              ))}
-            </select>
-          ) : null}
           {/* 「在青简中打开」暂撤:qingjian:// 协议需新版桌面端+引擎打通后恢复(用户实测打不开,坏入口不如不放)。 */}
           <button
             className="qingdoc-close"
@@ -749,6 +751,129 @@ export function QingDocPanel(props: QingDocPanelProps) {
   )
 }
 
+interface QingDocSwitcherProps {
+  docs: BridgeDocument[]
+  activeEngineSessionId?: string
+  title: string
+  activeBusy: boolean
+  activePendingReview: boolean
+  onSelect: (engineSessionId: string) => Promise<void>
+}
+
+function QingDocSwitcher(props: QingDocSwitcherProps) {
+  const [open, setOpen] = useState(false)
+  const [focusedIndex, setFocusedIndex] = useState(0)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const listboxId = useId()
+  const activeIndex = Math.max(0, props.docs.findIndex(
+    (doc) => doc.engineSessionId === props.activeEngineSessionId,
+  ))
+
+  const close = useCallback((restoreFocus = false) => {
+    setOpen(false)
+    if (restoreFocus) triggerRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    const handleOutsidePointer = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) close()
+    }
+    document.addEventListener('mousedown', handleOutsidePointer)
+    return () => document.removeEventListener('mousedown', handleOutsidePointer)
+  }, [close, open])
+
+  useEffect(() => {
+    if (open) setFocusedIndex(activeIndex)
+  }, [activeIndex, open])
+
+  const selectAt = useCallback((index: number) => {
+    const doc = props.docs[index]
+    if (!doc) return
+    close(true)
+    if (doc.engineSessionId !== props.activeEngineSessionId) void props.onSelect(doc.engineSessionId)
+  }, [close, props])
+
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === 'Escape' && open) {
+      event.preventDefault()
+      close(true)
+      return
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (!props.docs.length) return
+      if (!open) {
+        setOpen(true)
+        setFocusedIndex(activeIndex)
+        return
+      }
+      const delta = event.key === 'ArrowDown' ? 1 : -1
+      setFocusedIndex((index) => (index + delta + props.docs.length) % props.docs.length)
+      return
+    }
+    if (event.key === 'Enter' && open) {
+      event.preventDefault()
+      selectAt(focusedIndex)
+    }
+  }
+
+  return (
+    <div ref={rootRef} className="qingdoc-doc-switcher" onKeyDown={handleKeyDown}>
+      <button
+        ref={triggerRef}
+        className="qingdoc-doc-trigger"
+        type="button"
+        aria-label="切换青简文稿"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <strong className="qingdoc-stage-title" title={props.title}>{props.title}</strong>
+        <span className="qingdoc-doc-chevron" aria-hidden="true">▾</span>
+      </button>
+      {open ? (
+        <div id={listboxId} className="qingdoc-doc-menu" role="listbox" aria-label="本会话文稿">
+          {props.docs.map((doc, index) => {
+            const current = doc.engineSessionId === props.activeEngineSessionId
+            const status = documentActivity(doc, current, props.activeBusy, props.activePendingReview)
+            return (
+              <button
+                key={doc.engineSessionId}
+                className="qingdoc-doc-option"
+                type="button"
+                role="option"
+                aria-selected={current}
+                aria-label={`${doc.title}${status === 'writing' ? '，写作中' : status === 'reviewing' ? '，审阅中' : ''}`}
+                data-focused={focusedIndex === index ? 'true' : undefined}
+                onMouseEnter={() => setFocusedIndex(index)}
+                onClick={() => selectAt(index)}
+              >
+                <span className="qingdoc-doc-mark" aria-hidden="true">{current ? '✓' : ''}</span>
+                <span className="qingdoc-doc-option-title">{doc.title}</span>
+                <span className="qingdoc-doc-state" data-active={status !== 'idle' ? 'true' : undefined} aria-hidden="true" />
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function documentActivity(
+  doc: BridgeDocument,
+  current: boolean,
+  activeBusy: boolean,
+  activePendingReview: boolean,
+): 'idle' | 'writing' | 'reviewing' {
+  if (doc.state === 'pendingReview' || (current && activePendingReview)) return 'reviewing'
+  if (doc.agentBusy === true || (current && activeBusy)) return 'writing'
+  return 'idle'
+}
+
 function reviewTargetSelector(targetId: string): string {
   const escape = typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
     ? CSS.escape
@@ -760,25 +885,22 @@ function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
-function panelStatus(input: {
+export function panelStatus(input: {
   busy: boolean
   blocks: number
   words: number
   pendingReview: boolean
   reviewCount: number
   saveState: DocumentSaveState
-  version?: number
-  loading: boolean
+  showSaving: boolean
 }): string {
-  if (input.pendingReview) return `审阅中 · ${input.reviewCount} 处`
-  if (input.busy) return `写作中 · ${input.blocks} 块 · 约 ${input.words} 字`
-  if (input.saveState.kind === 'saving') return '保存中…'
-  if (input.saveState.kind === 'conflict') return '保存冲突 · 已暂停编辑'
+  if (input.pendingReview) return `审阅中·${input.reviewCount}处`
+  if (input.busy) return `写作中·${input.blocks}块·约${input.words}字`
+  if (input.saveState.kind === 'saving') return input.showSaving ? '保存中…' : ''
+  if (input.saveState.kind === 'conflict') return '保存冲突·已暂停编辑'
   if (input.saveState.kind === 'blocked') {
-    return input.saveState.code === 'AGENT_BUSY' ? '青简处理中 · 已暂停编辑' : '审阅中 · 已暂停编辑'
+    return input.saveState.code === 'AGENT_BUSY' ? '青简处理中' : `审阅中·${input.reviewCount}处`
   }
-  if (input.saveState.kind === 'error') return input.saveState.transient ? '网络不稳 · 等待重存' : '保存失败'
-  if (input.loading) return '正在读取文稿…'
-  if (input.version !== undefined) return '已保存'
-  return '准备写作'
+  if (input.saveState.kind === 'error') return input.saveState.transient ? '网络不稳·等待重存' : '保存失败'
+  return ''
 }
