@@ -282,11 +282,28 @@ export function QingDocPanel(props: QingDocPanelProps) {
       : null
     if (root) mutationObserver?.observe(root, { childList: true, subtree: true })
     window.addEventListener('resize', measurePaper)
+    // 位置漂移哨兵:dsh 三栏布局里聊天栏/侧栏变化会平移面板而不改任何元素尺寸,
+    // ResizeObserver/resize 全部失聪,--doc-left/right 变陈旧,审阅条/查找条按过期
+    // 坐标越出纸面。定期对比纸面真实矩形,漂移即重测。
+    const driftTimer = window.setInterval(() => {
+      const currentRoot = rootRef.current
+      const currentPaper = currentRoot?.querySelector<HTMLElement>('.wf-doc')
+        ?? currentRoot?.querySelector<HTMLElement>('.ws-paper-shell')
+      if (!currentRoot || !currentPaper) return
+      const rect = currentPaper.getBoundingClientRect()
+      const cachedLeft = Number.parseFloat(currentRoot.style.getPropertyValue('--doc-left'))
+      const cachedRight = Number.parseFloat(currentRoot.style.getPropertyValue('--doc-right'))
+      if (!Number.isFinite(cachedLeft) || Math.abs(cachedLeft - rect.left) > 0.5
+        || !Number.isFinite(cachedRight) || Math.abs(cachedRight - rect.right) > 0.5) {
+        measurePaper()
+      }
+    }, 400)
     return () => {
       cancelAnimationFrame(raf1)
       observer?.disconnect()
       mutationObserver?.disconnect()
       window.removeEventListener('resize', measurePaper)
+      window.clearInterval(driftTimer)
     }
   }, [measurePaper, snapshot.panelDoc, snapshot.reviewModel, snapshot.streaming, activeEngineSessionId])
 
