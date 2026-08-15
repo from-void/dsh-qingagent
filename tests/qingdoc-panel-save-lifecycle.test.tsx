@@ -275,13 +275,13 @@ describe('QingDocPanel 保存生命周期', () => {
     ).toBe('editable'))
   })
 
-  it('桌面入口使用 qingjian 自定义协议', async () => {
+  it('「在青简中打开」入口已暂撤(qingjian 协议待新版桌面端+引擎打通后恢复)', async () => {
     installBridgeFetch('dsh-open-native', ['qing-native'])
     renderPanel('dsh-open-native')
 
-    await vi.waitFor(() => expect(document.querySelector('.qingdoc-open')).not.toBeNull())
-    expect(document.querySelector('.qingdoc-open')?.getAttribute('href'))
-      .toBe('qingjian://open?engineSessionId=qing-native')
+    // 恢复该入口时,还原为断言 href === 'qingjian://open?engineSessionId=qing-native'。
+    await vi.waitFor(() => expect(document.querySelector('[data-qingagent-doc-panel]')).not.toBeNull())
+    expect(document.querySelector('.qingdoc-open')).toBeNull()
   })
 
   it('verdict 回执 patchIds/reviewingCount 与本地不符时补拉权威面板', async () => {

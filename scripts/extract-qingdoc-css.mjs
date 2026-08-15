@@ -362,6 +362,15 @@ output = replaceLast(
   `${patchNavGlue}\n${workspaceRoot} .patch-nav .pn-label {`,
 )
 
+// 宿主适配:顶栏与纸面之间露出深色间隔(用户拍板)。青简源里 .ws-right 的
+// padding-top 间隔靠透明背景露出玄青桌面;提取版曾整列刷纸色导致纸贴顶栏。
+output += `
+/* dsh 宿主适配:列背景透明,顶部 36px 间隔露出面板深色底,纸张自身保持奶白。 */
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-right {
+  background: transparent;
+}
+`
+
 const target = resolve('src/qingdoc/qingdoc.css')
 if (process.argv.includes('--check')) {
   const actual = await readFile(target, 'utf8')
