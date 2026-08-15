@@ -319,7 +319,8 @@ ${panelRoot} .qingdoc-doc-trigger {
   align-items: center;
   gap: 4px;
   padding: 0 5px;
-  color: var(--dsw-alias-label-primary);
+  /* 墨条永远是深底,标题色必须固定用青简暖纸色,不跟随 dsh 明暗令牌(浅色模式下深字压深底会看不见) */
+  color: #ece3d0;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -328,11 +329,11 @@ ${panelRoot} .qingdoc-doc-trigger {
 }
 ${panelRoot} .qingdoc-doc-trigger:hover,
 ${panelRoot} .qingdoc-doc-trigger[aria-expanded="true"] {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: rgba(236, 227, 208, .08);
 }
 ${panelRoot} .qingdoc-doc-trigger:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+  box-shadow: 0 0 0 2px rgba(236, 227, 208, .34);
 }
 ${panelRoot} .qingdoc-stage-title {
   min-width: 0;
@@ -342,7 +343,7 @@ ${panelRoot} .qingdoc-stage-title {
 }
 ${panelRoot} .qingdoc-doc-chevron {
   flex: 0 0 auto;
-  color: var(--dsw-alias-label-caption);
+  color: rgba(236, 227, 208, .55);
   transition: transform .12s ease;
 }
 ${panelRoot} .qingdoc-doc-trigger[aria-expanded="true"] .qingdoc-doc-chevron {
