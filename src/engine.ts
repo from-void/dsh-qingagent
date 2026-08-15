@@ -252,6 +252,15 @@ export class EngineConnection {
     return this.dependencies.fetch(`${this.config.engineUrl.replace(/\/$/, '')}/api/v1/external${path}`, { ...init, headers })
   }
 
+  /** 引擎内部(非 external)只读接口,当前仅导出用;仍带 Bearer(无全局令牌时被忽略,无副作用)。 */
+  async fetchInternal(path: string, init: RequestInit = {}): Promise<Response> {
+    return this.fetchReadyResponse((token) => {
+      const headers = new Headers(init.headers)
+      headers.set('Authorization', `Bearer ${token}`)
+      return this.dependencies.fetch(`${this.config.engineUrl.replace(/\/$/, '')}/api/v1${path}`, { ...init, headers })
+    })
+  }
+
 }
 
 export class EngineService extends Service {
@@ -267,6 +276,7 @@ export class EngineService extends Service {
   ensureReady(): Promise<EngineStatusSnapshot> { return this.connection.ensureReady() }
   fetchJson<T>(path: string, init?: RequestInit): Promise<T> { return this.connection.fetchJson<T>(path, init) }
   fetchAsset(path: string, init?: RequestInit): Promise<Response> { return this.connection.fetchAsset(path, init) }
+  fetchInternal(path: string, init?: RequestInit): Promise<Response> { return this.connection.fetchInternal(path, init) }
 }
 
 function readableError(error: unknown): string {

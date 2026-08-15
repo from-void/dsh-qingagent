@@ -28,7 +28,16 @@ export function apply(ctx: ClientContext): void {
         disposePanel = slots.register({
           name: 'details',
           priority: -10,
-          inject: () => ({ qingLayout: layout }),
+          inject: () => ({
+            qingLayout: layout,
+            // 审查按钮闭环:把组装好的审查 query 作为用户消息发进对应 dsh 会话(排队一轮)。
+            qingSendMessage: async (dshSessionId: string, text: string) => {
+              const scoped = sessions.scope(dshSessionId as Parameters<ISessions['scope']>[0])
+              if (!scoped) throw new Error('会话不可用,无法发送审查请求。')
+              await (scoped as unknown as { conversation: { send(text: string): Promise<void> } })
+                .conversation.send(text)
+            },
+          }),
         }, QingDocPanel)
       } else if (!shouldRegister && disposePanel) {
         disposePanel()

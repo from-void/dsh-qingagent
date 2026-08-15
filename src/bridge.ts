@@ -155,6 +155,33 @@ export class BridgeHub {
         writeJson(response, 200, { ok: true })
         return
       }
+      if (request.method === 'GET' && url.pathname === '/qingagent-bridge/export') {
+        // 导出:代理引擎内部导出接口,流式回传;格式白名单与青简 ExportMenu 一致。
+        const engineSessionId = this.authorizedEngineSessionId(url)
+        const format = url.searchParams.get('format') ?? ''
+        if (!['pdf', 'docx', 'html', 'markdown', 'txt'].includes(format)) {
+          throw new HttpInputError('不支持的导出格式。')
+        }
+        const upstream = await this.engine.fetchInternal(
+          `/export/${encodeURIComponent(engineSessionId)}?format=${encodeURIComponent(format)}`,
+        )
+        const headers: Record<string, string> = {
+          'Content-Type': upstream.headers.get('Content-Type') ?? 'application/octet-stream',
+        }
+        const degradations = upstream.headers.get('X-Qingagent-Export-Degradations')
+        if (degradations) headers['X-Qingagent-Export-Degradations'] = degradations
+        response.writeHead(upstream.status, headers)
+        const body = upstream.body
+        if (!body) { response.end(); return }
+        const reader = body.getReader()
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          response.write(value)
+        }
+        response.end()
+        return
+      }
       if (request.method === 'GET' && url.pathname === '/qingagent-bridge/library') {
         // 青简文库:引擎最近更新的文稿(含其他会话的),供下拉「最近文稿」分组;token 不出主机端。
         requiredQuery(url, 'dshSessionId')

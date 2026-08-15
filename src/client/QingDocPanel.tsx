@@ -34,12 +34,23 @@ import { buildReviewPresentationModel } from './reviewPresentation.js'
 import { installDetailsColumnWidth } from './detailsWidth.js'
 import { decideIncomingPanelDocument } from './incomingPanelDocument.js'
 import { QINGJIAN_ICON_DATA_URI } from './qingjianIcon.js'
+import { ensureQingdocRuntimeCss } from './runtimeCss.js'
 import { BridgeHttpError, qingClientStore } from './store.js'
 import type { QingLibraryDoc } from './store.js'
+import {
+  assembleDshReviewQuery,
+  exportFilename,
+  QING_EXPORT_FORMATS,
+  QING_REVIEW_MENU_ORDER,
+  QING_REVIEW_META,
+  type QingExportFormat,
+  type QingReviewType,
+} from './reviewExport.js'
 import '../qingdoc/qingdoc.css'
 
 interface InjectedProps {
   qingLayout: ILayout
+  qingSendMessage?: (dshSessionId: string, text: string) => Promise<void>
 }
 
 export type QingDocPanelProps = PropsRuntime<'details'> & InjectedProps
@@ -47,6 +58,7 @@ export type QingDocPanelProps = PropsRuntime<'details'> & InjectedProps
 const EMPTY_PATCH_IDS = new Set<string>()
 
 export function QingDocPanel(props: QingDocPanelProps) {
+  ensureQingdocRuntimeCss()
   const sessionId = String(props.useSession((session) => session.sessionId))
   const snapshot = useSyncExternalStore(
     (listener) => qingClientStore.subscribe(sessionId, listener),
@@ -432,15 +444,15 @@ export function QingDocPanel(props: QingDocPanelProps) {
     }
   }, [flushPendingDocSave, sessionId])
 
-  const handleClose = useCallback(async () => {
-    try {
-      await flushPendingDocSave()
-      props.qingLayout.closeDetails()
-    } catch (error) {
+  const handleClose = useCallback(() => {
+    // 关闭是用户显式意图,不能被 flush 扣住(审阅态下保存队列会永久等待,曾把 × 卡成无反应)。
+    // dsh 详情列显隐由插槽注册决定:置关闭位→注册器注销面板;layout.closeDetails 只是兜底。
+    qingClientStore.closePanel(sessionId)
+    props.qingLayout.closeDetails()
+    void flushPendingDocSave().catch((error) => {
       console.error('[qingagent-panel] close flush failed', error)
-      setToast('保存失败 · 文稿面板保持打开')
-    }
-  }, [flushPendingDocSave, props.qingLayout])
+    })
+  }, [flushPendingDocSave, props.qingLayout, sessionId])
 
   const visibleReviewTargets = reviewPresentation?.visibleReviewTargets ?? []
   const visibleReviewTargetIds = useMemo(
@@ -718,6 +730,16 @@ export function QingDocPanel(props: QingDocPanelProps) {
           ) : null}
         </div>
         <div className="qingdoc-host-actions">
+          {activeEngineSessionId ? (
+            <QingDocActionMenus
+              sessionId={sessionId}
+              engineSessionId={activeEngineSessionId}
+              title={title}
+              onFlushSave={flushPendingDocSave}
+              onToast={setToast}
+              onSendMessage={props.qingSendMessage}
+            />
+          ) : null}
           {activeEngineSessionId ? (
             <a
               className="qingdoc-open"
@@ -1027,4 +1049,152 @@ export function panelStatus(input: {
   }
   if (input.saveState.kind === 'error') return input.saveState.transient ? '网络不稳·等待重存' : '保存失败'
   return ''
+}
+
+interface QingDocActionMenusProps {
+  sessionId: string
+  engineSessionId: string
+  title: string
+  onFlushSave: () => Promise<void>
+  onToast: (message: string) => void
+  onSendMessage?: (dshSessionId: string, text: string) => Promise<void>
+}
+
+/** 顶栏「审查/导出」双入口:导出走桥接下载;审查把组装 query 发进 dsh 会话闭环。 */
+function QingDocActionMenus(props: QingDocActionMenusProps) {
+  const [openMenu, setOpenMenu] = useState<'review' | 'export' | null>(null)
+  const [reviewType, setReviewType] = useState<QingReviewType | null>(null)
+  const [supplement, setSupplement] = useState('')
+  const [busyFormat, setBusyFormat] = useState<string | null>(null)
+  const [sendingReview, setSendingReview] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!openMenu) return
+    const onOutside = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpenMenu(null)
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [openMenu])
+
+  const runExport = async (format: QingExportFormat) => {
+    setOpenMenu(null)
+    setBusyFormat(format.id)
+    try {
+      await props.onFlushSave()
+      const result = await qingClientStore.exportDoc(props.sessionId, props.engineSessionId, format.id)
+      const url = URL.createObjectURL(result.blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = exportFilename(props.title, format.ext)
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
+      props.onToast(result.degradations ? `${format.savedToast} · 部分图表以源码导出` : format.savedToast)
+    } catch (error) {
+      props.onToast(error instanceof Error ? error.message : '导出失败')
+    } finally {
+      setBusyFormat(null)
+    }
+  }
+
+  const startReview = async () => {
+    if (!reviewType || sendingReview) return
+    if (!props.onSendMessage) {
+      props.onToast('当前版本无法发送审查请求')
+      return
+    }
+    if (reviewType === 'custom' && !supplement.trim()) {
+      props.onToast('请先写下审查要求')
+      return
+    }
+    setSendingReview(true)
+    try {
+      await props.onSendMessage(props.sessionId, assembleDshReviewQuery(reviewType, supplement))
+      props.onToast('审查请求已发给对话')
+      setReviewType(null)
+      setSupplement('')
+    } catch (error) {
+      props.onToast(error instanceof Error ? error.message : '审查请求发送失败')
+    } finally {
+      setSendingReview(false)
+    }
+  }
+
+  const meta = reviewType ? QING_REVIEW_META[reviewType] : null
+  return (
+    <div ref={rootRef} className="qingdoc-action-root">
+      <button
+        type="button"
+        className="qingdoc-action-btn"
+        aria-haspopup="menu"
+        aria-expanded={openMenu === 'review'}
+        onClick={() => setOpenMenu((value) => value === 'review' ? null : 'review')}
+      >审查</button>
+      <button
+        type="button"
+        className="qingdoc-action-btn"
+        aria-haspopup="menu"
+        aria-expanded={openMenu === 'export'}
+        onClick={() => setOpenMenu((value) => value === 'export' ? null : 'export')}
+      >{busyFormat ? '导出中…' : '导出'}</button>
+      {openMenu === 'review' ? (
+        <div className="qingdoc-doc-menu qingdoc-action-menu" role="menu" aria-label="审查方式">
+          {QING_REVIEW_MENU_ORDER.map((type) => (
+            <button
+              key={type}
+              type="button"
+              role="menuitem"
+              className="qingdoc-doc-option"
+              onClick={() => { setOpenMenu(null); setSupplement(''); setReviewType(type) }}
+            >
+              <span className="qingdoc-doc-mark" aria-hidden="true" />
+              <span className="qingdoc-doc-option-title">{QING_REVIEW_META[type].title}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {openMenu === 'export' ? (
+        <div className="qingdoc-doc-menu qingdoc-action-menu" role="menu" aria-label="导出格式">
+          {QING_EXPORT_FORMATS.map((format) => (
+            <button
+              key={format.id}
+              type="button"
+              role="menuitem"
+              className="qingdoc-doc-option"
+              disabled={busyFormat !== null}
+              onClick={() => { void runExport(format) }}
+            >
+              <span className="qingdoc-doc-mark" aria-hidden="true" />
+              <span className="qingdoc-doc-option-title">{format.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {reviewType && meta ? (
+        <div className="qingdoc-review-dialog" role="dialog" aria-label={meta.title}>
+          <strong className="qingdoc-review-title">{meta.title}</strong>
+          <span className="qingdoc-review-subtitle">{meta.subtitle}</span>
+          <textarea
+            className="qingdoc-review-supplement"
+            value={supplement}
+            placeholder={meta.supplementPlaceholder}
+            rows={3}
+            onChange={(event) => setSupplement(event.currentTarget.value)}
+          />
+          <div className="qingdoc-review-dialog-actions">
+            <button type="button" className="qingdoc-review-cancel" onClick={() => setReviewType(null)}>取消</button>
+            <button
+              type="button"
+              className="qingdoc-review-start"
+              disabled={sendingReview}
+              onClick={() => { void startReview() }}
+            >{sendingReview ? '发送中…' : meta.action}</button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
 }

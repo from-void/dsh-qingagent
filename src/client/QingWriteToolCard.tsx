@@ -28,24 +28,29 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
   const title = meta?.title
   const failure = failed ? failureSummary(settledBlock?.content ?? []) : ''
   const state = failed ? 'failed' : settled ? 'complete' : 'running'
+  // 「块」是内部概念不暴露;运行态无字数时摘要留空(标题「正在写作」已足够,避免「正在写作·写作中」废话)。
+  const summaryText = failed
+    ? `未完成${failure ? ` · ${failure}` : ''}`
+    : [
+        title ? `《${title}》` : '',
+        words > 0 ? `约 ${words} 字` : '',
+        meta?.status === 'review' ? '待审阅' : '',
+      ].filter(Boolean).join(' · ')
 
   return (
     <div className={styles.toolCard} data-state={state}>
       <strong className={styles.toolTitle}>
         {failed ? '青简写作未完成' : settled ? '青简文稿已生成' : '正在写作'}
       </strong>
-      <span className={styles.separator} aria-hidden="true" />
-      <span className={styles.toolSummary}>
-        {failed
-          ? `未完成${failure ? ` · ${failure}` : ''}`
-          : <>
-              {title ? `《${title}》 · ` : ''}
-              {/* 「块」是内部概念不暴露;没有字数时不显示「约 0 字」。 */}
-              {words > 0 ? `约 ${words} 字` : (settled ? '' : '写作中')}
-              {meta?.status === 'review' ? ' · 待审阅' : ''}
-            </>}
-      </span>
-      {!failed ? <button type="button" className={styles.viewButton} onClick={() => props.qingLayout.openDetails()}>查看</button> : null}
+      {summaryText ? <span className={styles.separator} aria-hidden="true" /> : null}
+      {summaryText ? <span className={styles.toolSummary}>{summaryText}</span> : null}
+      {!failed ? (
+        <button
+          type="button"
+          className={styles.viewButton}
+          onClick={() => { qingClientStore.reopenPanel(sessionId); props.qingLayout.openDetails() }}
+        >查看</button>
+      ) : null}
     </div>
   )
 }

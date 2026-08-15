@@ -196,3 +196,10 @@ export function derivePatchPresentation(
   conflictIds: string[]
 }
 export function buildPatchMeta(applied: readonly AppliedPatch[]): Map<string, PatchMeta>
+
+/** launchModal/starterPresets 的构建期声明(运行时 tsdown 直连青简源码)。 */
+export interface TemplateStarterPreset {
+  name: string
+  prompt: string
+}
+export const REVIEW_STARTER_PRESETS: Record<string, readonly TemplateStarterPreset[]>

@@ -48,6 +48,8 @@ interface SessionEntry {
   listeners: Set<() => void>
   source?: EventSource
   refs: number
+  /** 用户点 × 显式关闭面板;新内容事件或「查看」重开时清除。 */
+  panelClosed?: boolean
   openers: Set<() => void>
   loading?: Promise<void>
   panelLoadToken: number
@@ -89,8 +91,25 @@ export class QingClientStore {
   }
 
   hasPanelContent(sessionId: string): boolean {
+    const entry = this.entries.get(sessionId)
+    if (entry?.panelClosed) return false
     const snapshot = this.getSnapshot(sessionId)
     return snapshot.streaming || snapshot.bindingCount > 0
+  }
+
+  /** × 关闭:dsh 详情列显隐由插槽注册决定,layout.closeDetails 对它无效;这里置关闭位驱动注销。 */
+  closePanel(sessionId: string): void {
+    const entry = this.entry(sessionId)
+    entry.panelClosed = true
+    this.update(entry, entry.snapshot)
+  }
+
+  /** 「查看」等显式重开入口。 */
+  reopenPanel(sessionId: string): void {
+    const entry = this.entry(sessionId)
+    if (!entry.panelClosed) return
+    entry.panelClosed = false
+    this.update(entry, entry.snapshot)
   }
 
   retain(sessionId: string, openDetails?: () => void): () => void {
@@ -142,6 +161,22 @@ export class QingClientStore {
       panelLoading: true,
     })
     void this.refreshPanel(sessionId, engineSessionId)
+  }
+
+  /** 导出当前文稿:走桥接代理引擎导出接口,返回文件字节与降级说明。 */
+  async exportDoc(
+    sessionId: string,
+    engineSessionId: string,
+    format: string,
+  ): Promise<{ blob: Blob; degradations?: string }> {
+    const query = new URLSearchParams({ dshSessionId: sessionId, engineSessionId, format })
+    const response = await fetch(`/qingagent-bridge/export?${query}`)
+    if (response.status === 409) throw new Error('还没有可导出的内容')
+    if (!response.ok) throw new Error(await responseError(response))
+    return {
+      blob: await response.blob(),
+      degradations: response.headers.get('X-Qingagent-Export-Degradations') ?? undefined,
+    }
   }
 
   /** 青简文库:引擎最近更新的文稿列表(含其他会话的),下拉「最近文稿」分组用。 */
@@ -654,6 +689,11 @@ export class QingClientStore {
   }
 
   private open(entry: SessionEntry): void {
+    // 新内容(写作开始等)自动重开被 × 关闭的面板。
+    if (entry.panelClosed) {
+      entry.panelClosed = false
+      this.update(entry, entry.snapshot)
+    }
     for (const opener of entry.openers) opener()
   }
 }

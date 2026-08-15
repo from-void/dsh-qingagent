@@ -465,6 +465,103 @@ ${panelRoot} .qingdoc-conflict-reload {
 ${panelRoot} .qingdoc-conflict-reload:hover {
   background: rgba(230, 189, 134, .12);
 }
+${panelRoot} .qingdoc-action-root {
+  position: relative;
+  display: inline-flex;
+  gap: 8px;
+}
+${panelRoot} .qingdoc-action-btn {
+  min-height: 28px;
+  padding: 0 10px;
+  color: rgba(236, 227, 208, .66);
+  border: 1px solid rgba(184, 169, 140, .22);
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+${panelRoot} .qingdoc-action-btn:hover,
+${panelRoot} .qingdoc-action-btn[aria-expanded="true"] {
+  color: #ece3d0;
+  border-color: rgba(236, 227, 208, .5);
+  background: rgba(236, 227, 208, .08);
+}
+${panelRoot} .qingdoc-action-menu {
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
+  width: max(200px, 100%);
+}
+${panelRoot} .qingdoc-review-dialog {
+  position: absolute;
+  z-index: 100400;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 320px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  color: var(--dsw-alias-label-secondary);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-3);
+}
+${panelRoot} .qingdoc-review-title { color: var(--dsw-alias-label-primary); font-size: 13px; }
+${panelRoot} .qingdoc-review-subtitle { color: var(--dsw-alias-label-caption); font-size: 12px; }
+${panelRoot} .qingdoc-review-supplement {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 6px 8px;
+  color: var(--dsw-alias-label-primary);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-2);
+  font: 12px/1.5 inherit;
+  font-family: inherit;
+}
+${panelRoot} .qingdoc-review-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+${panelRoot} .qingdoc-review-cancel,
+${panelRoot} .qingdoc-review-start {
+  min-height: 26px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+${panelRoot} .qingdoc-review-cancel {
+  color: var(--dsw-alias-label-secondary);
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: transparent;
+}
+${panelRoot} .qingdoc-review-start {
+  color: var(--dsw-alias-label-on-brand, #fff);
+  border: 1px solid var(--dsw-alias-brand-primary);
+  background: var(--dsw-alias-brand-primary);
+}
+${panelRoot} .qingdoc-review-start:disabled { opacity: .6; cursor: default; }
+/* 审阅条毛玻璃:注入管线会把 var() 形式的 backdrop-filter 剥掉,这里以显式值重申(面板 JS 另有内联兜底)。 */
+${workspaceRoot} .patch-nav:not(.is-confirming) {
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+}
+/* 纸面滚动条:青简原版 6px 淡拇指在宣纸上近乎隐形,按用户要求加宽提对比。 */
+${workspaceRoot} .ws-right::-webkit-scrollbar { width: 10px; }
+${workspaceRoot} .ws-right::-webkit-scrollbar-thumb {
+  background: rgba(120, 90, 50, .38);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+${workspaceRoot} .ws-right::-webkit-scrollbar-thumb:hover { background: rgba(120, 90, 50, .6); background-clip: padding-box; }
 ${panelRoot} .qingdoc-open-icon {
   width: 15px;
   height: 15px;
@@ -506,6 +603,15 @@ output += `
 /* dsh 宿主适配:列背景透明,顶部 36px 间隔露出面板深色底,纸张自身保持奶白。 */
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-right {
   background: transparent;
+  /* 青简桌面是 400/800 双定宽列,纸列宽以整窗 100vw 计;dsh 里纸列=整个详情面板,
+     必须回归弹性,否则列窄于 800 时纸面连同滚动条一起溢出被裁(用户实测「没有滚动条」)。 */
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .wf-doc,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-paper-shell {
+  max-width: min(800px, 100%);
 }
 `
 
