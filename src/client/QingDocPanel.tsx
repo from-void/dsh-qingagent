@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties } from 'react'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
@@ -11,6 +11,7 @@ import type { PmDoc } from '@qingagent/pm-schema'
 import { DocumentSaveCoordinator, type DocumentSaveState } from './documentSaveCoordinator.js'
 import { createQingmlCompileThrottle, type QingmlCompileThrottle } from './streamingDocument.js'
 import { buildReviewPresentationModel } from './reviewPresentation.js'
+import { installDetailsColumnWidth } from './detailsWidth.js'
 import { qingClientStore } from './store.js'
 import '../qingdoc/qingdoc.css'
 
@@ -41,6 +42,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
     () => qingClientStore.retain(sessionId, () => props.qingLayout.openDetails()),
     [sessionId, props.qingLayout],
   )
+
+  useLayoutEffect(() => {
+    const root = rootRef.current
+    return root ? installDetailsColumnWidth(root) : undefined
+  }, [])
 
   const docs = snapshot.state?.docs ?? []
   const activeEngineSessionId = snapshot.activeEngineSessionId
@@ -320,6 +326,13 @@ export function QingDocPanel(props: QingDocPanelProps) {
       style={rootStyle}
       aria-label="青简文档"
     >
+      <div
+        className="qingdoc-details-resizer"
+        data-qing-details-resizer
+        role="separator"
+        aria-label="调整青简文档栏宽度"
+        aria-orientation="vertical"
+      />
       <header className="qingdoc-stage-controls">
         <div className="qingdoc-heading">
           <span className="qingdoc-brand">青简</span>

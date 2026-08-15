@@ -10,6 +10,55 @@
   min-height: 0;
   overflow: hidden;
 }
+
+/* dsh AppFrame 的内建 preference 把 details 钳在 300–520；青简纸面打开时由同一个
+   CSS 变量接管第三轨，center 保持 minmax(0,1fr) 弹性收缩。!important 只覆盖
+   AppFrame 的普通 inline grid-template-columns，不改其 React store，卸载即自动复原。 */
+[class*="detailsCol"]:has([data-qingagent-doc-panel]) {
+  width: var(--qing-details-width, clamp(560px, 46vw, 920px)) !important;
+  min-width: 0 !important;
+}
+[class*="frame"]:has(> [class*="detailsCol"] [data-qingagent-doc-panel]) {
+  grid-template-columns:
+    var(--qing-sidebar-width, 280px)
+    minmax(0, 1fr)
+    var(--qing-details-width, clamp(560px, 46vw, 920px)) !important;
+}
+[class*="frame"]:has(> [class*="detailsCol"] [data-qingagent-doc-panel])
+  > [class*="centerCol"] {
+  min-width: 0 !important;
+  width: auto !important;
+  flex: 1 1 auto !important;
+}
+[class*="frame"]:has(> [class*="detailsCol"] [data-qingagent-doc-panel])
+  > [class*="handle"][data-side="details"] {
+  display: none !important;
+}
+[data-qingagent-doc-panel] .qingdoc-details-resizer {
+  position: absolute;
+  z-index: 100300;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+[data-qingagent-doc-panel] .qingdoc-details-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: rgba(181, 154, 99, 0);
+  transition: background .15s ease;
+}
+[data-qingagent-doc-panel] .qingdoc-details-resizer:hover::after,
+[data-qingagent-doc-panel][data-qing-details-resizing="1"] .qingdoc-details-resizer::after {
+  background: rgba(181, 154, 99, .68);
+}
 [data-qingagent-doc-panel] .ws-body {
   flex: 1 1 auto;
   min-height: 0;
