@@ -661,7 +661,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
               ))}
             </select>
           ) : null}
-          {openUrl ? <a className="qingdoc-open" href={openUrl}>在青简中打开 ↗</a> : null}
+          {/* 「在青简中打开」暂撤:qingjian:// 协议需新版桌面端+引擎打通后恢复(用户实测打不开,坏入口不如不放)。 */}
           <button
             className="qingdoc-close"
             type="button"

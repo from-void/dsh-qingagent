@@ -354,7 +354,8 @@
     display:flex;flex-direction:column;
     /* 顶部 36 留白(深墨间隔=顶部空间);底部 0,纸张 min-height:100% 直接铺到底,不留黑空隙 */
     padding:36px 80px 0 60px;
-    background:var(--bg-canvas);
+    /* 青简原样:列背景透明露出玄青桌面,只有纸张自身是奶白——顶部 36px 才是可见的深色间隔。 */
+    background:transparent;
   }
   :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-right::-webkit-scrollbar {width:6px}
   :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-right::-webkit-scrollbar-thumb {background:var(--line-2);border-radius:0}
