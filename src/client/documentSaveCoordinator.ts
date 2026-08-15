@@ -1,5 +1,11 @@
 import type { ExternalDocReplaceRequest, ExternalDocReplaceResponse, PmDoc } from '../contracts.js'
-import type { DocWriteBaseline } from '@qingweb/pages/workspace/data/docWriteBaseline'
+import {
+  createKnownDocVersionLedger,
+  resolveDocWriteConflict,
+  type DocWriteBaseline,
+  type KnownDocVersionLedger,
+  type KnownDocVersionOrigin,
+} from '@qingweb/pages/workspace/data/docWriteBaseline'
 import { classifyDocSaveError, TRANSIENT_DOC_SAVE_TOAST } from '@qingweb/pages/workspace/data/docSaveError'
 import { createClientMutationId, pmDocHasSubstantiveContent } from '@qingweb/pages/workspace/data/pageExitSave'
 
@@ -19,12 +25,6 @@ interface PendingWrite {
   replayDepth: number
   replayedVersions: Set<number>
   waiters: Array<{ resolve: () => void; reject: (error: Error) => void }>
-}
-
-interface KnownVersion {
-  expectedDocumentSnapshot: number
-  baseContentHash: string
-  baseHasSubstantiveContent: boolean
 }
 
 export interface DocumentSaveCoordinatorOptions {
@@ -61,7 +61,7 @@ export class DocumentSaveCoordinator {
   private failedTransient: PendingWrite | null = null
   private disposed = false
   private state: DocumentSaveState = { kind: 'idle' }
-  private readonly knownVersions = new Map<number, KnownVersion>()
+  private readonly knownVersionsByDocument = new Map<string, KnownDocVersionLedger>()
   private readonly createMutationId: () => string
   private readonly schedule: NonNullable<DocumentSaveCoordinatorOptions['schedule']>
   private readonly cancelSchedule: NonNullable<DocumentSaveCoordinatorOptions['cancelSchedule']>
@@ -82,6 +82,14 @@ export class DocumentSaveCoordinator {
       pendingDocWrite: this.current?.engineSessionId === engineSessionId,
       queuedDocWrite: this.queued?.engineSessionId === engineSessionId,
     }
+  }
+
+  rememberKnownVersion(
+    engineSessionId: string,
+    baseline: DocWriteBaseline,
+    origin: KnownDocVersionOrigin,
+  ): void {
+    this.versionLedger(engineSessionId).remember(baseline, origin)
   }
 
   enqueue(engineSessionId: string, doc: PmDoc, baseline: DocWriteBaseline): Promise<void> {
@@ -165,12 +173,12 @@ export class DocumentSaveCoordinator {
       this.handleConflict(write, response.conflict.expected, response.conflict.actual)
       return
     }
-    const baseline: KnownVersion = {
+    const baseline: DocWriteBaseline = {
       expectedDocumentSnapshot: response.docVersion,
       baseContentHash: response.contentHash,
       baseHasSubstantiveContent: pmDocHasSubstantiveContent(write.doc),
     }
-    this.rememberVersion(baseline)
+    this.rememberKnownVersion(write.engineSessionId, baseline, 'selfWrite')
     this.options.onCommitted(write.engineSessionId, write.doc, response)
     this.resolveWrite(write)
     this.current = null
@@ -230,16 +238,21 @@ export class DocumentSaveCoordinator {
   }
 
   private handleConflict(write: PendingWrite, expected: number, actual: number): void {
-    const known = this.knownVersions.get(actual)
-    if (
-      expected < actual &&
-      known &&
-      !write.replayedVersions.has(actual) &&
-      write.replayDepth < 4
-    ) {
+    const resolution = resolveDocWriteConflict({
+      conflict: {
+        expectedDocumentSnapshot: expected,
+        actualDocumentSnapshot: actual,
+      },
+      isLatestOwnMutation: this.current === write,
+      hasSubmittedDoc: true,
+      knownActualVersion: this.versionLedger(write.engineSessionId).get(actual),
+      replayedAgainstActual: write.replayedVersions.has(actual),
+      replayDepth: write.replayDepth,
+    })
+    if (resolution.kind === 'silentReplay') {
       write.replayedVersions.add(actual)
       write.replayDepth += 1
-      write.baseline = known
+      write.baseline = resolution.baseline
       write.mutationId = this.createMutationId()
       this.retryTimer = this.schedule(() => {
         this.retryTimer = null
@@ -260,15 +273,13 @@ export class DocumentSaveCoordinator {
     this.publish(state)
   }
 
-  private rememberVersion(baseline: KnownVersion): void {
-    if (baseline.expectedDocumentSnapshot <= 0) return
-    this.knownVersions.delete(baseline.expectedDocumentSnapshot)
-    this.knownVersions.set(baseline.expectedDocumentSnapshot, baseline)
-    while (this.knownVersions.size > 32) {
-      const oldest = this.knownVersions.keys().next()
-      if (oldest.done) break
-      this.knownVersions.delete(oldest.value)
+  private versionLedger(engineSessionId: string): KnownDocVersionLedger {
+    let ledger = this.knownVersionsByDocument.get(engineSessionId)
+    if (!ledger) {
+      ledger = createKnownDocVersionLedger()
+      this.knownVersionsByDocument.set(engineSessionId, ledger)
     }
+    return ledger
   }
 
   private publish(state: DocumentSaveState): void {

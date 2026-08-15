@@ -143,4 +143,49 @@ describe('DocumentSaveCoordinator', () => {
     })
     vi.useRealTimers()
   })
+
+  it('用青简已知版本账本静默重放 streamApply 冲突，且账本按文稿隔离', async () => {
+    vi.useFakeTimers()
+    const send = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false, clientMutationId: 'm-1', code: 'VERSION_CONFLICT',
+        conflict: { expected: 7, actual: 9 }, actualContentHash: 'hash-9',
+      })
+      .mockResolvedValueOnce({
+        ok: true, clientMutationId: 'm-2', docVersion: 10, contentHash: 'hash-10', ts: 't10',
+      })
+    let mutation = 0
+    const coordinator = new DocumentSaveCoordinator({
+      send,
+      createMutationId: () => `m-${++mutation}`,
+      onCommitted: vi.fn(),
+    })
+    coordinator.rememberKnownVersion('qing-a', baseline(9), 'streamApply')
+    coordinator.rememberKnownVersion('qing-b', baseline(12), 'streamApply')
+
+    const saving = coordinator.enqueue('qing-a', pm('追写'), baseline(7))
+    await vi.runAllTimersAsync()
+    await saving
+
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(send.mock.calls[1]?.[0]).toBe('qing-a')
+    expect(send.mock.calls[1]?.[1]).toMatchObject({
+      expectedDocumentSnapshot: 9,
+      baseContentHash: 'hash-9',
+      clientMutationId: 'm-2',
+    })
+
+    const isolatedSend = vi.fn(async () => ({
+      ok: false as const, clientMutationId: 'isolated', code: 'VERSION_CONFLICT' as const,
+      conflict: { expected: 7, actual: 12 }, actualContentHash: 'hash-12',
+    }))
+    const isolated = new DocumentSaveCoordinator({
+      send: isolatedSend,
+      onCommitted: vi.fn(),
+    })
+    isolated.rememberKnownVersion('qing-b', baseline(12), 'streamApply')
+    await expect(isolated.enqueue('qing-a', pm('不得借乙账本重放'), baseline(7))).rejects.toThrow('保存冲突')
+    expect(isolatedSend).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
 })

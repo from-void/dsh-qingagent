@@ -8,7 +8,11 @@ import {
   type DocumentSnapshotViewHandle,
 } from '@qingweb/pages/workspace/components/DocumentSnapshotView'
 import { PatchNav } from '@qingweb/pages/workspace/components/PatchNav'
-import { EMPTY_PM_DOC, type DocWriteBaseline } from '@qingweb/pages/workspace/data/docWriteBaseline'
+import {
+  appliedDocWriteBaseline,
+  EMPTY_PM_DOC,
+  type DocWriteBaseline,
+} from '@qingweb/pages/workspace/data/docWriteBaseline'
 import { pmDocToViewDocumentSnapshot } from '@qingweb/pages/workspace/data/protocol'
 import type { PmDoc } from '@qingagent/pm-schema'
 import { DocumentSaveCoordinator, type DocumentSaveState } from './documentSaveCoordinator.js'
@@ -126,6 +130,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
       },
       onStateChange: (state) => {
         qingClientStore.setSaveState(sessionId, state)
+        if (state.kind === 'conflict') setToast('文档已被更新 · 已暂停编辑')
         const engineSessionId = editorEngineSessionIdRef.current
         if (state.kind === 'blocked' && engineSessionId) {
           void qingClientStore.refreshPanel(sessionId, engineSessionId).catch(() => undefined)
@@ -182,11 +187,32 @@ export function QingDocPanel(props: QingDocPanelProps) {
         const expected = currentSnapshot.panelDoc?.docVersion ?? 0
         const actual = incomingPanelDoc.docVersion
         const message = `保存冲突：文稿已从 v${expected} 更新到 v${actual}，已暂停编辑以保护两边内容。`
+        saveCoordinatorRef.current?.rememberKnownVersion(
+          engineSessionId,
+          appliedDocWriteBaseline({
+            version: incomingPanelDoc.docVersion,
+            pmDoc: incomingPanelDoc.pmDoc,
+            contentHash: incomingPanelDoc.contentHash,
+          }),
+          'streamConflict',
+        )
         qingClientStore.setSaveState(sessionId, { kind: 'conflict', expected, actual, message })
         setToast('文档已被更新 · 已暂停编辑')
         return false
       }
       return false
+    },
+    afterApply: (engineSessionId, panelDoc) => {
+      if (!panelDoc.pmDoc) return
+      saveCoordinatorRef.current?.rememberKnownVersion(
+        engineSessionId,
+        appliedDocWriteBaseline({
+          version: panelDoc.docVersion,
+          pmDoc: panelDoc.pmDoc,
+          contentHash: panelDoc.contentHash,
+        }),
+        'streamApply',
+      )
     },
   }), [flushPendingDocSave, sessionId])
 

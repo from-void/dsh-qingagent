@@ -43,6 +43,7 @@ interface SessionEntry {
   loading?: Promise<void>
   panelLoadToken: number
   panelRefreshGuard?: PanelRefreshGuard
+  draftGeneration: number
 }
 
 export interface PanelRefreshGuard {
@@ -140,6 +141,7 @@ export class QingClientStore {
   async refreshPanel(sessionId: string, engineSessionId: string): Promise<void> {
     const entry = this.entry(sessionId)
     const token = ++entry.panelLoadToken
+    const draftGeneration = entry.draftGeneration
     const switching = entry.snapshot.panelEngineSessionId !== engineSessionId
     this.update(entry, {
       ...entry.snapshot,
@@ -158,6 +160,14 @@ export class QingClientStore {
           )
         : undefined
       if (entry.panelLoadToken !== token) return
+      if (entry.snapshot.saveState?.kind === 'conflict') {
+        this.update(entry, {
+          ...entry.snapshot,
+          panelLoading: false,
+          error: undefined,
+        })
+        return
+      }
       const shouldApply = await (entry.panelRefreshGuard?.beforeApply(engineSessionId, panelDoc)
         ?? Promise.resolve(true))
       if (entry.panelLoadToken !== token) return
@@ -169,6 +179,9 @@ export class QingClientStore {
         })
         return
       }
+      const keepStreaming = entry.draftGeneration > draftGeneration &&
+        entry.snapshot.streaming &&
+        entry.snapshot.activeEngineSessionId === engineSessionId
       this.update(entry, {
         ...entry.snapshot,
         activeEngineSessionId: engineSessionId,
@@ -176,13 +189,12 @@ export class QingClientStore {
         panelDoc,
         reviewModel,
         panelLoading: false,
-        // 面板权威刷新完成 = 生成流必然已结束;防御迟到的 draft-chunk(如坏块重试流的首块)
-        // 把状态卡在「写作中」。
-        streaming: false,
+        // 仅当刷新期间没有更新的 draft-chunk 才退出写作态；较新的流世代优先。
+        streaming: keepStreaming,
         reviewCount: reviewModel
           ? reviewModel.suggestions.filter((suggestion) => suggestion.status === 'reviewing').length
           : undefined,
-        saveState: { kind: 'idle' },
+        saveState: refreshSaveState(entry.snapshot.saveState),
         error: undefined,
       })
       entry.panelRefreshGuard?.afterApply?.(engineSessionId, panelDoc)
@@ -287,7 +299,14 @@ export class QingClientStore {
   private entry(sessionId: string): SessionEntry {
     let entry = this.entries.get(sessionId)
     if (!entry) {
-      entry = { snapshot: EMPTY, listeners: new Set(), refs: 0, openers: new Set(), panelLoadToken: 0 }
+      entry = {
+        snapshot: EMPTY,
+        listeners: new Set(),
+        refs: 0,
+        openers: new Set(),
+        panelLoadToken: 0,
+        draftGeneration: 0,
+      }
       this.entries.set(sessionId, entry)
     }
     return entry
@@ -322,6 +341,7 @@ export class QingClientStore {
 
   private handleEvent(sessionId: string, entry: SessionEntry, event: BridgeEvent): void {
     if (event.type === 'draft-chunk') {
+      entry.draftGeneration += 1
       this.update(entry, {
         ...entry.snapshot,
         activeEngineSessionId: event.engineSessionId,
@@ -491,6 +511,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readableError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function refreshSaveState(state: DocumentSaveState | undefined): DocumentSaveState {
+  return state?.kind === 'conflict' ? state : { kind: 'idle' }
 }
 
 export const qingClientStore = new QingClientStore()

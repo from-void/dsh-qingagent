@@ -31,6 +31,32 @@ export interface DocWriteBaseline {
   baseContentHash: string
   baseHasSubstantiveContent: boolean
 }
+export type KnownDocVersionOrigin = 'selfWrite' | 'streamApply' | 'streamConflict'
+export interface KnownDocVersion {
+  baseline: DocWriteBaseline
+  origin: KnownDocVersionOrigin
+}
+export interface KnownDocVersionLedger {
+  remember(baseline: DocWriteBaseline, origin: KnownDocVersionOrigin): void
+  get(version: number): KnownDocVersion | null
+  clear(): void
+  readonly size: number
+}
+export function createKnownDocVersionLedger(capacity?: number): KnownDocVersionLedger
+export function appliedDocWriteBaseline(input: {
+  version: number
+  pmDoc: PmDoc
+  contentHash?: string
+}): DocWriteBaseline
+export function resolveDocWriteConflict(input: {
+  conflict: { expectedDocumentSnapshot: number; actualDocumentSnapshot: number } | null
+  isLatestOwnMutation: boolean
+  hasSubmittedDoc: boolean
+  knownActualVersion: KnownDocVersion | null
+  replayedAgainstActual: boolean
+  replayDepth: number
+  maxReplayDepth?: number
+}): { kind: 'silentReplay'; baseline: DocWriteBaseline } | { kind: 'surface' }
 export const EMPTY_PM_DOC: PmDoc
 export function pmDocToViewDocumentSnapshot(
   doc: PmDoc,

@@ -150,6 +150,61 @@ describe('QingClientStore 生成终态', () => {
     await loading
     expect(store.getSnapshot('dsh-dirty').panelDoc?.pmDoc).toEqual(incomingPm)
   })
+
+  it('冲突态 refreshPanel 保持锁与本地正文，不静默换成远端稿', async () => {
+    const localPm = { type: 'doc', attrs: { schemaVersion: 1 }, content: [] } as PmDoc
+    const remotePm = {
+      type: 'doc', attrs: { schemaVersion: 1 },
+      content: [{ type: 'paragraph', attrs: { blockId: 'remote' }, content: [{ type: 'text', text: '远端正文' }] }],
+    } as PmDoc
+    let responsePm = localPm
+    const store = new QingClientStore()
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      sessionId: 'qing-conflict', docVersion: responsePm === localPm ? 1 : 2,
+      contentHash: responsePm === localPm ? 'hash-1' : 'hash-2', state: 'editing',
+      agentBusy: false, title: '冲突稿', ts: 't', pmDoc: responsePm,
+    })))
+    await store.refreshPanel('dsh-conflict', 'qing-conflict')
+    store.setSaveState('dsh-conflict', {
+      kind: 'conflict', expected: 1, actual: 2, message: '文档已被更新',
+    })
+    responsePm = remotePm
+
+    await store.refreshPanel('dsh-conflict', 'qing-conflict')
+
+    expect(store.getSnapshot('dsh-conflict').panelDoc?.pmDoc).toEqual(localPm)
+    expect(store.getSnapshot('dsh-conflict').saveState).toMatchObject({ kind: 'conflict' })
+  })
+
+  it('refreshPanel 在途若收到更新 draft-chunk，保留 streaming 世代', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const panelResponse = deferred<Response>()
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/qingagent-bridge/state?')) return Response.json(bridgeState())
+      if (url.startsWith('/qingagent-bridge/doc-pm?')) return panelResponse.promise
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const store = new QingClientStore()
+    const release = store.retain('dsh-generation')
+    await vi.waitFor(() => expect(store.getSnapshot('dsh-generation').state).toBeDefined())
+
+    const refresh = store.refreshPanel('dsh-generation', 'qing-1')
+    FakeEventSource.instances.at(-1)?.emit({
+      type: 'draft-chunk', engineSessionId: 'qing-1', chunkQingml: '<p>新世代</p>',
+      accumulatedBlocks: ['<p>新世代</p>'], title: '测试稿', blocks: 1, words: 3,
+    })
+    panelResponse.resolve(Response.json({
+      sessionId: 'qing-1', docVersion: 1, contentHash: 'hash-1', state: 'editing',
+      agentBusy: false, title: '旧响应', ts: 't1', pmDoc: { type: 'doc', attrs: { schemaVersion: 1 }, content: [] },
+    }))
+    await refresh
+
+    expect(store.getSnapshot('dsh-generation').streaming).toBe(true)
+    expect(store.getSnapshot('dsh-generation').qingml).toContain('新世代')
+    release()
+  })
 })
 
 function deferred<T>() {
