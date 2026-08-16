@@ -60,17 +60,23 @@ export function apply(ctx: ClientContext): void {
     let unsubscribeStore: (() => void) | undefined
     let selectionScope: ReturnType<typeof createScope> | undefined
     let unsubscribeInput: (() => void) | undefined
-    let pendingSelection: ReturnType<typeof qingClientStore.getSnapshot>['selection']
+    let pendingSelectionKey: string | undefined
+
+    // 值键而非对象引用:bridge 状态重放会产出新对象,引用比较挡不住同一选段重触发(实测双 chip)。
+    const selectionKey = (s: NonNullable<ReturnType<typeof qingClientStore.getSnapshot>['selection']>) =>
+      `${s.engineSessionId}|${s.anchor.blockId}|${s.anchor.from}|${s.anchor.to}|${s.quote}`
 
     const syncSelectionReference = () => {
       const sessionId = currentSessionId
       const selection = sessionId
         ? qingClientStore.getSnapshot(sessionId).selection
         : undefined
-      if (!sessionId || !selection || selection === pendingSelection || !selectionScope) return
+      if (!sessionId || !selection || !selectionScope) return
+      const key = selectionKey(selection)
+      if (key === pendingSelectionKey) return
 
       // 先设重入哨兵：bail 同步发布 input state，state subscriber 会在事件返回前回调。
-      pendingSelection = selection
+      pendingSelectionKey = key
       const snapshot = qingClientStore.getSnapshot(sessionId)
       const activeTitle = snapshot.activeEngineSessionId === selection.engineSessionId
         ? snapshot.activeDoc?.title
@@ -81,7 +87,7 @@ export function apply(ctx: ClientContext): void {
       if (!insertSelectionReference(selectionScope.ctx, selection, title)) {
         // adjudicating/submitting 等瞬态会拒绝插入；保留 bridge selection，等待 input
         // phase 或 store 下一次发布后重试。
-        pendingSelection = undefined
+        pendingSelectionKey = undefined
         return
       }
 
@@ -163,7 +169,7 @@ export function apply(ctx: ClientContext): void {
       selectionScope = undefined
       releaseSession = undefined
       disposePanel = undefined
-      pendingSelection = undefined
+      pendingSelectionKey = undefined
       currentSessionId = nextSessionId === undefined ? undefined : String(nextSessionId)
       if (currentSessionId) {
         unsubscribeStore = qingClientStore.subscribe(currentSessionId, () => {

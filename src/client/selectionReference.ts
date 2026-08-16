@@ -50,9 +50,16 @@ export function insertSelectionReference(
   title?: string | null,
 ): boolean {
   const snapshot = actx.conversation.input.for(actx).state.getSnapshot()
+  const reference = createSelectionReference(selection, title)
+  // 幂等守卫:bridge 状态重放/多路订阅可能对同一选段重复触发(用户实测双 chip);
+  // 草稿里已有同 source+ref 的 occurrence 即视为已插入成功,由调用方清 ingress。
+  if (snapshot.occurrences?.some((occurrence) =>
+    occurrence.source === QING_SELECTION_REFERENCE_SOURCE && occurrence.ref === reference.ref)) {
+    return true
+  }
   const offset = snapshot.draft.length
   return actx.bail(actx, 'slash/input-insert-reference', {
-    reference: createSelectionReference(selection, title),
+    reference,
     span: {
       start: offset,
       end: offset,
