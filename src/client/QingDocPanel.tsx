@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, RefObject } from 'react'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
@@ -12,6 +12,9 @@ import {
 import { DocFindBar } from '@qingweb/pages/workspace/components/DocFindBar'
 import { DocToolbar } from '@qingweb/pages/workspace/components/DocToolbar'
 import { PatchNav } from '@qingweb/pages/workspace/components/PatchNav'
+import { DeaiReviewModal } from '@qingweb/pages/workspace/components/DeaiReviewModal'
+import { ReviewIcon, ReviewMenu } from '@qingweb/pages/workspace/components/ReviewMenu'
+import { ExportIcon } from '@qingweb/pages/workspace/components/RightPane'
 import type { AiModifyTarget } from '@qingweb/pages/workspace/data/aiModifyTarget'
 import type { DocDimensions } from '@qingweb/pages/workspace/data/docDimensions'
 import {
@@ -23,6 +26,7 @@ import { pmDocToViewDocumentSnapshot } from '@qingweb/pages/workspace/data/proto
 import { canUseDocumentEditing } from '@qingweb/pages/workspace/data/reviewActions'
 import { useWorkspaceFind } from '@qingweb/pages/workspace/hooks/useWorkspaceFind'
 import type { PmDoc } from '@qingagent/pm-schema'
+import type { StyleTemplateItem } from '@qingagent/contract-ts'
 import {
   encodeAssetBridgeContext,
   type AssetBridgeContext,
@@ -40,10 +44,9 @@ import { BridgeHttpError, qingClientStore } from './store.js'
 import type { QingLibraryDoc } from './store.js'
 import {
   assembleDshReviewQuery,
+  DSH_DEAI_STYLE_TEMPLATES,
   exportFilename,
   QING_EXPORT_FORMATS,
-  QING_REVIEW_MENU_ORDER,
-  QING_REVIEW_META,
   type QingExportFormat,
   type QingReviewType,
 } from './reviewExport.js'
@@ -753,6 +756,26 @@ export function QingDocPanel(props: QingDocPanelProps) {
     editorRef: tiptapEditorRef,
   })
 
+  // 与青简 useWorkspacePageController.tsx:1366-1397 同一语义顺序：空稿、
+  // 青简处理中、待审修改、其他阻塞操作；图标按钮保留 title 告知具体原因。
+  const exportDisabledReason = useMemo<string | null>(() => {
+    if (!panelDoc || panelDoc.state === 'empty') return '还没有可导出的内容'
+    if (busy || turnRunningEffective) return '请等待青简完成编辑'
+    if (pendingReview) {
+      return '有待处理的修改：请先采纳或撤销正文中的候选（或点「放弃全部」），再导出'
+    }
+    if (saveLocked) return '请先完成当前操作，再导出'
+    return null
+  }, [busy, panelDoc, pendingReview, saveLocked, turnRunningEffective])
+  const reviewDisabledReason = useMemo<string | null>(() => {
+    if (!panelDoc || panelDoc.state === 'empty') return '还没有可审查的内容'
+    if (busy || turnRunningEffective) return '请等待青简完成编辑后再审查'
+    if (pendingReview) return '文档有待处理的修改，请先处理后再审查'
+    if (saveLocked) return '请先完成当前操作，再审查'
+    if (!props.qingSendMessage) return '当前版本无法发送审查请求'
+    return null
+  }, [busy, panelDoc, pendingReview, props.qingSendMessage, saveLocked, turnRunningEffective])
+
   const rootStyle = {
     '--ws-paper-body-padding-inline': '40px',
     '--ws-paper-chat-column-width': '400px',
@@ -811,16 +834,6 @@ export function QingDocPanel(props: QingDocPanelProps) {
         </div>
         <div className="qingdoc-host-actions">
           {activeEngineSessionId ? (
-            <QingDocActionMenus
-              sessionId={sessionId}
-              engineSessionId={activeEngineSessionId}
-              title={title}
-              onFlushSave={flushPendingDocSave}
-              onToast={setToast}
-              onSendMessage={props.qingSendMessage}
-            />
-          ) : null}
-          {activeEngineSessionId ? (
             <a
               className="qingdoc-open"
               href={`qingjian://open?engineSessionId=${encodeURIComponent(activeEngineSessionId)}`}
@@ -840,6 +853,18 @@ export function QingDocPanel(props: QingDocPanelProps) {
       </header>
       <div className="ws-body">
         <main className="ws-right">
+          {activeEngineSessionId && panelDoc ? (
+            <QingDocFunctions
+              sessionId={sessionId}
+              engineSessionId={activeEngineSessionId}
+              title={title}
+              reviewDisabledReason={reviewDisabledReason}
+              exportDisabledReason={exportDisabledReason}
+              onFlushSave={flushPendingDocSave}
+              onToast={setToast}
+              onSendMessage={props.qingSendMessage}
+            />
+          ) : null}
           <div className="ws-paper-shell" data-wf="WorkspacePaperShell" aria-hidden="true" />
           <div className="ws-document-content" data-wf="WorkspaceHydrationDocumentContent">
             <AssetBridgeProvider context={assetContext}>
@@ -1131,150 +1156,259 @@ export function panelStatus(input: {
   return ''
 }
 
-interface QingDocActionMenusProps {
+export interface QingDocFunctionsProps {
   sessionId: string
   engineSessionId: string
   title: string
+  reviewDisabledReason: string | null
+  exportDisabledReason: string | null
   onFlushSave: () => Promise<void>
   onToast: (message: string) => void
   onSendMessage?: (dshSessionId: string, text: string) => Promise<void>
 }
 
-/** 顶栏「审查/导出」双入口:导出走桥接下载;审查把组装 query 发进 dsh 会话闭环。 */
-function QingDocActionMenus(props: QingDocActionMenusProps) {
-  const [openMenu, setOpenMenu] = useState<'review' | 'export' | null>(null)
-  const [reviewType, setReviewType] = useState<QingReviewType | null>(null)
-  const [supplement, setSupplement] = useState('')
-  const [busyFormat, setBusyFormat] = useState<string | null>(null)
+/** 青简纸面原生功能区；组件与 DOM 结构对齐 WorkspaceDocumentPane.tsx:436-522。 */
+export function QingDocFunctions(props: QingDocFunctionsProps) {
+  const [reviewMenuOpen, setReviewMenuOpen] = useState(false)
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
+  const [deaiOpen, setDeaiOpen] = useState(false)
   const [sendingReview, setSendingReview] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
+  const [deaiTemplates, setDeaiTemplates] = useState<StyleTemplateItem[]>(
+    () => DSH_DEAI_STYLE_TEMPLATES.map((template) => ({ ...template })),
+  )
+  const reviewAnchorRef = useRef<HTMLDivElement>(null)
+  const exportAnchorRef = useRef<HTMLDivElement>(null)
+  const customTemplateSequenceRef = useRef(0)
 
   useEffect(() => {
-    if (!openMenu) return
-    const onOutside = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpenMenu(null)
+    if (props.reviewDisabledReason) {
+      setReviewMenuOpen(false)
+      setDeaiOpen(false)
     }
-    document.addEventListener('mousedown', onOutside)
-    return () => document.removeEventListener('mousedown', onOutside)
-  }, [openMenu])
+    if (props.exportDisabledReason) setExportMenuOpen(false)
+  }, [props.exportDisabledReason, props.reviewDisabledReason])
 
-  const runExport = async (format: QingExportFormat) => {
-    setOpenMenu(null)
-    setBusyFormat(format.id)
-    try {
-      await props.onFlushSave()
-      const result = await qingClientStore.exportDoc(props.sessionId, props.engineSessionId, format.id)
-      const url = URL.createObjectURL(result.blob)
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = exportFilename(props.title, format.ext)
-      document.body.appendChild(anchor)
-      anchor.click()
-      anchor.remove()
-      window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
-      props.onToast(result.degradations ? `${format.savedToast} · 部分图表以源码导出` : format.savedToast)
-    } catch (error) {
-      props.onToast(error instanceof Error ? error.message : '导出失败')
-    } finally {
-      setBusyFormat(null)
-    }
-  }
-
-  const startReview = async () => {
-    if (!reviewType || sendingReview) return
+  const sendReview = useCallback(async (
+    type: QingReviewType,
+    supplement = '',
+    template?: Pick<StyleTemplateItem, 'name' | 'prompt'>,
+  ) => {
+    if (sendingReview) return
     if (!props.onSendMessage) {
       props.onToast('当前版本无法发送审查请求')
       return
     }
-    if (reviewType === 'custom' && !supplement.trim()) {
-      props.onToast('请先写下审查要求')
-      return
-    }
     setSendingReview(true)
     try {
-      await props.onSendMessage(props.sessionId, assembleDshReviewQuery(reviewType, supplement))
+      await props.onSendMessage(
+        props.sessionId,
+        assembleDshReviewQuery(type, supplement, template),
+      )
       props.onToast('审查请求已发给对话')
-      setReviewType(null)
-      setSupplement('')
     } catch (error) {
       props.onToast(error instanceof Error ? error.message : '审查请求发送失败')
     } finally {
       setSendingReview(false)
     }
+  }, [props, sendingReview])
+
+  const chooseReview = (type: QingReviewType) => {
+    setReviewMenuOpen(false)
+    if (type === 'deai') {
+      setDeaiOpen(true)
+      return
+    }
+    void sendReview(type)
   }
 
-  const meta = reviewType ? QING_REVIEW_META[reviewType] : null
+  const loadDeaiTemplates = useCallback(async () => deaiTemplates, [deaiTemplates])
+  const loadDeaiTemplate = useCallback(async (id: string) => {
+    const template = deaiTemplates.find((item) => item.id === id)
+    if (!template) throw new Error('模板不存在')
+    return template
+  }, [deaiTemplates])
+  const saveDeaiTemplate = useCallback(async (input: {
+    name: string
+    detail: string
+    prompt: string
+  }) => {
+    const saved: StyleTemplateItem = {
+      id: `dsh-deai-custom-${++customTemplateSequenceRef.current}`,
+      dtype: 'deai',
+      slot: 'instruction',
+      name: input.name,
+      detail: input.detail,
+      prompt: input.prompt,
+      builtin: false,
+    }
+    setDeaiTemplates((templates) => [...templates, saved])
+    return saved
+  }, [])
+
   return (
-    <div ref={rootRef} className="qingdoc-action-root">
-      <button
-        type="button"
-        className="qingdoc-action-btn"
-        aria-haspopup="menu"
-        aria-expanded={openMenu === 'review'}
-        onClick={() => setOpenMenu((value) => value === 'review' ? null : 'review')}
-      >审查</button>
-      <button
-        type="button"
-        className="qingdoc-action-btn"
-        aria-haspopup="menu"
-        aria-expanded={openMenu === 'export'}
-        onClick={() => setOpenMenu((value) => value === 'export' ? null : 'export')}
-      >{busyFormat ? '导出中…' : '导出'}</button>
-      {openMenu === 'review' ? (
-        <div className="qingdoc-doc-menu qingdoc-action-menu" role="menu" aria-label="审查方式">
-          {QING_REVIEW_MENU_ORDER.map((type) => (
-            <button
-              key={type}
-              type="button"
-              role="menuitem"
-              className="qingdoc-doc-option"
-              onClick={() => { setOpenMenu(null); setSupplement(''); setReviewType(type) }}
-            >
-              <span className="qingdoc-doc-mark" aria-hidden="true" />
-              <span className="qingdoc-doc-option-title">{QING_REVIEW_META[type].title}</span>
-            </button>
-          ))}
+    <>
+      <div className="ws-docfns" data-wf="WorkspaceDocFunctions">
+        <div className="ws-export-anchor" ref={reviewAnchorRef}>
+          <button
+            type="button"
+            className={`ws-docfn-btn${props.reviewDisabledReason || sendingReview ? ' is-disabled' : ''}`}
+            title={props.reviewDisabledReason ?? (sendingReview ? '审查请求发送中' : '审查')}
+            aria-haspopup="menu"
+            aria-expanded={reviewMenuOpen}
+            aria-disabled={props.reviewDisabledReason || sendingReview ? true : undefined}
+            onClick={() => {
+              if (!props.reviewDisabledReason && !sendingReview) {
+                setExportMenuOpen(false)
+                setReviewMenuOpen((value) => !value)
+              }
+            }}
+          >
+            <ReviewIcon />
+          </button>
+          {reviewMenuOpen && !props.reviewDisabledReason && !sendingReview ? (
+            <ReviewMenu
+              anchorRef={reviewAnchorRef}
+              onClose={() => setReviewMenuOpen(false)}
+              onSensitiveReview={() => chooseReview('sensitive')}
+              onDeaiReview={() => chooseReview('deai')}
+              onSourceCheck={() => chooseReview('source')}
+              onConsistencyReview={() => chooseReview('consistency')}
+              onPrivacyReview={() => chooseReview('privacy')}
+              onFormatReview={() => chooseReview('format')}
+              onRoleReview={() => chooseReview('role')}
+              onCustomReview={() => chooseReview('custom')}
+            />
+          ) : null}
         </div>
-      ) : null}
-      {openMenu === 'export' ? (
-        <div className="qingdoc-doc-menu qingdoc-action-menu" role="menu" aria-label="导出格式">
-          {QING_EXPORT_FORMATS.map((format) => (
-            <button
-              key={format.id}
-              type="button"
-              role="menuitem"
-              className="qingdoc-doc-option"
-              disabled={busyFormat !== null}
-              onClick={() => { void runExport(format) }}
-            >
-              <span className="qingdoc-doc-mark" aria-hidden="true" />
-              <span className="qingdoc-doc-option-title">{format.label}</span>
-            </button>
-          ))}
+        <div className="ws-export-anchor" ref={exportAnchorRef}>
+          <button
+            type="button"
+            className={`ws-doc-btn ws-docfn-btn${props.exportDisabledReason ? ' is-disabled' : ''}`}
+            title={props.exportDisabledReason ?? '导出'}
+            aria-label="导出"
+            aria-haspopup="menu"
+            aria-expanded={exportMenuOpen}
+            aria-disabled={props.exportDisabledReason ? true : undefined}
+            onClick={() => {
+              if (!props.exportDisabledReason) {
+                setReviewMenuOpen(false)
+                setExportMenuOpen((value) => !value)
+              }
+            }}
+          >
+            <ExportIcon />
+          </button>
+          {exportMenuOpen && !props.exportDisabledReason ? (
+            <DshExportMenu
+              anchorRef={exportAnchorRef}
+              onClose={() => setExportMenuOpen(false)}
+              sessionId={props.sessionId}
+              engineSessionId={props.engineSessionId}
+              title={props.title}
+              onFlushSave={props.onFlushSave}
+              onToast={props.onToast}
+            />
+          ) : null}
         </div>
-      ) : null}
-      {reviewType && meta ? (
-        <div className="qingdoc-review-dialog" role="dialog" aria-label={meta.title}>
-          <strong className="qingdoc-review-title">{meta.title}</strong>
-          <span className="qingdoc-review-subtitle">{meta.subtitle}</span>
-          <textarea
-            className="qingdoc-review-supplement"
-            value={supplement}
-            placeholder={meta.supplementPlaceholder}
-            rows={3}
-            onChange={(event) => setSupplement(event.currentTarget.value)}
-          />
-          <div className="qingdoc-review-dialog-actions">
-            <button type="button" className="qingdoc-review-cancel" onClick={() => setReviewType(null)}>取消</button>
-            <button
-              type="button"
-              className="qingdoc-review-start"
-              disabled={sendingReview}
-              onClick={() => { void startReview() }}
-            >{sendingReview ? '发送中…' : meta.action}</button>
-          </div>
-        </div>
-      ) : null}
+      </div>
+      <DeaiReviewModal
+        open={deaiOpen}
+        loadTemplates={loadDeaiTemplates}
+        loadTemplate={loadDeaiTemplate}
+        saveTemplate={saveDeaiTemplate}
+        onClose={() => setDeaiOpen(false)}
+        onConfirm={(template, supplement) => {
+          setDeaiOpen(false)
+          void sendReview('deai', supplement, template)
+        }}
+      />
+    </>
+  )
+}
+
+interface DshExportMenuProps {
+  anchorRef: RefObject<HTMLElement>
+  sessionId: string
+  engineSessionId: string
+  title: string
+  onFlushSave: () => Promise<void>
+  onClose: () => void
+  onToast: (message: string) => void
+}
+
+/** ExportMenu 的确定性格式分支适配 dsh bridge；DOM/class 与产品组件一致，不含平台技能项。 */
+function DshExportMenu(props: DshExportMenuProps) {
+  const [busy, setBusy] = useState<QingExportFormat['id'] | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (ref.current?.contains(target) || props.anchorRef.current?.contains(target)) return
+      props.onClose()
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') props.onClose()
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [props])
+
+  const download = async (format: QingExportFormat) => {
+    if (busy) return
+    setBusy(format.id)
+    try {
+      await props.onFlushSave()
+      const result = await qingClientStore.exportDoc(
+        props.sessionId,
+        props.engineSessionId,
+        format.id,
+      )
+      const url = URL.createObjectURL(result.blob)
+      try {
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = exportFilename(props.title, format.ext)
+        document.body.appendChild(anchor)
+        anchor.click()
+        anchor.remove()
+      } finally {
+        window.setTimeout(() => URL.revokeObjectURL(url), 0)
+      }
+      props.onToast(result.degradations
+        ? `${format.savedToast} · 部分图表以源码导出`
+        : format.savedToast)
+      props.onClose()
+    } catch (error) {
+      console.error('[qingagent-panel] export failed', error)
+      props.onClose()
+      props.onToast(error instanceof Error ? error.message : '导出失败 · 请重试')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div ref={ref} className="ws-export-menu" role="menu" data-wf="ExportMenu">
+      {QING_EXPORT_FORMATS.map((format) => (
+        <button
+          key={format.id}
+          type="button"
+          role="menuitem"
+          className="ws-export-item"
+          disabled={busy !== null}
+          onClick={() => { void download(format) }}
+          data-wf={`ExportFormat-${format.id}`}
+        >
+          {busy === format.id ? (
+            <><span className="ws-export-spinner" aria-hidden="true" />生成中…</>
+          ) : format.label}
+        </button>
+      ))}
     </div>
   )
 }

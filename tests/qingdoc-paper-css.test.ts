@@ -114,4 +114,33 @@ describe('青简纸面移植契约', () => {
     expect(css).toContain(':is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) :is(.wf-doc,.doc-typography) table {')
     expect(css).toContain(':is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) :is(.wf-doc,.doc-typography) td {')
   })
+
+  it('纸面 docfns/菜单/去AI味弹窗只使用钉准的青简源样式，运行时补回滤镜与关键帧', async () => {
+    const [css, generator, panelSource, runtimeCss] = await Promise.all([
+      readFile(resolve('src/qingdoc/qingdoc.css'), 'utf8'),
+      readFile(resolve('scripts/extract-qingdoc-css.mjs'), 'utf8'),
+      readFile(resolve('src/client/QingDocPanel.tsx'), 'utf8'),
+      readFile(resolve('src/client/runtimeCss.ts'), 'utf8'),
+    ])
+
+    expect(generator).toContain("['apps/web/src/pages/workspace/workspace.css', [[169, 169]")
+    expect(generator).toContain('[1527, 1548]')
+    expect(generator).toContain('[1863, 2033]')
+    expect(generator).toContain('[2093, 2151]')
+    expect(generator).toContain('[2558, 2682]')
+    expect(css).toContain('source: apps/web/src/pages/workspace/workspace-ink-skin.css:1863-2033')
+    expect(css).toContain('.ws-docfns {')
+    expect(css).toContain('.ws-docfn-btn {')
+    expect(css).toContain('[data-wf="ReviewMenu"]')
+    expect(css).toContain('.ws-export-menu {')
+    expect(css).toContain('.ws-deai-template.is-selected')
+    expect(panelSource).toContain('data-wf="WorkspaceDocFunctions"')
+    expect(panelSource).toContain('<DeaiReviewModal')
+    expect(panelSource).not.toContain('QingDocActionMenus')
+    expect(css).not.toContain('.qingdoc-action-btn')
+    expect(css).not.toContain('.qingdoc-review-dialog')
+    expect(runtimeCss).toContain('[data-qingagent-doc-panel] .ws-export-menu')
+    expect(runtimeCss).toContain('@keyframes ws-export-pop')
+    expect(runtimeCss).toContain('@keyframes ws-export-spin')
+  })
 })

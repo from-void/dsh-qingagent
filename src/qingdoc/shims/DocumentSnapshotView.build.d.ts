@@ -27,6 +27,28 @@ export interface PatchNavProps {
   onCommit: () => void | Promise<void>
 }
 export const PatchNav: ComponentType<PatchNavProps>
+export const ReviewIcon: ComponentType
+export const ReviewMenu: ComponentType<{
+  anchorRef?: RefObject<HTMLElement>
+  onClose: () => void
+  onSensitiveReview: () => void
+  onDeaiReview: () => void
+  onSourceCheck: () => void
+  onConsistencyReview: () => void
+  onPrivacyReview: () => void
+  onFormatReview: () => void
+  onRoleReview: () => void
+  onCustomReview: () => void
+}>
+export const ExportIcon: ComponentType
+export const DeaiReviewModal: ComponentType<{
+  open: boolean
+  loadTemplates: () => Promise<import('@qingagent/contract-ts').StyleTemplateItem[]>
+  loadTemplate: (id: string) => Promise<import('@qingagent/contract-ts').StyleTemplateItem>
+  saveTemplate: (input: { name: string; detail: string; prompt: string }) => Promise<import('@qingagent/contract-ts').StyleTemplateItem>
+  onClose: () => void
+  onConfirm: (template: import('@qingagent/contract-ts').StyleTemplateItem, supplement: string) => void
+}>
 export interface AiModifyTarget {
   label: string
   suffix: string

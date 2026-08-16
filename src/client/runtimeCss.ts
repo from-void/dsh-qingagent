@@ -12,6 +12,19 @@ const RUNTIME_CSS = `
   backdrop-filter: blur(18px) saturate(1.3);
   -webkit-backdrop-filter: blur(18px) saturate(1.3);
 }
+/* 青简 workspace-ink-skin.css:2558-2575；导出/审查菜单绕过 dsh CSS 管线。 */
+[data-qingagent-doc-panel] .ws-export-menu {
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+}
+/* 青简 workspace-ink-skin.css:2584-2593,2632-2636；管线可能剥 @keyframes。 */
+@keyframes ws-export-pop {
+  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes ws-export-spin {
+  to { transform: rotate(360deg); }
+}
 [data-qingagent-doc-panel] .ws-right::-webkit-scrollbar { width: 10px; }
 [data-qingagent-doc-panel] .ws-right::-webkit-scrollbar-thumb {
   background: rgba(120, 90, 50, .38);

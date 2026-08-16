@@ -4,6 +4,16 @@ export interface PmDoc {
   content: Array<Record<string, unknown>>
 }
 
+export interface StyleTemplateItem {
+  id: string
+  dtype: string
+  slot: 'layout' | 'writing' | 'instruction'
+  name: string
+  detail: string
+  prompt: string
+  builtin: boolean
+}
+
 export function qingmlParse(text: string): {
   title: string | null
   blocks: Array<Record<string, unknown>>
