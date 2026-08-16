@@ -4,7 +4,11 @@ import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
 import type { Editor } from '@tiptap/react'
-import type { BridgeDocument } from '../contracts.js'
+import type {
+  BridgeDocument,
+  ExternalPmDocReadResponse,
+  ExternalReviewRenderModelResponse,
+} from '../contracts.js'
 import {
   DocumentSnapshotView,
   type DocumentSnapshotViewHandle,
@@ -14,7 +18,6 @@ import { DocToolbar } from '@qingweb/pages/workspace/components/DocToolbar'
 import { PatchNav } from '@qingweb/pages/workspace/components/PatchNav'
 import { DeaiReviewModal } from '@qingweb/pages/workspace/components/DeaiReviewModal'
 import { ReviewIcon, ReviewMenu } from '@qingweb/pages/workspace/components/ReviewMenu'
-import { ExportIcon } from '@qingweb/pages/workspace/components/RightPane'
 import type { AiModifyTarget } from '@qingweb/pages/workspace/data/aiModifyTarget'
 import type { DocDimensions } from '@qingweb/pages/workspace/data/docDimensions'
 import {
@@ -23,15 +26,23 @@ import {
   type DocWriteBaseline,
 } from '@qingweb/pages/workspace/data/docWriteBaseline'
 import { pmDocToViewDocumentSnapshot } from '@qingweb/pages/workspace/data/protocol'
-import { canUseDocumentEditing } from '@qingweb/pages/workspace/data/reviewActions'
+import {
+  canUseDocumentEditing,
+  deriveReviewRenderMode,
+} from '@qingweb/pages/workspace/data/reviewActions'
 import { useWorkspaceFind } from '@qingweb/pages/workspace/hooks/useWorkspaceFind'
-import type { PmDoc } from '@qingagent/pm-schema'
+import {
+  countDocVisibleChars,
+  countVisibleChars,
+  type PmDoc,
+} from '@qingagent/pm-schema'
 import type { StyleTemplateItem } from '@qingagent/contract-ts'
 import {
   encodeAssetBridgeContext,
   type AssetBridgeContext,
 } from '../assetBridge.js'
 import { AssetBridgeProvider } from '../qingdoc/AssetBridgeProvider.js'
+import { ConfirmProvider } from '../qingdoc/shims/system.js'
 import { DocumentSaveCoordinator, type DocumentSaveState } from './documentSaveCoordinator.js'
 import { createQingmlCompileThrottle, type QingmlCompileThrottle } from './streamingDocument.js'
 import { buildReviewPresentationModel } from './reviewPresentation.js'
@@ -42,6 +53,7 @@ import { QINGJIAN_ICON_DATA_URI } from './qingjianIcon.js'
 import { ensureQingdocRuntimeCss } from './runtimeCss.js'
 import { BridgeHttpError, qingClientStore } from './store.js'
 import type { QingLibraryDoc } from './store.js'
+import { WholeDocReviewNav } from './WholeDocReviewNav.js'
 import {
   assembleDshReviewQuery,
   DSH_DEAI_STYLE_TEMPLATES,
@@ -60,6 +72,7 @@ interface InjectedProps {
 export type QingDocPanelProps = PropsRuntime<'details'> & InjectedProps
 
 const EMPTY_PATCH_IDS = new Set<string>()
+const WHOLE_DOC_REVIEW_THRESHOLD = 0.7
 
 export function QingDocPanel(props: QingDocPanelProps) {
   ensureQingdocRuntimeCss()
@@ -78,6 +91,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const [showSavingStatus, setShowSavingStatus] = useState(false)
   const [streamingPmDoc, setStreamingPmDoc] = useState<PmDoc | null>(null)
   const [activeReviewTargetId, setActiveReviewTargetId] = useState<string | null>(null)
+  const [wholeDocVersion, setWholeDocVersion] = useState<'new' | 'old'>('new')
   const [reviewSubmitting, setReviewSubmitting] = useState(false)
   const [reviewSettlementRetryPending, setReviewSettlementRetryPending] = useState(false)
   const rootRef = useRef<HTMLElement>(null)
@@ -91,6 +105,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const autoCommitKeyRef = useRef<string | null>(null)
   const reviewSubmittingRef = useRef(false)
   const reviewSettlementRetryPendingRef = useRef(false)
+  const wholeDocScrollMemRef = useRef<Record<'new' | 'old', number>>({ new: 0, old: 0 })
   const snapshotRef = useRef(snapshot)
   snapshotRef.current = snapshot
 
@@ -395,6 +410,63 @@ export function QingDocPanel(props: QingDocPanelProps) {
       : null,
     [panelDoc, snapshot.reviewModel],
   )
+  // 对齐青简 useWorkspacePageController.tsx:1181-1201：整篇审新版直接使用后端给出的
+  // editedDoc；changeRatio 缺失时按产品公式用 suggestion 前后可见字符数 / 新旧文档
+  // 可见字符总数派生，不能从内联 decoration 反推候选稿。
+  const editedNewDoc = useMemo(
+    () => snapshot.reviewModel?.editedDoc
+      ? pmDocToViewDocumentSnapshot(
+          snapshot.reviewModel.editedDoc,
+          snapshot.reviewModel.baseVersion + 1,
+          panelDoc?.ts ?? '',
+        )
+      : null,
+    [panelDoc?.ts, snapshot.reviewModel],
+  )
+  const derivedReviewChangeRatio = useMemo(
+    () => panelDoc && snapshot.reviewModel
+      ? computeExternalReviewChangeRatio(panelDoc, snapshot.reviewModel)
+      : 0,
+    [panelDoc, snapshot.reviewModel],
+  )
+  const engineChangeRatio = snapshot.reviewModel?.changeRatio
+  const changeRatio = typeof engineChangeRatio === 'number' && Number.isFinite(engineChangeRatio)
+    ? engineChangeRatio
+    : derivedReviewChangeRatio
+  const effectiveReview = pendingReview && Boolean(snapshot.reviewModel?.suggestions.some((suggestion) =>
+    suggestion.kind !== 'annotation' &&
+    (suggestion.status === 'reviewing' || suggestion.status === 'accepted' || suggestion.status === 'rejected')))
+  const reviewRenderMode = deriveReviewRenderMode({
+    effectiveReview,
+    editedNewDoc,
+    changeRatio,
+    wholeDocReviewThreshold: WHOLE_DOC_REVIEW_THRESHOLD,
+    wholeDocument: snapshot.reviewModel?.wholeDocument,
+  })
+  const wholeDocReview = reviewRenderMode.wholeDocReview
+  const wholeDocReviewBatchKey = [
+    activeEngineSessionId ?? '',
+    snapshot.reviewModel?.baseVersion ?? -1,
+    ...(snapshot.reviewModel?.suggestions.map((suggestion) => suggestion.id).sort() ?? []),
+  ].join(':')
+  useEffect(() => {
+    setWholeDocVersion('new')
+    wholeDocScrollMemRef.current = { new: 0, old: 0 }
+  }, [wholeDocReviewBatchKey])
+  const handleWholeDocVersionChange = useCallback((next: 'new' | 'old') => {
+    setWholeDocVersion((current) => {
+      const scrollContainer = rootRef.current?.querySelector<HTMLElement>('.ws-right')
+      if (current !== next && scrollContainer) {
+        wholeDocScrollMemRef.current[current] = scrollContainer.scrollTop
+      }
+      return next
+    })
+  }, [])
+  useLayoutEffect(() => {
+    if (!wholeDocReview) return
+    const scrollContainer = rootRef.current?.querySelector<HTMLElement>('.ws-right')
+    if (scrollContainer) scrollContainer.scrollTop = wholeDocScrollMemRef.current[wholeDocVersion] ?? 0
+  }, [wholeDocReview, wholeDocVersion])
   // P11:冲突稿切回时优先恢复本地内容快照(冲突态本就等用户裁决,呈现本地稿语义正确)。
   const conflictStashDoc = activeConflict && activeEngineSessionId
     ? snapshot.conflictStash?.[activeEngineSessionId]
@@ -715,6 +787,15 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const reviewCount = reviewPresentation
     ? remainingReviewCount
     : snapshot.reviewCount ?? 0
+  const shownWholeDoc = wholeDocVersion === 'old'
+    ? (reviewPresentation?.doc ?? surfaceDoc)
+    : (editedNewDoc ?? surfaceDoc)
+  const wholeDocReviewScopeKey = [
+    activeEngineSessionId ?? '',
+    shownWholeDoc.version,
+    remainingReviewCount,
+    visibleReviewTargets.length,
+  ].join(':')
   const title = panelDoc?.title || snapshot.activeDoc?.title || activeBound?.title || '未命名文稿'
   const statusLabel = panelStatus({
     busy,
@@ -786,20 +867,21 @@ export function QingDocPanel(props: QingDocPanelProps) {
   } as CSSProperties
 
   return (
-    <section
-      ref={rootRef}
-      id="view-workspace"
-      data-qingagent-doc-panel
-      data-view="workspace"
-      data-wf="WorkspacePage"
-      data-content={contentKind}
-      data-tool={busy ? 'agentBusy' : 'none'}
-      data-ws-state={busy ? 'streaming' : 'idle'}
-      data-qingdoc-mode={interactiveEditable ? 'editable' : 'readonly'}
-      data-save-state={saveState.kind}
-      style={rootStyle}
-      aria-label="青简文档"
-    >
+    <ConfirmProvider>
+      <section
+        ref={rootRef}
+        id="view-workspace"
+        data-qingagent-doc-panel
+        data-view="workspace"
+        data-wf="WorkspacePage"
+        data-content={contentKind}
+        data-tool={busy ? 'agentBusy' : 'none'}
+        data-ws-state={busy ? 'streaming' : 'idle'}
+        data-qingdoc-mode={interactiveEditable ? 'editable' : 'readonly'}
+        data-save-state={saveState.kind}
+        style={rootStyle}
+        aria-label="青简文档"
+      >
       <div
         className="qingdoc-details-resizer"
         data-qing-details-resizer
@@ -868,35 +950,55 @@ export function QingDocPanel(props: QingDocPanelProps) {
           <div className="ws-paper-shell" data-wf="WorkspacePaperShell" aria-hidden="true" />
           <div className="ws-document-content" data-wf="WorkspaceHydrationDocumentContent">
             <AssetBridgeProvider context={assetContext}>
-              <DocumentSnapshotView
-                key={`${assetSessionId ?? 'empty'}:${snapshot.panelReloadNonce ?? 0}`}
-                ref={setDocViewHandle}
-                doc={surfaceDoc}
-                docId={assetSessionId ?? `dsh:${sessionId}:empty`}
-                editable
-                interactiveEditable={interactiveEditable}
-                deferBlockIdNormalization={pendingReview}
-                showPatches={pendingReview && Boolean(reviewPresentation?.applied.length)}
-                acceptedPatches={reviewPresentation?.acceptedIds ?? EMPTY_PATCH_IDS}
-                rejectedPatches={reviewPresentation?.rejectedIds ?? EMPTY_PATCH_IDS}
-                onPatchVerdict={(patchId: string, verdict: 'accepted' | 'rejected') => {
-                  void handleReviewVerdict(patchId, verdict)
-                }}
-                patchMeta={reviewPresentation?.patchMeta}
-                activePatchId={reviewPresentation?.visibleReviewTargets.find(
-                  (target) => target.id === activeReviewTargetId,
-                )?.patchId ?? null}
-                reviewSuggestions={reviewPresentation?.suggestions}
-                reviewOverlayInputs={reviewPresentation?.overlayInputs}
-                reviewBlockPatches={reviewPresentation?.blockPatchInputs}
-                reviewAppliedPatches={reviewPresentation?.applied}
-                reviewTargets={reviewPresentation?.reviewTargets}
-                activeReviewTargetId={activeReviewTargetId}
-                onEditorReady={handleEditorReady}
-                onEditorChange={interactiveEditable ? handleEditorChange : undefined}
-                onAiModify={handleAiModify}
-                onToast={setToast}
-              />
+              {wholeDocReview ? (
+                <div className="wdr-swap" key={wholeDocVersion}>
+                  <DocumentSnapshotView
+                    key={`${assetSessionId ?? 'empty'}:${snapshot.panelReloadNonce ?? 0}`}
+                    ref={setDocViewHandle}
+                    doc={shownWholeDoc}
+                    docId={assetSessionId ?? `dsh:${sessionId}:empty`}
+                    editable
+                    interactiveEditable={false}
+                    deferBlockIdNormalization
+                    showPatches={false}
+                    acceptedPatches={EMPTY_PATCH_IDS}
+                    rejectedPatches={EMPTY_PATCH_IDS}
+                    patchMeta={reviewPresentation?.patchMeta}
+                    activePatchId={null}
+                    onEditorReady={handleEditorReady}
+                  />
+                </div>
+              ) : (
+                <DocumentSnapshotView
+                  key={`${assetSessionId ?? 'empty'}:${snapshot.panelReloadNonce ?? 0}`}
+                  ref={setDocViewHandle}
+                  doc={surfaceDoc}
+                  docId={assetSessionId ?? `dsh:${sessionId}:empty`}
+                  editable
+                  interactiveEditable={interactiveEditable}
+                  deferBlockIdNormalization={pendingReview}
+                  showPatches={pendingReview && Boolean(reviewPresentation?.applied.length)}
+                  acceptedPatches={reviewPresentation?.acceptedIds ?? EMPTY_PATCH_IDS}
+                  rejectedPatches={reviewPresentation?.rejectedIds ?? EMPTY_PATCH_IDS}
+                  onPatchVerdict={(patchId: string, verdict: 'accepted' | 'rejected') => {
+                    void handleReviewVerdict(patchId, verdict)
+                  }}
+                  patchMeta={reviewPresentation?.patchMeta}
+                  activePatchId={reviewPresentation?.visibleReviewTargets.find(
+                    (target) => target.id === activeReviewTargetId,
+                  )?.patchId ?? null}
+                  reviewSuggestions={reviewPresentation?.suggestions}
+                  reviewOverlayInputs={reviewPresentation?.overlayInputs}
+                  reviewBlockPatches={reviewPresentation?.blockPatchInputs}
+                  reviewAppliedPatches={reviewPresentation?.applied}
+                  reviewTargets={reviewPresentation?.reviewTargets}
+                  activeReviewTargetId={activeReviewTargetId}
+                  onEditorReady={handleEditorReady}
+                  onEditorChange={interactiveEditable ? handleEditorChange : undefined}
+                  onAiModify={handleAiModify}
+                  onToast={setToast}
+                />
+              )}
             </AssetBridgeProvider>
             {findOpen && findMode !== 'hidden' ? (
               <DocFindBar
@@ -923,23 +1025,34 @@ export function QingDocPanel(props: QingDocPanelProps) {
           </div>
         </main>
       </div>
-      {pendingReview && snapshot.reviewModel?.suggestions.length ? (
-        <PatchNav
-          remainingCount={remainingReviewCount}
-          totalCount={visibleReviewTargets.length}
-          activePatchIndex={activeReviewTargetId
-            ? visibleReviewTargetIds.indexOf(activeReviewTargetId)
-            : -1}
-          isSubmitting={reviewSubmitting}
-          retryOnly={reviewSettlementRetryPending}
-          unrenderableOnly={unrenderableReviewOnly}
-          onJumpPrev={() => jumpReview(-1)}
-          onJumpNext={() => jumpReview(1)}
-          onRejectAll={() => { void handleReviewCommit('reject_all') }}
-          onCommit={() => handleReviewCommit('commit')}
-        />
-      ) : null}
-    </section>
+        {wholeDocReview && snapshot.reviewModel?.suggestions.length ? (
+          <WholeDocReviewNav
+            reviewScopeKey={wholeDocReviewScopeKey}
+            version={wholeDocVersion}
+            isSubmitting={reviewSubmitting}
+            onVersionChange={handleWholeDocVersionChange}
+            onApply={() => handleReviewCommit('accept_all')}
+            onRevert={() => handleReviewCommit('reject_all')}
+            onToast={setToast}
+          />
+        ) : pendingReview && snapshot.reviewModel?.suggestions.length ? (
+          <PatchNav
+            remainingCount={remainingReviewCount}
+            totalCount={visibleReviewTargets.length}
+            activePatchIndex={activeReviewTargetId
+              ? visibleReviewTargetIds.indexOf(activeReviewTargetId)
+              : -1}
+            isSubmitting={reviewSubmitting}
+            retryOnly={reviewSettlementRetryPending}
+            unrenderableOnly={unrenderableReviewOnly}
+            onJumpPrev={() => jumpReview(-1)}
+            onJumpNext={() => jumpReview(1)}
+            onRejectAll={() => { void handleReviewCommit('reject_all') }}
+            onCommit={() => handleReviewCommit('commit')}
+          />
+        ) : null}
+      </section>
+    </ConfirmProvider>
   )
 }
 
@@ -1133,6 +1246,43 @@ function reviewTargetSelector(targetId: string): string {
 
 function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds))
+}
+
+/** 青简 RightPane.tsx:521-530 原图标。 */
+function ExportIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3v12" />
+      <path d="M8 7l4-4 4 4" />
+      <path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5" />
+    </svg>
+  )
+}
+
+/**
+ * 青简产品源 apps/web/src/pages/workspace/data/reviewActions.ts:9-33 与
+ * useWorkspacePageController.tsx:1194-1201 的 external render-model 等价输入层。
+ */
+export function computeExternalReviewChangeRatio(
+  panelDoc: ExternalPmDocReadResponse,
+  renderModel: ExternalReviewRenderModelResponse,
+): number {
+  const changed = renderModel.suggestions.reduce((sum, suggestion) => {
+    if (suggestion.kind === 'annotation') return sum
+    if (
+      suggestion.status !== 'reviewing' &&
+      suggestion.status !== 'accepted' &&
+      suggestion.status !== 'rejected'
+    ) return sum
+    const before = suggestion.diffHunk?.beforeText ?? suggestion.preview.deleteText
+    const after = suggestion.diffHunk?.afterText ?? suggestion.preview.insertText
+    return sum + countVisibleChars(before ?? '') + countVisibleChars(after ?? '')
+  }, 0)
+  const baseDoc = renderModel.previewDoc ?? panelDoc.pmDoc
+  const total = (baseDoc ? countDocVisibleChars(baseDoc) : 0) +
+    (renderModel.editedDoc ? countDocVisibleChars(renderModel.editedDoc) : 0)
+  return total > 0 ? changed / total : 0
 }
 
 export function panelStatus(input: {

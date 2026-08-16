@@ -48,7 +48,13 @@ export interface ExternalDoc {
 export type ExternalPmDocReadResponse = QingExternalPmDocReadResponse
 export type ExternalDocReplaceRequest = QingExternalDocReplaceRequest
 export type ExternalDocReplaceResponse = QingExternalDocReplaceResponse
-export type ExternalReviewRenderModelResponse = QingExternalReviewRenderModelResponse
+/**
+ * 当前青简公开契约携带 wholeDocument/previewDoc/editedDoc；部分引擎版本还会直接给出
+ * changeRatio。后者保持可选，缺失时由客户端按青简产品侧同式派生。
+ */
+export type ExternalReviewRenderModelResponse = QingExternalReviewRenderModelResponse & {
+  changeRatio?: number
+}
 export type ExternalAssetUploadJsonRequest = QingExternalAssetUploadJsonRequest
 export type ExternalAssetUploadResponse = QingExternalAssetUploadResponse
 

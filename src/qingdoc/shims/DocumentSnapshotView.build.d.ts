@@ -27,6 +27,16 @@ export interface PatchNavProps {
   onCommit: () => void | Promise<void>
 }
 export const PatchNav: ComponentType<PatchNavProps>
+export interface WholeDocReviewNavProps {
+  reviewScopeKey: string
+  version: 'new' | 'old'
+  isSubmitting?: boolean
+  onVersionChange: (version: 'new' | 'old') => void
+  onApply: () => void | Promise<void>
+  onRevert: () => void | Promise<void>
+  onToast?: (message: string) => void
+}
+export const WholeDocReviewNav: ComponentType<WholeDocReviewNavProps>
 export const ReviewIcon: ComponentType
 export const ReviewMenu: ComponentType<{
   anchorRef?: RefObject<HTMLElement>
@@ -218,6 +228,29 @@ export function derivePatchPresentation(
   conflictIds: string[]
 }
 export function buildPatchMeta(applied: readonly AppliedPatch[]): Map<string, PatchMeta>
+export function deriveReviewRenderMode(input: {
+  effectiveReview: boolean
+  editedNewDoc: ViewDocumentSnapshot | null
+  changeRatio: number
+  wholeDocReviewThreshold: number
+  wholeDocument?: boolean
+}): {
+  wholeDocReview: boolean
+  awaitingWholeDocReviewMaterial: boolean
+  inlinePatchReview: boolean
+}
+
+export interface ConfirmOptions {
+  title: string
+  message: import('react').ReactNode
+  confirmLabel?: string
+  cancelLabel?: string
+  tone?: 'danger' | 'affirm'
+  subject?: string
+  footHint?: string
+}
+export const ConfirmProvider: ComponentType<{ children: import('react').ReactNode }>
+export function useConfirm(): (options: ConfirmOptions) => Promise<boolean>
 
 /** launchModal/starterPresets 的构建期声明(运行时 tsdown 直连青简源码)。 */
 export interface TemplateStarterPreset {

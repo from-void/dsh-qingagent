@@ -1,14 +1,7 @@
-import type { ReactNode } from 'react'
-
-export interface ConfirmOptions {
-  title: string
-  message: ReactNode
-  confirmLabel?: string
-  cancelLabel?: string
-  tone?: 'danger' | 'affirm'
-  subject?: string
-  footHint?: string
-}
+// 确认层直接复用青简产品的 ConfirmProvider；WholeDocReviewNav 的 useConfirm
+// 通过本 shim 与面板外层 Provider 共享同一个 Symbol.for context。
+export { ConfirmProvider, useConfirm } from '@qingweb/system/ConfirmProvider'
+export type { ConfirmOptions } from '@qingweb/system/ConfirmProvider'
 
 let toastSequence = 0
 
@@ -21,13 +14,4 @@ export function useToast() {
     },
     dismiss(): void {},
   }
-}
-
-export function useConfirm() {
-  return async (options: ConfirmOptions): Promise<boolean> =>
-    window.confirm(`${options.title}\n\n${String(options.message)}`)
-}
-
-export function ConfirmProvider({ children }: { children: ReactNode }) {
-  return <>{children}</>
 }

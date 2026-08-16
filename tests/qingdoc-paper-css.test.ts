@@ -124,7 +124,8 @@ describe('青简纸面移植契约', () => {
     ])
 
     expect(generator).toContain("['apps/web/src/pages/workspace/workspace.css', [[169, 169]")
-    expect(generator).toContain('[1527, 1548]')
+    expect(generator).toContain("['apps/web/src/app.css', [[1, 15], [255, 477]]]")
+    expect(generator).toContain('[1527, 1667]')
     expect(generator).toContain('[1863, 2033]')
     expect(generator).toContain('[2093, 2151]')
     expect(generator).toContain('[2558, 2682]')
@@ -142,5 +143,8 @@ describe('青简纸面移植契约', () => {
     expect(runtimeCss).toContain('[data-qingagent-doc-panel] .ws-export-menu')
     expect(runtimeCss).toContain('@keyframes ws-export-pop')
     expect(runtimeCss).toContain('@keyframes ws-export-spin')
+    expect(runtimeCss).toContain('@keyframes wdr-swap-in')
+    expect(runtimeCss).toContain('@keyframes ws-folder-modal-overlay-in')
+    expect(runtimeCss).toContain('@keyframes ws-folder-modal-panel-out')
   })
 })

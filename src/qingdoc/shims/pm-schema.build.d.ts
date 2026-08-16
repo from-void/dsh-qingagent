@@ -22,6 +22,8 @@ export function qingmlParse(text: string): {
 export function aiIrToPm(input: { blocks: Array<Record<string, unknown>> }): PmDoc
 export function pmToAiIr(doc: PmDoc): { blocks: Array<Record<string, unknown>> }
 export function aiBlocksToQingml(blocks: ReadonlyArray<Record<string, unknown>>): string
+export function countVisibleChars(text: string): number
+export function countDocVisibleChars(doc: PmDoc): number
 
 export interface DocSuggestion {
   id: string
@@ -43,7 +45,7 @@ export interface DocSuggestion {
   }
   patch: { kind: 'prosemirror_steps'; steps: Array<Record<string, unknown>> }
   preview: { deleteText: string; insertText: string }
-  diffHunk?: Record<string, unknown>
+  diffHunk?: { beforeText?: string; afterText?: string; [key: string]: unknown }
   summary: string
   conflict?: Record<string, unknown>
   kind?: 'revision' | 'annotation'
@@ -84,6 +86,7 @@ export interface ExternalReviewRenderModelResponse {
   agentBusy: boolean
   baseVersion: number
   suggestions: DocSuggestion[]
+  changeRatio?: number
   wholeDocument?: boolean
   previewDoc?: PmDoc
   editedDoc?: PmDoc

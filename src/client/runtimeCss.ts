@@ -25,6 +25,36 @@ const RUNTIME_CSS = `
 @keyframes ws-export-spin {
   to { transform: rotate(360deg); }
 }
+/* 青简 workspace.css:385-386 与 app.css:407-463；dsh 注入管线可能剥 @keyframes，
+   整篇版本切换和产品确认层动画在运行时按真源值补回。 */
+@keyframes wdr-swap-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ws-folder-modal-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ws-folder-modal-overlay-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes ws-folder-modal-panel-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes ws-folder-modal-panel-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-4px) scale(0.985); }
+}
+@keyframes ws-folder-modal-panel-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ws-folder-modal-panel-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
 [data-qingagent-doc-panel] .ws-right::-webkit-scrollbar { width: 10px; }
 [data-qingagent-doc-panel] .ws-right::-webkit-scrollbar-thumb {
   background: rgba(120, 90, 50, .38);

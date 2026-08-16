@@ -178,7 +178,10 @@ function cssPlugin(pluginId: string): BuildPlugin {
       this.addWatchFile(filename)
       let source = await readFile(filename, 'utf8')
       source = await inlineLocalCssAssets(source, filename, (asset) => this.addWatchFile(asset))
-      if (filename.startsWith(`${QING_WEB_SOURCE}/pages/workspace/`)) {
+      if (
+        filename.startsWith(`${QING_WEB_SOURCE}/pages/workspace/`) ||
+        filename === `${QING_SYSTEM_SOURCE}/folder-control.css`
+      ) {
         source = `@scope (${QING_PANEL_SELECTOR}) {\n${source}\n}`
       }
       const { code, exports } = transform({

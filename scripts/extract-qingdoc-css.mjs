@@ -21,11 +21,21 @@ const sources = [
   // 清单写到 35；基线第 36 行才是 .font-mono 的闭合花括号，随段补齐以保持合法 CSS。
   ['packages/ui-kit/src/base.css', [[5, 36]]],
   ['packages/ui-kit/src/components.css', [[181, 274]]],
-  ['apps/web/src/app.css', [[1, 15]]],
+  ['apps/web/src/app.css', [[1, 15], [255, 477]]],
   ['apps/web/src/pages/workspace/workspace.css', [[169, 169], [197, 214], [304, 386], [1299, 3662]]],
-  ['apps/web/src/pages/workspace/workspace-ink-skin.css', [[20, 60], [119, 204], [592, 682], [1111, 1220], [1527, 1548], [1669, 1802], [1863, 2033], [2093, 2151], [2558, 2682], [3193, 3508]]],
+  ['apps/web/src/pages/workspace/workspace-ink-skin.css', [[20, 60], [119, 204], [592, 682], [1111, 1220], [1527, 1667], [1669, 1802], [1863, 2033], [2093, 2151], [2558, 2682], [3193, 3508]]],
   ['apps/web/src/pages/workspace/workspace-responsive.css', [[1, 30]]],
 ]
+
+// 尾部几何覆写:必须排在机械提取的产品规则之后,同特异度靠后取胜。
+const geometryOverrides = `/* 纸内功能区几何换算:产品 top 64 = 纸上留白 52 + 纸内缩 12,right 18 以
+   「滚动容器宽=纸宽」为前提;插件纸上留白为 0 且容器弹性全宽(纸居中),
+   换算为:顶=纸内缩 12,右=纸右缘往内 18。 */
+${workspaceRoot} .ws-docfns {
+  top: 12px;
+  right: max(18px, calc((100% - min(var(--ws-paper-column-width), 100%)) / 2 + 18px));
+}
+`
 
 const hostGlue = `/* dsh 面板薄胶水：只建立青简纸面所需的唯一根与原 DOM 骨架。 */
 ${panelRoot} {
@@ -235,6 +245,7 @@ let output = [
   '/* 由 scripts/extract-qingdoc-css.mjs 从青简 wt/dsh-bridge@dc1a0baf 机械提取；声明值不改。 */',
   hostGlue,
   scopeStylesheet(extracted.join('\n\n')),
+  geometryOverrides,
   '',
 ].join('\n').replace(/[ \t]+$/gm, '')
 

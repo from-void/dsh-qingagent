@@ -4,8 +4,18 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DocWriteBaseline } from '@qingweb/pages/workspace/data/docWriteBaseline'
-import type { PmDoc } from '../src/contracts.js'
-import { panelStatus, QingDocPanel, type QingDocPanelProps } from '../src/client/QingDocPanel.js'
+import type {
+  DocSuggestion,
+  ExternalPmDocReadResponse,
+  ExternalReviewRenderModelResponse,
+  PmDoc,
+} from '../src/contracts.js'
+import {
+  computeExternalReviewChangeRatio,
+  panelStatus,
+  QingDocPanel,
+  type QingDocPanelProps,
+} from '../src/client/QingDocPanel.js'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -43,7 +53,10 @@ vi.mock('@qingweb/pages/workspace/components/DocumentSnapshotView', async () => 
           if (pending) await props.onEditorChange?.(pending.doc, pending.baseline)
         },
       }), [props.onEditorChange])
-      return React.createElement('article', { 'data-testid': 'mock-document-view' })
+      return React.createElement('article', {
+        'data-testid': 'mock-document-view',
+        'data-doc-json': JSON.stringify((props as unknown as { doc?: unknown }).doc ?? null),
+      })
     }),
   }
 })
@@ -87,6 +100,28 @@ const EDITED_PM = {
   type: 'doc', attrs: { schemaVersion: 1 },
   content: [{ type: 'paragraph', attrs: { blockId: 'typed' }, content: [{ type: 'text', text: '刚输入的正文' }] }],
 } as PmDoc
+const WHOLE_BASE_PM = {
+  type: 'doc', attrs: { schemaVersion: 1 },
+  content: [{ type: 'paragraph', attrs: { blockId: 'whole-base' }, content: [{ type: 'text', text: '旧版全文' }] }],
+} as PmDoc
+const WHOLE_EDITED_PM = {
+  type: 'doc', attrs: { schemaVersion: 1 },
+  content: [{ type: 'paragraph', attrs: { blockId: 'whole-edited' }, content: [{ type: 'text', text: '新版全文' }] }],
+} as PmDoc
+
+function reviewSuggestion(
+  status: 'reviewing' | 'accepted' | 'rejected' = 'reviewing',
+  beforeText = '',
+  afterText = '落稿',
+): DocSuggestion {
+  return {
+    id: 'patch-reviewed', reviewBatchId: 'batch-1', groupMode: 'independent',
+    docId: 'qing-review', baseVersion: 3, baseSchemaVersion: 1, status,
+    anchor: { blockId: 'missing', pmFrom: 1, pmTo: 1, quote: '', textHash: 'hash' },
+    patch: { kind: 'prosemirror_steps', steps: [] },
+    preview: { deleteText: beforeText, insertText: afterText }, summary: '测试候选',
+  }
+}
 
 let root: Root | null = null
 let host: HTMLElement | null = null
@@ -377,6 +412,128 @@ describe('QingDocPanel 保存生命周期', () => {
   })
 })
 
+describe('QingDocPanel 整篇审阅', () => {
+  it('按青简输入侧公式派生 changeRatio，达到 0.7 阈值时切到整篇审并可切换新旧全文', async () => {
+    const ratio = computeExternalReviewChangeRatio(
+      {
+        sessionId: 'qing-review', docVersion: 3, contentHash: 'hash-3',
+        state: 'pendingReview', agentBusy: false, title: '整篇审', ts: 't0', pmDoc: WHOLE_BASE_PM,
+      } satisfies ExternalPmDocReadResponse,
+      {
+        sessionId: 'qing-review', docVersion: 3, state: 'pendingReview', agentBusy: false,
+        baseVersion: 3, previewDoc: WHOLE_BASE_PM, editedDoc: WHOLE_EDITED_PM,
+        suggestions: [reviewSuggestion('reviewing', '旧版全文', '新版全文')],
+      } satisfies ExternalReviewRenderModelResponse,
+    )
+    expect(ratio).toBe(1)
+
+    installBridgeFetch('dsh-whole-threshold', ['qing-review'], {
+      pendingReview: true,
+      reviewSuggestionStatus: 'reviewing',
+      changeRatio: 0.7,
+      reviewBasePm: WHOLE_BASE_PM,
+      reviewEditedPm: WHOLE_EDITED_PM,
+    })
+    renderPanel('dsh-whole-threshold')
+
+    await vi.waitFor(() => expect(document.querySelector('[data-wf="WholeDocReviewNav"]')).not.toBeNull())
+    expect(document.querySelector('[data-testid="mock-patch-nav"]')).toBeNull()
+    expect(document.querySelector('.wdr-swap')).not.toBeNull()
+    expect(document.querySelector('[data-testid="mock-document-view"]')?.getAttribute('data-doc-json'))
+      .toContain('新版全文')
+    expect(viewHarness.props).toMatchObject({
+      interactiveEditable: false,
+      deferBlockIdNormalization: true,
+      showPatches: false,
+      activePatchId: null,
+    })
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="false"]')?.click()
+    })
+    await vi.waitFor(() => expect(
+      document.querySelector('[data-testid="mock-document-view"]')?.getAttribute('data-doc-json'),
+    ).toContain('旧版全文'))
+    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('旧版')
+  })
+
+  it('应用新版复用 reviewCommit 并发送 accept_all', async () => {
+    const fetchMock = installBridgeFetch('dsh-whole-apply', ['qing-review'], {
+      pendingReview: true,
+      reviewSuggestionStatus: 'reviewing',
+      wholeDocument: true,
+      reviewBasePm: WHOLE_BASE_PM,
+      reviewEditedPm: WHOLE_EDITED_PM,
+    })
+    renderPanel('dsh-whole-apply')
+    const apply = await vi.waitFor(() => {
+      const button = [...document.querySelectorAll<HTMLButtonElement>('[data-wf="WholeDocReviewNav"] button')]
+        .find((candidate) => candidate.textContent === '应用新版')
+      expect(button).toBeDefined()
+      return button!
+    })
+
+    await act(async () => { apply.click() })
+    await vi.waitFor(() => expect(reviewCommitActions(fetchMock)).toContain('accept_all'))
+  })
+
+  it('引擎未返回 changeRatio 时使用 suggestion 前后文本派生并进入整篇审', async () => {
+    installBridgeFetch('dsh-whole-derived-ratio', ['qing-review'], {
+      pendingReview: true,
+      reviewSuggestionStatus: 'reviewing',
+      reviewBasePm: WHOLE_BASE_PM,
+      reviewEditedPm: WHOLE_EDITED_PM,
+      reviewBeforeText: '旧版全文',
+      reviewAfterText: '新版全文',
+    })
+    renderPanel('dsh-whole-derived-ratio')
+
+    await vi.waitFor(() => expect(document.querySelector('[data-wf="WholeDocReviewNav"]')).not.toBeNull())
+    expect(document.querySelector('[data-testid="mock-patch-nav"]')).toBeNull()
+  })
+
+  it('退回旧版先走产品确认层，确认后复用 reviewCommit 并发送 reject_all', async () => {
+    const fetchMock = installBridgeFetch('dsh-whole-revert', ['qing-review'], {
+      pendingReview: true,
+      reviewSuggestionStatus: 'reviewing',
+      wholeDocument: true,
+      reviewBasePm: WHOLE_BASE_PM,
+      reviewEditedPm: WHOLE_EDITED_PM,
+    })
+    renderPanel('dsh-whole-revert')
+    const revert = await vi.waitFor(() => {
+      const button = [...document.querySelectorAll<HTMLButtonElement>('[data-wf="WholeDocReviewNav"] button')]
+        .find((candidate) => candidate.textContent === '退回旧版')
+      expect(button).toBeDefined()
+      return button!
+    })
+
+    await act(async () => { revert.click() })
+    const confirm = await vi.waitFor(() => {
+      const dialog = document.querySelector<HTMLElement>('[data-wf="GlobalConfirm"]')
+      expect(dialog?.textContent).toContain('退回旧版会放弃本轮全部修改。')
+      return dialog!.querySelector<HTMLButtonElement>('.ws-folder-modal-danger')!
+    })
+    await act(async () => { confirm.click() })
+    await vi.waitFor(() => expect(reviewCommitActions(fetchMock)).toContain('reject_all'))
+  })
+
+  it('changeRatio 低于 0.7 时仍走逐处 PatchNav', async () => {
+    installBridgeFetch('dsh-inline-threshold', ['qing-review'], {
+      pendingReview: true,
+      reviewSuggestionStatus: 'reviewing',
+      changeRatio: 0.69,
+      reviewBasePm: WHOLE_BASE_PM,
+      reviewEditedPm: WHOLE_EDITED_PM,
+    })
+    renderPanel('dsh-inline-threshold')
+
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="mock-patch-nav"]')).not.toBeNull())
+    expect(document.querySelector('[data-wf="WholeDocReviewNav"]')).toBeNull()
+    expect(document.querySelector('.wdr-swap')).toBeNull()
+  })
+})
+
 describe('QingDocPanel 顶栏状态', () => {
   const base = {
     busy: false,
@@ -431,6 +588,12 @@ function installBridgeFetch(
     mismatchVerdict?: boolean
     postCommitPanelGate?: Promise<void>
     stalePostCommitPanelReads?: number
+    changeRatio?: number
+    wholeDocument?: boolean
+    reviewBasePm?: PmDoc
+    reviewEditedPm?: PmDoc
+    reviewBeforeText?: string
+    reviewAfterText?: string
   } = {},
 ) {
   vi.stubGlobal('EventSource', FakeEventSource)
@@ -476,7 +639,7 @@ function installBridgeFetch(
         sessionId: engineSessionId, docVersion: pendingReview ? 3 : 4,
         contentHash: pendingReview ? 'hash-3' : 'hash-4',
         state: pendingReview ? 'pendingReview' : 'editing',
-        agentBusy: false, title: engineSessionId, ts: 't0', pmDoc: EMPTY_PM,
+        agentBusy: false, title: engineSessionId, ts: 't0', pmDoc: options.reviewBasePm ?? EMPTY_PM,
       })
     }
     if (url.startsWith('/qingagent-bridge/doc?')) {
@@ -490,15 +653,15 @@ function installBridgeFetch(
     if (url.startsWith('/qingagent-bridge/review-render-model?')) {
       return Response.json({
         sessionId: engineSessionIds[0], docVersion: 3, state: 'pendingReview', agentBusy: false,
-        baseVersion: 3, previewDoc: EMPTY_PM,
-        suggestions: reviewCommitted ? [] : [{
-          id: 'patch-reviewed', reviewBatchId: 'batch-1', groupMode: 'independent',
-          docId: engineSessionIds[0], baseVersion: 3, baseSchemaVersion: 1,
-          status: options.reviewSuggestionStatus ?? 'accepted',
-          anchor: { blockId: 'missing', pmFrom: 1, pmTo: 1, quote: '', textHash: 'hash' },
-          patch: { kind: 'prosemirror_steps', steps: [] },
-          preview: { insertText: '落稿' }, summary: '测试候选',
-        }],
+        baseVersion: 3, previewDoc: options.reviewBasePm ?? EMPTY_PM,
+        ...(options.reviewEditedPm ? { editedDoc: options.reviewEditedPm } : {}),
+        ...(options.changeRatio === undefined ? {} : { changeRatio: options.changeRatio }),
+        ...(options.wholeDocument ? { wholeDocument: true } : {}),
+        suggestions: reviewCommitted ? [] : [reviewSuggestion(
+          options.reviewSuggestionStatus ?? 'accepted',
+          options.reviewBeforeText,
+          options.reviewAfterText,
+        )],
       })
     }
     if (url.startsWith('/qingagent-bridge/review-commit?') && init?.method === 'POST') {
@@ -534,6 +697,14 @@ function installBridgeFetch(
 function reviewCommitCalls(fetchMock: ReturnType<typeof installBridgeFetch>): number {
   return fetchMock.mock.calls.filter(([url, init]) =>
     String(url).startsWith('/qingagent-bridge/review-commit?') && init?.method === 'POST').length
+}
+
+function reviewCommitActions(fetchMock: ReturnType<typeof installBridgeFetch>): string[] {
+  return fetchMock.mock.calls
+    .filter(([url, init]) =>
+      String(url).startsWith('/qingagent-bridge/review-commit?') && init?.method === 'POST')
+    .map(([, init]) => JSON.parse(String(init?.body)) as { action: string })
+    .map((body) => body.action)
 }
 
 function panelReadCalls(fetchMock: ReturnType<typeof installBridgeFetch>): number {
