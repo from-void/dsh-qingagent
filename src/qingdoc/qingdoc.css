@@ -828,6 +828,46 @@
   :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .wdr-swap {animation:wdr-swap-in .34s cubic-bezier(.22,.61,.36,1) both}
   @keyframes wdr-swap-in {from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
+/* source: apps/web/src/pages/workspace/workspace.css:1120-1157 */
+  /* ============ 青简 Loading（空文档占位：静止态/推理态） ============ */
+  /* 复用 .doc-empty 那张「奶白纸」(ink-skin 给了 top/背景/阴影)，只把里面的浮动 loader 换成青字效果，
+     所以这里不自定义铺满背景/定位——纸张与位置完全沿用原空态。 */
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .qing-col {display:flex;flex-direction:column;align-items:center}
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .qing-stage {position:relative}
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .qing-stage .qing-ch,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .qing-stage .qing-center {
+    position:absolute;left:0;top:0;display:flex;align-items:center;justify-content:center;
+    line-height:1;user-select:none;
+  }
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .qing-stage .qing-ch {will-change:opacity;pointer-events:none;opacity:0}
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .qing-stage .qing-center {z-index:5;font-weight:700;color:var(--mark)}
+  /* 静止态：青字浅金；hover 整张纸(.qing-empty)时加深、辉光增强 */
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .qing-empty.is-static .qing-center {
+    color:#cbab70;filter:drop-shadow(0 0 10px rgba(168,130,63,.20));
+    transition:color .28s ease,filter .28s ease;
+  }
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .qing-empty.is-static:hover .qing-center {
+    color:var(--mark);filter:drop-shadow(0 0 16px rgba(168,130,63,.42));
+  }
+  /* 署名默认隐藏，仅鼠标移到圆圈(stage 被 clip-path 裁成圆)上才淡出；静止态完全不显示 */
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .qing-tag {
+    text-align:center;font-family:var(--font-zh-serif);
+    color:#6b6256;opacity:0;transition:opacity .3s ease;
+  }
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .qing-stage:hover ~ .qing-tag {opacity:.62}
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .qing-empty.is-static .qing-tag {display:none}
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .qing-tag-inner {will-change:opacity,transform}
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .qing-tag-inner .qt-title {font-size:14px;letter-spacing:2px}
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .qing-tag-inner .qt-author {font-size:12px;letter-spacing:2px;opacity:.8;margin-top:8px}
+
+  /* ============ doc-state 容器 ============ */
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .doc-empty {
+    position:absolute;inset:0;z-index:3;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--bg-canvas);
+    overflow:hidden;
+  }
+
 /* source: apps/web/src/pages/workspace/workspace.css:1289-3652 */
   /* ============ 工具栏 · 浮现式 (选中文本时出现在选区上方) ============ */
   :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .doc-toolbar {

@@ -14,6 +14,7 @@ export interface DocumentSnapshotViewHandle {
 export const DocumentSnapshotView: ForwardRefExoticComponent<
   Record<string, unknown> & RefAttributes<DocumentSnapshotViewHandle>
 >
+export const QingLoading: ComponentType<{ reasoning: boolean }>
 export const AnnotationCarousel: ComponentType<{
   groups: readonly AnnotationGroup[]
   editorDom: HTMLElement | null

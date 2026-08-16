@@ -54,12 +54,17 @@ vi.mock('@qingweb/pages/workspace/components/DocumentSnapshotView', async () => 
         },
       }), [props.onEditorChange])
       return React.createElement(
-        'article',
-        {
-          'data-testid': 'mock-document-view',
-          'data-doc-json': JSON.stringify((props as unknown as { doc?: unknown }).doc ?? null),
-        },
-        React.createElement('div', { className: 'pm-diagram-view', 'data-testid': 'mock-drawio-preview' }),
+        'div',
+        { className: 'ws-paper-surface' },
+        React.createElement('div', { className: 'ws-editor-glow', 'aria-hidden': 'true' }),
+        React.createElement(
+          'article',
+          {
+            'data-testid': 'mock-document-view',
+            'data-doc-json': JSON.stringify((props as unknown as { doc?: unknown }).doc ?? null),
+          },
+          React.createElement('div', { className: 'pm-diagram-view', 'data-testid': 'mock-drawio-preview' }),
+        ),
       )
     }),
   }
@@ -144,6 +149,48 @@ afterEach(() => {
 })
 
 describe('QingDocPanel 保存生命周期', () => {
+  it('空稿写作中挂载 QingLoading 推理态，不保留空文档 glow', async () => {
+    installBridgeFetch('dsh-empty-busy', ['qing-empty-busy'], { agentBusy: true })
+    renderPanel('dsh-empty-busy')
+
+    const loading = await vi.waitFor(() => {
+      const candidate = document.querySelector<HTMLElement>('[data-wf="QingLoading"]')
+      expect(candidate).not.toBeNull()
+      return candidate!
+    })
+    expect(loading.classList.contains('is-static')).toBe(false)
+    expect(document.querySelector('[data-testid="mock-document-view"]')).toBeNull()
+    expect(document.querySelector('.ws-editor-glow')).toBeNull()
+  })
+
+  it('有稿写作中不挂 QingLoading，保留现有纸面 glow 态', async () => {
+    installBridgeFetch('dsh-content-busy', ['qing-content-busy'], {
+      agentBusy: true,
+      panelPm: EDITED_PM,
+    })
+    renderPanel('dsh-content-busy')
+
+    await vi.waitFor(() => expect(
+      document.querySelector('[data-qingagent-doc-panel]')?.getAttribute('data-tool'),
+    ).toBe('agentBusy'))
+    await vi.waitFor(() => expect(
+      document.querySelector('[data-testid="mock-document-view"]'),
+    ).not.toBeNull())
+    expect(document.querySelector('[data-wf="QingLoading"]')).toBeNull()
+    expect(document.querySelector('.ws-paper-surface > .ws-editor-glow')).not.toBeNull()
+  })
+
+  it('空稿闲置时不挂 QingLoading', async () => {
+    installBridgeFetch('dsh-empty-idle', ['qing-empty-idle'])
+    renderPanel('dsh-empty-idle')
+
+    await vi.waitFor(() => expect(
+      document.querySelector('[data-testid="mock-document-view"]'),
+    ).not.toBeNull())
+    expect(document.querySelector('[data-wf="QingLoading"]')).toBeNull()
+    expect(document.querySelector('[data-qingagent-doc-panel]')?.getAttribute('data-tool')).toBe('none')
+  })
+
   it('DocToolbar 严格跟随 canUseDocumentEditing：编辑态启用且使用资产桥会话', async () => {
     installBridgeFetch('dsh-toolbar', ['qing-toolbar'])
     renderPanel('dsh-toolbar')
@@ -607,6 +654,8 @@ function installBridgeFetch(
   dshSessionId: string,
   engineSessionIds: string[],
   options: {
+    agentBusy?: boolean
+    panelPm?: PmDoc
     pendingReview?: boolean
     failReviewCommit?: boolean
     reviewCommitConflictSettled?: boolean
@@ -641,11 +690,11 @@ function installBridgeFetch(
         docs: engineSessionIds.map((engineSessionId) => ({
           engineSessionId, title: engineSessionId, createdAt: '2026-08-15T00:00:00.000Z',
           state: serverPendingReview ? 'pendingReview' : 'empty',
-          docVersion: serverPendingReview ? 3 : 0, agentBusy: false,
+          docVersion: serverPendingReview ? 3 : 0, agentBusy: options.agentBusy === true,
         })),
         activeDoc: {
           sessionId: engineSessionIds[0], docVersion: serverPendingReview ? 3 : 0,
-          state: serverPendingReview ? 'pendingReview' : 'empty', agentBusy: false,
+          state: serverPendingReview ? 'pendingReview' : 'empty', agentBusy: options.agentBusy === true,
           markdown: '', qingml: '', title: engineSessionIds[0],
         },
         engine: { state: 'online', engineUrl: 'http://127.0.0.1:8080' },
@@ -666,14 +715,15 @@ function installBridgeFetch(
         sessionId: engineSessionId, docVersion: pendingReview ? 3 : 4,
         contentHash: pendingReview ? 'hash-3' : 'hash-4',
         state: pendingReview ? 'pendingReview' : 'editing',
-        agentBusy: false, title: engineSessionId, ts: 't0', charCount: 0, pmDoc: options.reviewBasePm ?? EMPTY_PM,
+        agentBusy: options.agentBusy === true, title: engineSessionId, ts: 't0', charCount: 0,
+        pmDoc: options.panelPm ?? options.reviewBasePm ?? EMPTY_PM,
       })
     }
     if (url.startsWith('/qingagent-bridge/doc?')) {
       const engineSessionId = new URL(url, 'http://local').searchParams.get('engineSessionId')!
       return Response.json({
         sessionId: engineSessionId, docVersion: serverPendingReview ? 3 : 4,
-        state: serverPendingReview ? 'pendingReview' : 'editing', agentBusy: false,
+        state: serverPendingReview ? 'pendingReview' : 'editing', agentBusy: options.agentBusy === true,
         markdown: '', qingml: '', title: engineSessionId,
       })
     }

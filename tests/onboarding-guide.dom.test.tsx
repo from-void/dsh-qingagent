@@ -38,7 +38,7 @@ describe('青简未连接引导卡', () => {
       '③插件将自动连接',
     ])
     const link = host.querySelector<HTMLAnchorElement>('a')
-    expect(link?.href).toBe(QINGJIAN_DOWNLOAD_URL)
+    expect(link?.href).toBe(new URL(QINGJIAN_DOWNLOAD_URL).href)
     expect(host.textContent).toContain('本引导会自动消失')
     expect(host.querySelector('[role="alert"]')).toBeNull()
   })
@@ -91,7 +91,7 @@ describe('青简未连接引导卡', () => {
       '②启动一次青简',
       '③插件将自动连接',
     ])
-    expect(host.querySelector<HTMLAnchorElement>('a')?.href).toBe(QINGJIAN_DOWNLOAD_URL)
+    expect(host.querySelector<HTMLAnchorElement>('a')?.href).toBe(new URL(QINGJIAN_DOWNLOAD_URL).href)
   })
 
   it('样式只使用青简暖纸色板，且所有圆角均为 0', async () => {

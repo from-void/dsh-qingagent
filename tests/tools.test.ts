@@ -5,6 +5,7 @@ import type { BindingStore } from '../src/bindings.js'
 import type { BridgeHub } from '../src/bridge.js'
 import { DRAFT_MARK_COLORS, type BridgeEvent, type EngineStatusSnapshot, type ExternalDoc } from '../src/contracts.js'
 import { EngineHttpError, type EngineService } from '../src/engine.js'
+import { QINGJIAN_DOWNLOAD_URL } from '../src/onboarding.js'
 import { registerTools } from '../src/tools.js'
 
 const DRAFT_ONE = '<title>测试稿</title><h1>开篇</h1><p>第一版正文。</p>'
@@ -115,7 +116,7 @@ describe('qing_* 未连接结构化报错', () => {
       .rejects.toThrow([
         '【未连接青简】未检测到可用的青简引擎。',
         '请先安装并启动青简；插件会自动连接，无需重启 DSH。',
-        '下载青简：https://github.com/from-void/qingagent/releases',
+        `下载青简：${QINGJIAN_DOWNLOAD_URL}`,
       ].join('\n'))
     expect(fixture.engine.fetchJson).not.toHaveBeenCalled()
   })
@@ -133,7 +134,7 @@ describe('qing_* 未连接结构化报错', () => {
         '【未连接青简】检测到青简引擎，但握手失败。',
         '具体原因：attachProtocolVersion 不兼容：青简为 2，插件需要 1。',
         '请修复或更新青简并保持运行；插件会自动重连，无需重启 DSH。',
-        '下载青简：https://github.com/from-void/qingagent/releases',
+        `下载青简：${QINGJIAN_DOWNLOAD_URL}`,
       ].join('\n'))
     expect(fixture.engine.fetchJson).not.toHaveBeenCalled()
   })

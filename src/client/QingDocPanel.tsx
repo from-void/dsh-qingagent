@@ -18,6 +18,7 @@ import { DocFindBar } from '@qingweb/pages/workspace/components/DocFindBar'
 import { DocToolbar } from '@qingweb/pages/workspace/components/DocToolbar'
 import { PatchNav } from '@qingweb/pages/workspace/components/PatchNav'
 import { DeaiReviewModal } from '@qingweb/pages/workspace/components/DeaiReviewModal'
+import { QingLoading } from '@qingweb/pages/workspace/components/QingLoading'
 import { ReviewIcon, ReviewMenu } from '@qingweb/pages/workspace/components/ReviewMenu'
 import type { AiModifyTarget } from '@qingweb/pages/workspace/data/aiModifyTarget'
 import type { DocDimensions } from '@qingweb/pages/workspace/data/docDimensions'
@@ -26,6 +27,7 @@ import {
   EMPTY_PM_DOC,
   type DocWriteBaseline,
 } from '@qingweb/pages/workspace/data/docWriteBaseline'
+import { pmDocHasSubstantiveContent } from '@qingweb/pages/workspace/data/pageExitSave'
 import { pmDocToViewDocumentSnapshot } from '@qingweb/pages/workspace/data/protocol'
 import {
   canUseDocumentEditing,
@@ -505,6 +507,9 @@ export function QingDocPanel(props: QingDocPanelProps) {
     ? snapshot.conflictStash?.[activeEngineSessionId]
     : undefined
   const surfacePmDoc = conflictStashDoc ?? streamingPmDoc ?? panelDoc?.pmDoc ?? EMPTY_PM_DOC
+  // 与产品 RightPane 的空稿 busy 分支同口径；surfacePmDoc 包含流式投影，首个实质块
+  // 落下时会在同一渲染周期从青字扩散切回既有纸面内发光。
+  const showEmptyBusyLoading = busy && !pmDocHasSubstantiveContent(surfacePmDoc)
   const surfaceVersion = pendingReview
     ? snapshot.reviewModel?.baseVersion ?? panelDoc?.docVersion ?? 0
     : panelDoc?.docVersion ?? 0
@@ -1031,7 +1036,9 @@ export function QingDocPanel(props: QingDocPanelProps) {
           <div className="ws-paper-shell" data-wf="WorkspacePaperShell" aria-hidden="true" />
           <div className="ws-document-content" data-wf="WorkspaceHydrationDocumentContent">
             <AssetBridgeProvider context={assetContext}>
-              {wholeDocReview ? (
+              {showEmptyBusyLoading ? (
+                <QingLoading reasoning />
+              ) : wholeDocReview ? (
                 <div className="wdr-swap" key={wholeDocVersion}>
                   <DocumentSnapshotView
                     key={`${assetSessionId ?? 'empty'}:${snapshot.panelReloadNonce ?? 0}`}
