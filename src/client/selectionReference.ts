@@ -16,9 +16,10 @@ const PREVIEW_LENGTH = 5
  * 单槽 selection，也不能依赖只供复制/持久化的 clipboardText。
  */
 export function selectionReferenceText(selection: QingSelection, title?: string | null): string {
-  const documentTitle = title?.trim() || selection.engineSessionId
-  const { blockId, from, to } = selection.anchor
-  return `[选段] 出自《${documentTitle}》（文稿 ${selection.engineSessionId}，块 ${blockId}，范围 ${from}-${to}）：「${selection.quote}」`
+  // 展开文本会原样出现在发送气泡里:不带 UUID/块 ID/字符范围等机器噪音(用户实测嫌丑)。
+  // agent 定位选段靠引文逐字匹配(strReplace 内容锚点)+当前聚焦稿,标识符本就用不上。
+  const documentTitle = title?.trim() || '当前文稿'
+  return `[选段]《${documentTitle}》:「${selection.quote}」`
 }
 
 export function selectionReferenceLabel(quote: string): string {
@@ -94,18 +95,39 @@ export function installSelectionChipHoverTitles(
   getOccurrences: () => readonly { source: string; ref: string }[] | undefined,
 ): () => void {
   if (typeof document === 'undefined') return () => {}
-  const onOver = (event: MouseEvent) => {
-    const target = event.target as Element | null
-    const label = target?.closest?.('[class*="chipLabel"]') as HTMLElement | null
-    if (!label || label.title) return
-    const container = label.closest('[class*="backdrop"]') ?? label.parentElement?.parentElement
-    if (!container) return
-    const labels = [...container.querySelectorAll('[class*="chipLabel"]')]
-    const index = labels.indexOf(label)
-    if (index < 0) return
-    const occurrence = getOccurrences()?.[index]
-    if (occurrence?.source === QING_SELECTION_REFERENCE_SOURCE) label.title = occurrence.ref
+  // chip 画在 pointer-events:none 的 backdrop 镜像层,鼠标事件全落在上层透明 textarea——
+  // mouseover 委托打不到 chip(实测)。改为 mousemove 坐标命中:光标落在某枚 chip 矩形内时,
+  // 把完整引文写到 textarea 的 title(原生悬浮),移出即清。rAF 节流。
+  let raf = 0
+  let lastTarget: HTMLElement | null = null
+  const onMove = (event: MouseEvent) => {
+    if (raf) return
+    raf = requestAnimationFrame(() => {
+      raf = 0
+      const input = (event.target as Element | null)?.closest?.('textarea') as HTMLTextAreaElement | null
+      if (!input) {
+        if (lastTarget) { lastTarget.title = ''; lastTarget = null }
+        return
+      }
+      const scope = input.closest('[class*="card"]') ?? input.parentElement?.parentElement
+      const labels = scope ? [...scope.querySelectorAll('[class*="chipLabel"]')] : []
+      let hit = -1
+      for (let index = 0; index < labels.length; index += 1) {
+        const rect = labels[index]!.getBoundingClientRect()
+        if (event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom) {
+          hit = index
+          break
+        }
+      }
+      const occurrence = hit >= 0 ? getOccurrences()?.[hit] : undefined
+      const title = occurrence?.source === QING_SELECTION_REFERENCE_SOURCE ? occurrence.ref : ''
+      if (input.title !== title) input.title = title
+      lastTarget = title ? input : null
+    })
   }
-  document.addEventListener('mouseover', onOver, { capture: true, passive: true })
-  return () => document.removeEventListener('mouseover', onOver, { capture: true })
+  document.addEventListener('mousemove', onMove, { capture: true, passive: true })
+  return () => {
+    if (raf) cancelAnimationFrame(raf)
+    document.removeEventListener('mousemove', onMove, { capture: true })
+  }
 }

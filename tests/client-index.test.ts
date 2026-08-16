@@ -241,8 +241,8 @@ describe('client details 动态占槽', () => {
       { start: 6, end: 6, draftRev: 11 },
       { start: 8, end: 8, draftRev: 12 },
     ])
-    expect(payloads[0]?.reference.ref).toContain('出自《泊船瓜洲》')
-    expect(payloads[1]?.reference.ref).toContain('块 block-12，范围 31-39')
+    expect(payloads[0]?.reference.ref).toContain('[选段]《泊船瓜洲》')
+    expect(payloads[1]?.reference.ref).toContain('「')
     expect(fetchMock).toHaveBeenCalledWith(
       `/qingagent-bridge/selection?dshSessionId=${sessionId}`,
       { method: 'DELETE' },
