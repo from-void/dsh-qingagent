@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { validateJsonSchemaValue, type ToolDefinition, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { BindingStore } from '../src/bindings.js'
 import type { BridgeHub } from '../src/bridge.js'
-import type { BridgeEvent, EngineStatusSnapshot, ExternalDoc } from '../src/contracts.js'
+import { DRAFT_MARK_COLORS, type BridgeEvent, type EngineStatusSnapshot, type ExternalDoc } from '../src/contracts.js'
 import { EngineHttpError, type EngineService } from '../src/engine.js'
 import { registerTools } from '../src/tools.js'
 
@@ -429,6 +429,94 @@ describe('qing_read_draft', () => {
 })
 
 describe('qing_edit_draft', () => {
+  it('schema 接受全部合法 markText 标记与受控色板，拒绝任意 CSS 色值', () => {
+    const fixture = harness([], async () => { throw new Error('不应访问引擎') })
+    const schema = fixture.tools.get('qing_edit_draft')!.parameters
+    const marks = [
+      { type: 'bold' },
+      { type: 'italic' },
+      { type: 'strike' },
+      { type: 'underline' },
+      { type: 'code' },
+      { type: 'link', href: 'https://example.com', title: '来源' },
+      { type: 'link', href: '#source', title: null },
+      ...DRAFT_MARK_COLORS.flatMap((color) => [
+        { type: 'highlight', color },
+        { type: 'textColor', color },
+      ]),
+    ]
+
+    for (const mark of marks) {
+      expect(validateJsonSchemaValue(schema, {
+        ops: [{ kind: 'markText', find: '目标文本', mark, op: 'add' }],
+      }), JSON.stringify(mark)).toEqual([])
+    }
+    expect(validateJsonSchemaValue(schema, {
+      ops: [{ kind: 'markText', find: '目标文本', mark: { type: 'highlight', color: '#ff0' }, op: 'add' }],
+    })).not.toEqual([])
+  })
+
+  it('markText 原样进入 proposals 请求且不携带 opId', async () => {
+    const op = {
+      kind: 'markText' as const,
+      find: '重点句',
+      mark: { type: 'highlight' as const, color: 'amber' as const },
+      op: 'add' as const,
+      all: true,
+      isRegex: false,
+      withinRef: 'paragraph-1',
+    }
+    let proposalBody: Record<string, unknown> | undefined
+    const fixture = harness([], async (path, init) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '重点句', markdownWithLineNumbers: '   1 | 重点句', title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposalBody = JSON.parse(String(init?.body))
+        return { status: 'committed', docVersion: 3 }
+      }
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({ docVersion: 3, state: 'editing', qingml: '<p><mark>重点句</mark></p>', title: '测试稿' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    await fixture.tools.get('qing_edit_draft')!.execute(
+      { ops: [op] },
+      exec(undefined, 'edit-mark-text', 'qing_edit_draft'),
+    )
+
+    expect(proposalBody).toMatchObject({ expectedDocVersion: 2, ops: [op] })
+    expect(proposalBody).toHaveProperty('clientMutationId', expect.any(String))
+    expect(proposalBody).not.toHaveProperty('opId')
+  })
+
+  it('markText 的引擎 400 可自纠文案完整透传', async () => {
+    const correction = '文本未命中或未唯一命中,请缩小 withinRef 或设 all:true；注:代码块内文本不参与行内标记'
+    let proposals = 0
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '重复文本\n\n重复文本', markdownWithLineNumbers: '   1 | 重复文本\n   2 | \n   3 | 重复文本', title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposals += 1
+        throw new EngineHttpError(400, { error: correction, code: 'VALIDATION' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    await expect(fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'markText', find: '重复文本', mark: { type: 'bold' }, op: 'add' }],
+    }, exec(undefined, 'edit-mark-error', 'qing_edit_draft'))).rejects.toThrow(correction)
+    expect(proposals).toBe(1)
+  })
+
   it('strReplace 原样未命中时规范化 Markdown 前缀与包裹标记后重试一次', async () => {
     const proposalBodies: Array<{ expectedDocVersion: number; ops: unknown[] }> = []
     const fixture = harness([], async (path, init) => {
