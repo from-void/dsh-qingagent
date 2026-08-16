@@ -24,6 +24,11 @@ import type {
 import { EngineHttpError, type EngineService } from './engine.js'
 import type { BindingStore } from './bindings.js'
 import { engineAssetFileId } from './assetBridge.js'
+import {
+  DEFAULT_DRAWIO_VENDOR_ROOT,
+  DRAWIO_ROUTE_PATH,
+  serveDrawioAsset,
+} from './drawioAssets.js'
 
 const MAX_ASSET_BYTES = 50 * 1024 * 1024
 const MAX_ASSET_JSON_BYTES = 70 * 1024 * 1024
@@ -42,16 +47,29 @@ export class BridgeHub {
     private readonly ctx: Context,
     private readonly engine: EngineService,
     private readonly bindings: BindingStore,
+    private readonly drawioVendorRoot = DEFAULT_DRAWIO_VENDOR_ROOT,
   ) {}
 
   mount(): void {
-    const dispose = this.ctx.webServer.register({
+    const disposeDrawio = this.ctx.webServer.register({
+      kind: 'prefix',
+      path: DRAWIO_ROUTE_PATH,
+      handler: (request, response) => {
+        if (!isLoopback(request.socket.remoteAddress)) {
+          writeJson(response, 403, { error: 'drawio 静态资产仅允许本机访问。' })
+          return
+        }
+        return serveDrawioAsset(request, response, this.drawioVendorRoot)
+      },
+    })
+    const disposeBridge = this.ctx.webServer.register({
       kind: 'prefix',
       path: '/qingagent-bridge',
       handler: (request, response) => this.route(request, response),
     })
     this.ctx.effect(() => () => {
-      dispose()
+      disposeDrawio()
+      disposeBridge()
       for (const subscriber of this.subscribers) this.removeSubscriber(subscriber)
       this.selections.clear()
     })

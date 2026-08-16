@@ -38,6 +38,8 @@ export interface ExternalDoc {
   markdown: string
   qingml: string
   title: string | null
+  /** external v2 wire；旧事件未携带时由当前 PM 面板值承接。 */
+  charCount?: number
   /** 新版桥事件可直接携带 canonical PM；旧版仅有 qingml 时客户端会本地编译。 */
   pmDoc?: PmDoc
   contentHash?: string

@@ -53,10 +53,14 @@ vi.mock('@qingweb/pages/workspace/components/DocumentSnapshotView', async () => 
           if (pending) await props.onEditorChange?.(pending.doc, pending.baseline)
         },
       }), [props.onEditorChange])
-      return React.createElement('article', {
-        'data-testid': 'mock-document-view',
-        'data-doc-json': JSON.stringify((props as unknown as { doc?: unknown }).doc ?? null),
-      })
+      return React.createElement(
+        'article',
+        {
+          'data-testid': 'mock-document-view',
+          'data-doc-json': JSON.stringify((props as unknown as { doc?: unknown }).doc ?? null),
+        },
+        React.createElement('div', { className: 'pm-diagram-view', 'data-testid': 'mock-drawio-preview' }),
+      )
     }),
   }
 })
@@ -160,6 +164,29 @@ describe('QingDocPanel 保存生命周期', () => {
       document.querySelector('[data-testid="mock-doc-toolbar"]')?.getAttribute('data-active'),
     ).toBe('false'))
     expect(toolbarHarness.props?.onAiModify).toBeTypeOf('function')
+  })
+
+  it('审阅态双击 drawio 只提示，不打开 overlay 或进入本地保存事务', async () => {
+    installBridgeFetch('dsh-drawio-review', ['qing-drawio'], {
+      pendingReview: true,
+      reviewSuggestionStatus: 'reviewing',
+    })
+    renderPanel('dsh-drawio-review')
+    await vi.waitFor(() => expect(
+      document.querySelector('[data-qingagent-doc-panel]')?.getAttribute('data-qingdoc-mode'),
+    ).toBe('readonly'))
+    await vi.waitFor(() => expect(document.querySelector('.qingdoc-status')?.textContent)
+      .toBe('审阅中·1处'))
+    const preview = document.querySelector<HTMLElement>('[data-testid="mock-drawio-preview"]')!
+
+    await act(async () => {
+      preview.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
+    })
+
+    await vi.waitFor(() => expect(document.querySelector('.qingdoc-status')?.textContent)
+      .toBe('文稿正在审阅，请先完成审阅再编辑 drawio 图'))
+    expect(document.querySelector('.drawio-editor-overlay')).toBeNull()
+    expect(viewHarness.props?.onEditorChange).toBeUndefined()
   })
 
   it('Ctrl+F 走青简 useWorkspaceFind 并挂出原生 DocFindBar', async () => {
@@ -417,7 +444,7 @@ describe('QingDocPanel 整篇审阅', () => {
     const ratio = computeExternalReviewChangeRatio(
       {
         sessionId: 'qing-review', docVersion: 3, contentHash: 'hash-3',
-        state: 'pendingReview', agentBusy: false, title: '整篇审', ts: 't0', pmDoc: WHOLE_BASE_PM,
+        state: 'pendingReview', agentBusy: false, title: '整篇审', ts: 't0', charCount: 4, pmDoc: WHOLE_BASE_PM,
       } satisfies ExternalPmDocReadResponse,
       {
         sessionId: 'qing-review', docVersion: 3, state: 'pendingReview', agentBusy: false,
@@ -626,7 +653,7 @@ function installBridgeFetch(
     }
     if (url.startsWith('/qingagent-bridge/doc-pm?') && init?.method === 'PUT') {
       return Response.json({
-        ok: true, clientMutationId: 'saved-1', docVersion: 1, contentHash: 'hash-1', ts: 't1',
+        ok: true, clientMutationId: 'saved-1', docVersion: 1, contentHash: 'hash-1', ts: 't1', charCount: 0,
       })
     }
     if (url.startsWith('/qingagent-bridge/doc-pm?')) {
@@ -639,7 +666,7 @@ function installBridgeFetch(
         sessionId: engineSessionId, docVersion: pendingReview ? 3 : 4,
         contentHash: pendingReview ? 'hash-3' : 'hash-4',
         state: pendingReview ? 'pendingReview' : 'editing',
-        agentBusy: false, title: engineSessionId, ts: 't0', pmDoc: options.reviewBasePm ?? EMPTY_PM,
+        agentBusy: false, title: engineSessionId, ts: 't0', charCount: 0, pmDoc: options.reviewBasePm ?? EMPTY_PM,
       })
     }
     if (url.startsWith('/qingagent-bridge/doc?')) {

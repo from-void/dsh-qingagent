@@ -897,6 +897,7 @@ function committedPanelDoc(
     agentBusy: doc.agentBusy,
     title: doc.title,
     ts: doc.ts ?? current.ts,
+    charCount: doc.charCount ?? current.charCount,
     pmDoc,
   }
 }

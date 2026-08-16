@@ -375,6 +375,26 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const annotations = pendingReview
     ? EMPTY_ANNOTATIONS
     : snapshot.reviewModel?.annotations ?? EMPTY_ANNOTATIONS
+  const pendingReviewRef = useRef(pendingReview)
+  pendingReviewRef.current = pendingReview
+  useEffect(() => {
+    const handleReviewDrawioDoubleClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      const root = rootRef.current
+      if (
+        !pendingReviewRef.current
+        || !root
+        || !target
+        || !root.contains(target)
+        || !target.closest('.pm-diagram-view')
+      ) return
+      event.preventDefault()
+      event.stopPropagation()
+      setToast('文稿正在审阅，请先完成审阅再编辑 drawio 图')
+    }
+    document.addEventListener('dblclick', handleReviewDrawioDoubleClick, { capture: true })
+    return () => document.removeEventListener('dblclick', handleReviewDrawioDoubleClick, { capture: true })
+  }, [])
   const busy = snapshot.streaming || panelDoc?.agentBusy === true || activeBound?.agentBusy === true
   // 冲突态按文稿隔离(权威在 conflicts 分槽映射):当前稿有冲突记录就呈现冲突(含切走再切回),
   // 别的文稿的冲突不影响当前稿;瞬态保存状态照常走单槽。

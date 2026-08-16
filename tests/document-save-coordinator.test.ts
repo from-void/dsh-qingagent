@@ -49,7 +49,7 @@ describe('DocumentSaveCoordinator', () => {
     const three = coordinator.enqueue('qing-1', pm('三'), baseline(4))
     expect(send).toHaveBeenCalledTimes(1)
 
-    first.resolve({ ok: true, clientMutationId: 'm-1', docVersion: 5, contentHash: 'hash-5', ts: 't5' })
+    first.resolve({ ok: true, clientMutationId: 'm-1', docVersion: 5, contentHash: 'hash-5', ts: 't5', charCount: 1 })
     await one
     await vi.runOnlyPendingTimersAsync()
     expect(send).toHaveBeenCalledTimes(2)
@@ -60,7 +60,7 @@ describe('DocumentSaveCoordinator', () => {
       doc: pm('三'),
     })
 
-    second.resolve({ ok: true, clientMutationId: 'm-2', docVersion: 6, contentHash: 'hash-6', ts: 't6' })
+    second.resolve({ ok: true, clientMutationId: 'm-2', docVersion: 6, contentHash: 'hash-6', ts: 't6', charCount: 1 })
     await Promise.all([two, three])
     expect(committed).toEqual(['一', '三'])
     vi.useRealTimers()
@@ -118,7 +118,7 @@ describe('DocumentSaveCoordinator', () => {
     const send = vi.fn()
       .mockReturnValueOnce(first.promise)
       .mockResolvedValueOnce({
-        ok: true, clientMutationId: 'm-2', docVersion: 1, contentHash: 'hash-b1', ts: 'tb1',
+        ok: true, clientMutationId: 'm-2', docVersion: 1, contentHash: 'hash-b1', ts: 'tb1', charCount: 1,
       })
     let mutation = 0
     const coordinator = new DocumentSaveCoordinator({
@@ -129,7 +129,7 @@ describe('DocumentSaveCoordinator', () => {
 
     const one = coordinator.enqueue('qing-a', pm('甲'), baseline(4))
     const two = coordinator.enqueue('qing-b', pm('乙'), baseline(0))
-    first.resolve({ ok: true, clientMutationId: 'm-1', docVersion: 5, contentHash: 'hash-a5', ts: 'ta5' })
+    first.resolve({ ok: true, clientMutationId: 'm-1', docVersion: 5, contentHash: 'hash-a5', ts: 'ta5', charCount: 1 })
     await one
     await vi.runOnlyPendingTimersAsync()
     await two
@@ -152,7 +152,7 @@ describe('DocumentSaveCoordinator', () => {
         conflict: { expected: 7, actual: 9 }, actualContentHash: 'hash-9',
       })
       .mockResolvedValueOnce({
-        ok: true, clientMutationId: 'm-2', docVersion: 10, contentHash: 'hash-10', ts: 't10',
+        ok: true, clientMutationId: 'm-2', docVersion: 10, contentHash: 'hash-10', ts: 't10', charCount: 1,
       })
     let mutation = 0
     const coordinator = new DocumentSaveCoordinator({
