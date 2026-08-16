@@ -2,9 +2,9 @@ import type { ClientContext, ISessions } from '@deepseek-ai/dsh-client-runtime/c
 import { createScope } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import { QingDocPanel } from './QingDocPanel.js'
-import { QingSelectionDock } from './QingSelectionDock.js'
 import { QingWriteToolCard } from './QingWriteToolCard.js'
 import {
   QingEditToolCard,
@@ -14,9 +14,13 @@ import {
   QingReviewCommitToolCard,
 } from './QingToolCard.js'
 import { qingClientStore } from './store.js'
+import {
+  insertSelectionReference,
+  qingSelectionReferenceSource,
+} from './selectionReference.js'
 
 export const name = 'dsh-qingagent-client'
-export const inject = ['slots', 'layout', 'sessions', 'conversation']
+export const inject = ['slots', 'layout', 'sessions', 'conversation', 'inputTriggers']
 
 // P26:会话名条件跟随纸面标题。记录插件上次写入的会话名;一旦用户手动改名(当前名≠上次
 // 写入值)即永久脱离跟随,绝不覆盖用户命名。localStorage 持久化,跨 tab/重载一致。
@@ -43,12 +47,50 @@ export function apply(ctx: ClientContext): void {
   const slots = ctx.get('slots')!
   const layout = ctx.get('layout')!
   const sessions = ctx.get('sessions') as unknown as ISessions
+  const inputTriggers = ctx.get('inputTriggers')!
+
+  // chip 提交必须能按 source 找回 codec；owner 缺失时 dsh 会阻止发送而不会降级成
+  // clipboardText，因此 source 与选段 bridge 同属插件生命周期。
+  ctx.effect(() => inputTriggers.registerSource(qingSelectionReferenceSource))
 
   slots.inject('details', () => {
     let currentSessionId: string | undefined
     let disposePanel: (() => void) | undefined
     let releaseSession: (() => void) | undefined
     let unsubscribeStore: (() => void) | undefined
+    let selectionScope: ReturnType<typeof createScope> | undefined
+    let unsubscribeInput: (() => void) | undefined
+    let pendingSelection: ReturnType<typeof qingClientStore.getSnapshot>['selection']
+
+    const syncSelectionReference = () => {
+      const sessionId = currentSessionId
+      const selection = sessionId
+        ? qingClientStore.getSnapshot(sessionId).selection
+        : undefined
+      if (!sessionId || !selection || selection === pendingSelection || !selectionScope) return
+
+      // 先设重入哨兵：bail 同步发布 input state，state subscriber 会在事件返回前回调。
+      pendingSelection = selection
+      const snapshot = qingClientStore.getSnapshot(sessionId)
+      const activeTitle = snapshot.activeEngineSessionId === selection.engineSessionId
+        ? snapshot.activeDoc?.title
+        : undefined
+      const title = activeTitle ?? snapshot.state?.binding.docs.find(
+        (doc) => doc.engineSessionId === selection.engineSessionId,
+      )?.title
+      if (!insertSelectionReference(selectionScope.ctx, selection, title)) {
+        // adjudicating/submitting 等瞬态会拒绝插入；保留 bridge selection，等待 input
+        // phase 或 store 下一次发布后重试。
+        pendingSelection = undefined
+        return
+      }
+
+      // bridge selection 只是 ingress 单槽；成功铸成 composer occurrence 后立即清掉。
+      // 这样用户删除原生 chip 就确实放弃该选段，后端动态提示也不会残留。
+      void qingClientStore.clearSelection(sessionId).catch((error) => {
+        console.warn('[qingagent] 清理已插入的选段 bridge 状态失败', error)
+      })
+    }
 
     const syncPanelRegistration = () => {
       const shouldRegister = currentSessionId !== undefined && qingClientStore.hasPanelContent(currentSessionId)
@@ -112,20 +154,33 @@ export function apply(ctx: ClientContext): void {
       const nextSessionId = sessions.list.getSnapshot().current
       if (nextSessionId === currentSessionId) return
       unsubscribeStore?.()
+      unsubscribeInput?.()
+      selectionScope?.fiber.dispose()
       releaseSession?.()
       disposePanel?.()
       unsubscribeStore = undefined
+      unsubscribeInput = undefined
+      selectionScope = undefined
       releaseSession = undefined
       disposePanel = undefined
+      pendingSelection = undefined
       currentSessionId = nextSessionId === undefined ? undefined : String(nextSessionId)
       if (currentSessionId) {
         unsubscribeStore = qingClientStore.subscribe(currentSessionId, () => {
           syncPanelRegistration()
           syncSessionTitle()
+          syncSelectionReference()
         })
         releaseSession = qingClientStore.retain(currentSessionId)
+        selectionScope = createScope(
+          ctx as unknown as Parameters<typeof createScope>[0],
+          currentSessionId as Parameters<typeof createScope>[1],
+        )
+        const inputState = selectionScope.ctx.conversation.input.for(selectionScope.ctx).state
+        unsubscribeInput = inputState.subscribe(syncSelectionReference)
       }
       syncPanelRegistration()
+      syncSelectionReference()
     }
 
     const unsubscribeSessions = sessions.list.subscribe(syncCurrentSession)
@@ -133,6 +188,8 @@ export function apply(ctx: ClientContext): void {
     return () => {
       unsubscribeSessions()
       unsubscribeStore?.()
+      unsubscribeInput?.()
+      selectionScope?.fiber.dispose()
       releaseSession?.()
       disposePanel?.()
     }
@@ -170,10 +227,4 @@ export function apply(ctx: ClientContext): void {
     key: 'qing_focus_doc',
     inject: () => ({ qingLayout: layout }),
   }, QingFocusToolCard))
-
-  slots.inject('conversation.input.dock', () => slots.register({
-    name: 'conversation.input.dock',
-    id: 'qingagent-selection',
-    order: -10,
-  }, QingSelectionDock))
 }

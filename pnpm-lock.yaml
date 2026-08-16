@@ -75,6 +75,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-conversation':
         specifier: 0.1.0-rc.6
         version: 0.1.0-rc.6(1f926cfe5de3213e02060d56d49cf341)
+      '@deepseek-ai/dsh-client-ui-input-trigger':
+        specifier: 0.1.0-rc.6
+        version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-client-locale@0.1.0-rc.6(0ba4f4b465be4bee7a206ef709742fb1))(@deepseek-ai/dsh-client-runtime@0.1.0-rc.6(8bb9b08eabf7d67464c7548502c6892d))(@deepseek-ai/dsh-client-ui-primitives@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-client-ui-slots@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(react@18.3.1)
       '@deepseek-ai/dsh-client-ui-layout':
         specifier: 0.1.0-rc.6
         version: 0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-client-runtime@0.1.0-rc.6(8bb9b08eabf7d67464c7548502c6892d))(@deepseek-ai/dsh-client-ui-slots@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-client-ui-theme@0.1.0-rc.6(312a19c907eb260c1b73039bbeee4f7a))(@deepseek-ai/dsh-invariants@0.1.0-rc.6(@deepseek-ai/cordis@4.0.1))(react@18.3.1)
