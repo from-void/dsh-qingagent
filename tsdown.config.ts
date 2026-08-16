@@ -178,10 +178,10 @@ function cssPlugin(pluginId: string): BuildPlugin {
       this.addWatchFile(filename)
       let source = await readFile(filename, 'utf8')
       source = await inlineLocalCssAssets(source, filename, (asset) => this.addWatchFile(asset))
-      if (
-        filename.startsWith(`${QING_WEB_SOURCE}/pages/workspace/`) ||
-        filename === `${QING_SYSTEM_SOURCE}/folder-control.css`
-      ) {
+      // 凡青简仓的 CSS 一律锁进面板作用域:ui-kit base.css 的 html/body 全局字体曾
+      // 未包裹泄漏进宿主,把整个 dsh 主界面带成宋体(2026-08-16 实证)。tokens.css 的
+      // :root 变量在 @scope 内失配没关系——面板所需 tokens 已由提取管线落在 qingdoc.css。
+      if (filename.startsWith(`${QING_ROOT}/`)) {
         source = `@scope (${QING_PANEL_SELECTOR}) {\n${source}\n}`
       }
       const { code, exports } = transform({

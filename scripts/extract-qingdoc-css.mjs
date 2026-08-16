@@ -21,7 +21,7 @@ const sources = [
   // 清单写到 35；基线第 36 行才是 .font-mono 的闭合花括号，随段补齐以保持合法 CSS。
   ['packages/ui-kit/src/base.css', [[5, 36]]],
   ['packages/ui-kit/src/components.css', [[181, 274]]],
-  ['apps/web/src/app.css', [[1, 15], [255, 477]]],
+  ['apps/web/src/app.css', [[1, 15], [293, 515]]],
   ['apps/web/src/pages/workspace/workspace.css', [[169, 169], [197, 214], [304, 386], [1299, 3662]]],
   ['apps/web/src/pages/workspace/workspace-ink-skin.css', [[20, 60], [119, 204], [592, 682], [1111, 1220], [1527, 1667], [1669, 1802], [1863, 2033], [2093, 2151], [2558, 2682], [3193, 3508]]],
   ['apps/web/src/pages/workspace/workspace-responsive.css', [[1, 30]]],

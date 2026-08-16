@@ -493,7 +493,7 @@
   --desk-vignette: radial-gradient(150% 130% at 50% 42%, transparent 0%, transparent 48%, rgba(8, 13, 19, 0.42) 100%);
 }
 
-/* source: apps/web/src/app.css:255-477 */
+/* source: apps/web/src/app.css:293-515 */
 [data-qingagent-doc-panel] .ws-folder-modal-overlay {
   position: fixed;
   inset: 0;

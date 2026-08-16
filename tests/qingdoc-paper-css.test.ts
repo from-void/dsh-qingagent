@@ -124,7 +124,7 @@ describe('青简纸面移植契约', () => {
     ])
 
     expect(generator).toContain("['apps/web/src/pages/workspace/workspace.css', [[169, 169]")
-    expect(generator).toContain("['apps/web/src/app.css', [[1, 15], [255, 477]]]")
+    expect(generator).toContain("['apps/web/src/app.css', [[1, 15], [293, 515]]]")
     expect(generator).toContain('[1527, 1667]')
     expect(generator).toContain('[1863, 2033]')
     expect(generator).toContain('[2093, 2151]')
