@@ -141,5 +141,9 @@
   "homepage": "https://github.com/from-void/dsh-qingagent#readme",
   "bugs": {
     "url": "https://github.com/from-void/dsh-qingagent/issues"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   }
 }
