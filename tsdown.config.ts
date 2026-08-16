@@ -184,12 +184,18 @@ function cssPlugin(pluginId: string): BuildPlugin {
       if (filename.startsWith(`${QING_ROOT}/`)) {
         source = `@scope (${QING_PANEL_SELECTOR}) {\n${source}\n}`
       }
-      const { code, exports } = transform({
+      let code, exports
+      try {
+        ({ code, exports } = transform({
         filename,
         code: Buffer.from(source),
         cssModules: filename.endsWith('.module.css') ? { pattern: '[hash]_[local]' } : undefined,
         minify: true,
-      })
+      }))
+      } catch (error) {
+        console.error('[css-inline] transform failed:', filename)
+        throw error
+      }
       const classMap: Record<string, string> = {}
       for (const [local, value] of Object.entries(exports ?? {})) classMap[local] = (value as { name: string }).name
       const tagId = `${pluginId}/${basename(filename)}`
