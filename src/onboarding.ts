@@ -1,7 +1,7 @@
 import type { EngineStatusSnapshot } from './contracts.js'
 
 /** 引导卡、工具报错共用的唯一下载地址；后续发布渠道变化只改这里。 */
-export const QINGJIAN_DOWNLOAD_URL = 'https://github.com/from-void/qingagent/releases'
+export const QINGJIAN_DOWNLOAD_URL = 'https://qingagent.com'
 
 export function qingjianUnavailableMessage(status: EngineStatusSnapshot): string {
   const download = `下载青简：${QINGJIAN_DOWNLOAD_URL}`

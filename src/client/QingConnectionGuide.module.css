@@ -36,7 +36,7 @@
 .eyebrow {
   margin: 0 0 10px;
   color: var(--guide-accent);
-  font: 600 12px/1.4 "Noto Sans SC", system-ui, sans-serif;
+  font: 600 12px/1.4 "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
   letter-spacing: .16em;
 }
 
@@ -66,7 +66,7 @@
   border-left: 3px solid var(--guide-accent);
   border-radius: 0;
   background: rgba(168, 130, 63, .08);
-  font: 13px/1.7 "Noto Sans SC", system-ui, sans-serif;
+  font: 13px/1.7 "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
 }
 
 .reason span {
@@ -97,7 +97,7 @@
 .steps li span {
   flex: none;
   color: var(--guide-accent);
-  font: 20px/1 Georgia, serif;
+  font: 20px/1 "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
 }
 
 .steps li strong {
@@ -116,7 +116,7 @@
   border: 1px solid var(--guide-accent);
   border-radius: 0;
   background: var(--guide-accent);
-  font: 600 14px/1.4 "Noto Sans SC", system-ui, sans-serif;
+  font: 600 14px/1.4 "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
   text-decoration: none;
 }
 
@@ -134,13 +134,13 @@
 .launchFallback {
   margin: 8px 0 0;
   color: var(--guide-ink-muted);
-  font: 12px/1.7 "Noto Sans SC", system-ui, sans-serif;
+  font: 12px/1.7 "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
 }
 
 .retry {
   margin: 18px 0 0;
   color: var(--guide-ink-muted);
-  font: 12px/1.7 "Noto Sans SC", system-ui, sans-serif;
+  font: 12px/1.7 "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
 }
 
 @media (max-width: 520px) {

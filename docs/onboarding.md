@@ -4,7 +4,7 @@ dsh-qingagent 依赖本机运行的青简桌面端。插件不会把青简的 Be
 
 ## 1. 安装青简
 
-从 [青简 Releases](https://github.com/from-void/qingagent/releases) 下载适合当前系统的最新版本并完成安装。
+从 [青简官网](https://qingagent.com) 下载适合当前系统的最新版本并完成安装。
 
 ## 2. 启动一次青简
 
