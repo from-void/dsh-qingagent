@@ -96,38 +96,67 @@ export function installSelectionChipHoverTitles(
 ): () => void {
   if (typeof document === 'undefined') return () => {}
   // chip 画在 pointer-events:none 的 backdrop 镜像层,鼠标事件全落在上层透明 textarea——
-  // mouseover 委托打不到 chip(实测)。改为 mousemove 坐标命中:光标落在某枚 chip 矩形内时,
-  // 把完整引文写到 textarea 的 title(原生悬浮),移出即清。rAF 节流。
+  // 用 mousemove 坐标命中,命中即显示自绘悬浮条(原生 title 有 ~1s 延迟,用户等不到)。
+  const TIP_ID = 'qingagent-selection-tip'
+  const ensureTip = (): HTMLDivElement => {
+    let tip = document.getElementById(TIP_ID) as HTMLDivElement | null
+    if (!tip) {
+      tip = document.createElement('div')
+      tip.id = TIP_ID
+      tip.style.cssText = [
+        'position:fixed', 'z-index:100500', 'display:none', 'pointer-events:none',
+        'max-width:380px', 'padding:6px 10px', 'border-radius:8px',
+        'background:var(--dsw-alias-bg-layer-3, #26282c)',
+        'color:var(--dsw-alias-label-primary, #e8e8ea)',
+        'border:1px solid var(--dsw-alias-border-l1, rgba(255,255,255,.12))',
+        'box-shadow:var(--dsw-shadow-lv2, 0 8px 24px rgba(0,0,0,.35))',
+        'font-size:12px', 'line-height:18px', 'white-space:pre-wrap', 'word-break:break-word',
+      ].join(';')
+      document.body.appendChild(tip)
+    }
+    return tip
+  }
+  const hideTip = () => {
+    const tip = document.getElementById(TIP_ID)
+    if (tip) tip.style.display = 'none'
+  }
   let raf = 0
-  let lastTarget: HTMLElement | null = null
   const onMove = (event: MouseEvent) => {
     if (raf) return
     raf = requestAnimationFrame(() => {
       raf = 0
-      const input = (event.target as Element | null)?.closest?.('textarea') as HTMLTextAreaElement | null
-      if (!input) {
-        if (lastTarget) { lastTarget.title = ''; lastTarget = null }
-        return
-      }
+      const input = (event.target as Element | null)?.closest?.('textarea')
+      if (!input) return hideTip()
       const scope = input.closest('[class*="card"]') ?? input.parentElement?.parentElement
       const labels = scope ? [...scope.querySelectorAll('[class*="chipLabel"]')] : []
       let hit = -1
+      let hitRect: DOMRect | undefined
       for (let index = 0; index < labels.length; index += 1) {
         const rect = labels[index]!.getBoundingClientRect()
         if (event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom) {
           hit = index
+          hitRect = rect
           break
         }
       }
       const occurrence = hit >= 0 ? getOccurrences()?.[hit] : undefined
-      const title = occurrence?.source === QING_SELECTION_REFERENCE_SOURCE ? occurrence.ref : ''
-      if (input.title !== title) input.title = title
-      lastTarget = title ? input : null
+      if (!occurrence || occurrence.source !== QING_SELECTION_REFERENCE_SOURCE || !hitRect) return hideTip()
+      const tip = ensureTip()
+      tip.textContent = occurrence.ref
+      tip.style.display = 'block'
+      // 先摆再量:置于 chip 上方,水平钳在视口内。
+      const width = Math.min(380, tip.offsetWidth || 380)
+      tip.style.left = `${Math.max(8, Math.min(hitRect.left, window.innerWidth - width - 8))}px`
+      tip.style.top = `${Math.max(8, hitRect.top - tip.offsetHeight - 8)}px`
     })
   }
+  const onLeave = () => hideTip()
   document.addEventListener('mousemove', onMove, { capture: true, passive: true })
+  document.addEventListener('mousedown', onLeave, { capture: true, passive: true })
   return () => {
     if (raf) cancelAnimationFrame(raf)
     document.removeEventListener('mousemove', onMove, { capture: true })
+    document.removeEventListener('mousedown', onLeave, { capture: true })
+    document.getElementById(TIP_ID)?.remove()
   }
 }

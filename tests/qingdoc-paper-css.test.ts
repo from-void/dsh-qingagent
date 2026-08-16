@@ -93,15 +93,18 @@ describe('青简纸面移植契约', () => {
     expect(panelSource).toContain('aria-expanded={open}')
     expect(panelSource).toContain('role="option"')
     expect(css).not.toContain('.qingdoc-doc-select')
-    // 触发器嵌在青简深色墨条里,必须用固定暖纸色(dsh 浅色令牌会深字压深底);下拉菜单浮在 dsh 层上,仍须全用 dsh 语义色。
+    // 触发器嵌在青简深色墨条里,必须用固定暖纸色;下拉菜单按青简风(用户拍板 2026-08-16:
+    // 产品无圆角)——暖纸直角固定色板,禁用 dsh 语义令牌与任何圆角。
     const triggerStyles = switcherStyles.slice(0, switcherStyles.indexOf('.qingdoc-doc-menu'))
     const menuStyles = switcherStyles.slice(switcherStyles.indexOf('.qingdoc-doc-menu'))
     expect(triggerStyles).toContain('color: #ece3d0')
     expect(triggerStyles).not.toMatch(/var\(\s*--dsw-alias-/)
-    expect(menuStyles).not.toMatch(/#[\da-f]{3,8}\b|rgba?\s*\(/i)
-    const variables = [...menuStyles.matchAll(/var\(\s*(--[\w-]+)/g)].map((match) => match[1])
-    expect(variables.length).toBeGreaterThan(0)
-    expect(variables.every((variable) => variable?.startsWith('--dsw-alias-'))).toBe(true)
+    expect(menuStyles).not.toMatch(/var\(\s*--dsw-alias-/)
+    expect(menuStyles).toContain('background: #faf6ec')
+    expect(menuStyles).toContain('color: #a8823f')
+    const radii = [...menuStyles.matchAll(/border-radius:\s*([^;]+);/g)].map((match) => match[1]!.trim())
+    expect(radii.length).toBeGreaterThan(0)
+    expect(radii.every((radius) => radius === '0')).toBe(true)
   })
 
   it('workspace scope 保留青简 #view-workspace 的 ID 权重', async () => {

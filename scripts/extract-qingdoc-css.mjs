@@ -339,7 +339,7 @@ ${panelRoot} .qingdoc-doc-trigger {
   /* 墨条永远是深底,标题色必须固定用青简暖纸色,不跟随 dsh 明暗令牌(浅色模式下深字压深底会看不见) */
   color: #ece3d0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
   background: transparent;
   font: inherit;
   cursor: pointer;
@@ -377,10 +377,12 @@ ${panelRoot} .qingdoc-doc-menu {
   box-sizing: border-box;
   padding: 5px;
   overflow-y: auto;
-  color: var(--dsw-alias-label-secondary);
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-3);
+  /* 青简风(用户拍板 2026-08-16:产品无圆角):暖纸底+褐线直角+墨字,弃 dsh 令牌 */
+  color: #5c5346;
+  border: 1px solid rgba(120, 90, 50, .28);
+  border-radius: 0;
+  background: #faf6ec;
+  box-shadow: 0 12px 28px rgba(40, 28, 12, .22);
 }
 ${panelRoot} .qingdoc-doc-option {
   width: 100%;
@@ -390,9 +392,9 @@ ${panelRoot} .qingdoc-doc-option {
   align-items: center;
   gap: 7px;
   padding: 6px 8px;
-  color: var(--dsw-alias-label-secondary);
+  color: #5c5346;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
   background: transparent;
   font: inherit;
   text-align: left;
@@ -400,17 +402,17 @@ ${panelRoot} .qingdoc-doc-option {
 }
 ${panelRoot} .qingdoc-doc-option:hover,
 ${panelRoot} .qingdoc-doc-option[data-focused="true"] {
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-interactive-bg-hover);
+  color: #2f2a22;
+  background: rgba(120, 90, 50, .10);
 }
 ${panelRoot} .qingdoc-doc-option[aria-selected="true"] {
-  color: var(--dsw-alias-brand-primary);
+  color: #a8823f;
 }
 ${panelRoot} .qingdoc-doc-mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--dsw-alias-brand-primary);
+  color: #a8823f;
 }
 ${panelRoot} .qingdoc-doc-option-title {
   overflow: hidden;
@@ -420,19 +422,19 @@ ${panelRoot} .qingdoc-doc-option-title {
 ${panelRoot} .qingdoc-doc-state-label {
   flex: 0 0 auto;
   font-size: 11px;
-  color: var(--dsw-alias-label-caption);
+  color: #8a7f6e;
   white-space: nowrap;
 }
 ${panelRoot} .qingdoc-doc-group-label {
   padding: 6px 8px 3px;
   font-size: 11px;
-  color: var(--dsw-alias-label-caption);
+  color: #8a7f6e;
   white-space: nowrap;
   user-select: none;
 }
 ${panelRoot} .qingdoc-doc-group-label:not(:first-child) {
   margin-top: 3px;
-  border-top: 1px solid var(--dsw-alias-border-l1);
+  border-top: 1px solid rgba(120, 90, 50, .16);
   padding-top: 8px;
 }
 ${panelRoot} .qingdoc-status {

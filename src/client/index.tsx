@@ -19,6 +19,7 @@ import {
   installSelectionChipHoverTitles,
   qingSelectionReferenceSource,
 } from './selectionReference.js'
+import { installSelectionBubbleDecor } from './selectionBubbleDecor.js'
 
 export const name = 'dsh-qingagent-client'
 export const inject = ['slots', 'layout', 'sessions', 'conversation', 'inputTriggers']
@@ -53,6 +54,8 @@ export function apply(ctx: ClientContext): void {
   // chip 提交必须能按 source 找回 codec；owner 缺失时 dsh 会阻止发送而不会降级成
   // clipboardText，因此 source 与选段 bridge 同属插件生命周期。
   ctx.effect(() => inputTriggers.registerSource(qingSelectionReferenceSource))
+  // 发送气泡里的 [选段] 段落样式化(宿主消息渲染无槽位,DOM 装饰器随插件生命周期)。
+  ctx.effect(() => installSelectionBubbleDecor())
 
   slots.inject('details', () => {
     let currentSessionId: string | undefined

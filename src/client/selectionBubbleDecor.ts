@@ -1,0 +1,90 @@
+/**
+ * 发送气泡里的选段样式化:宿主 user 气泡渲染无插件槽位,这里用 MutationObserver 把
+ * 消息文本中的「[选段]《标题》:「引文」」段替换为 chip 视觉(贴 composer chip 的蓝底胶囊),
+ * 完整引文走 title 悬浮。只改文本节点、幂等、随插件卸载断开——不触碰宿主代码。
+ * 兼容旧格式(带文稿/块/范围机器字段)以装饰历史消息。
+ */
+const SELECTION_RE = /\[选段\](?: 出自)?《([^》]{1,120})》(?:（[^）]{0,200}）)?[:：]\s*「([\s\S]{1,500}?)」/g
+
+const DECORATED = 'data-qingagent-selection-decorated'
+
+function clip(text: string, max: number): string {
+  const plain = text.replace(/\s+/g, ' ').trim()
+  return plain.length > max ? `${plain.slice(0, max - 1)}…` : plain
+}
+
+function buildChip(title: string, quote: string): HTMLSpanElement {
+  const chip = document.createElement('span')
+  chip.setAttribute(DECORATED, '1')
+  chip.title = `《${title}》:「${quote}」`
+  chip.style.cssText = [
+    'display:inline-flex', 'align-items:center', 'gap:4px', 'max-width:100%',
+    'padding:1px 8px', 'margin:0 2px', 'border-radius:6px',
+    'background:#6187d838', 'color:var(--dsw-alias-label-primary, inherit)',
+    'font-size:0.92em', 'line-height:1.5', 'vertical-align:baseline',
+    'white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis',
+  ].join(';')
+  const mark = document.createElement('span')
+  mark.textContent = '选段'
+  mark.style.cssText = 'opacity:.65;font-size:.9em;flex:none'
+  const body = document.createElement('span')
+  body.textContent = `「${clip(quote, 18)}」`
+  body.style.cssText = 'overflow:hidden;text-overflow:ellipsis'
+  chip.append(mark, body)
+  return chip
+}
+
+function decorateTextNode(node: Text): void {
+  const text = node.data
+  SELECTION_RE.lastIndex = 0
+  if (!SELECTION_RE.test(text)) return
+  SELECTION_RE.lastIndex = 0
+  const fragment = document.createDocumentFragment()
+  let cursor = 0
+  for (const match of text.matchAll(SELECTION_RE)) {
+    const index = match.index ?? 0
+    if (index > cursor) fragment.append(text.slice(cursor, index))
+    fragment.append(buildChip(match[1]!, match[2]!))
+    cursor = index + match[0].length
+  }
+  if (cursor < text.length) fragment.append(text.slice(cursor))
+  node.replaceWith(fragment)
+}
+
+function decorateWithin(root: Node): void {
+  if (root.nodeType === Node.TEXT_NODE) {
+    decorateTextNode(root as Text)
+    return
+  }
+  if (!(root instanceof Element)) return
+  if (root.closest(`[${DECORATED}]`)) return
+  // 只碰对话消息区文本;输入框(textarea/镜像层)与纸面绝不装饰。
+  if (root.closest('textarea, [data-qingagent-doc-panel]')) return
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) => {
+      const parent = node.parentElement
+      if (!parent || parent.closest(`[${DECORATED}], textarea, [data-qingagent-doc-panel], [class*="mirror"], [class*="backdrop"]`)) {
+        return NodeFilter.FILTER_REJECT
+      }
+      return (node as Text).data.includes('[选段]') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
+    },
+  })
+  const hits: Text[] = []
+  while (walker.nextNode()) hits.push(walker.currentNode as Text)
+  for (const hit of hits) decorateTextNode(hit)
+}
+
+export function installSelectionBubbleDecor(): () => void {
+  if (typeof document === 'undefined') return () => {}
+  decorateWithin(document.body)
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) decorateWithin(node)
+      if (mutation.type === 'characterData' && mutation.target.nodeType === Node.TEXT_NODE) {
+        decorateTextNode(mutation.target as Text)
+      }
+    }
+  })
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+  return () => observer.disconnect()
+}
