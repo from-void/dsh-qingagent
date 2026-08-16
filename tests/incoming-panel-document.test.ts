@@ -19,7 +19,7 @@ describe('权威 panelDoc dirty 门', () => {
     } as unknown as DocumentSnapshotViewHandle
     const panelDoc = {
       sessionId: 'qing-1', docVersion: 2, contentHash: 'hash-2', state: 'editing',
-      agentBusy: false, title: 'Agent 稿', ts: 't2', pmDoc: incomingPm,
+      agentBusy: false, title: 'Agent 稿', ts: 't2', charCount: 8, pmDoc: incomingPm,
     } satisfies ExternalPmDocReadResponse
 
     const decision = await decideIncomingPanelDocument({

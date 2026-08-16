@@ -59,6 +59,7 @@ export interface ExternalPmDocReadResponse {
   agentBusy: boolean
   title: string | null
   ts: string
+  charCount: number
   pmDoc: PmDoc | null
 }
 
@@ -70,7 +71,7 @@ export interface ExternalDocReplaceRequest {
 }
 
 export type ExternalDocReplaceResponse =
-  | { ok: true; clientMutationId: string; docVersion: number; contentHash: string; ts: string }
+  | { ok: true; clientMutationId: string; docVersion: number; contentHash: string; ts: string; charCount: number }
   | {
       ok: false
       clientMutationId: string

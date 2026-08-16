@@ -11,7 +11,7 @@
 | ColumnDnD 分栏拖拽 | 可用 | 原 `ColumnView` / `ColumnDnD` extension 随 `DocumentSnapshotView` 同源挂载。 |
 | CodeBlock 语言菜单 | 可用 | 原 `CodeBlockCM` / `CodeBlockView` NodeView 挂载；fixture DOM 已核查代码块结构。 |
 | DiagramView：Mermaid | 可用 | 原 Mermaid 渲染、交互工具栏和双击编辑链随 NodeView 打包。 |
-| DiagramView：drawio | 缺依赖 | `DrawioEditorOverlay` 与 launcher 已随原件打包并挂载；DSH 宿主当前没有发布青简 `public/drawio`（约 24 MiB）的 `/drawio/index.html` 静态运行时，因此 iframe 编辑器在宿主内暂不可加载。 |
+| DiagramView：drawio | 可用 | `DrawioEditorOverlay`、JSON embed 协议、maxGraph 回退渲染与写回链随原件 1:1 打包；宿主只读发布青简 `public/drawio`（v31.0.2，约 24 MiB）到同源 `/drawio/*`，不依赖远程 iframe。审阅态双击仅提示，不会进入编辑器或产生写事务。 |
 | MathEditPopover | 可用 | 原公式点击事件、保存、删除和关闭链由 `DocumentSnapshotView` 挂载。 |
 | DocFind / Ctrl+F | 可用 | 补挂原 `useWorkspaceFind` 与 `DocFindBar`，Ctrl+F DOM 回归已覆盖。 |
 | undo / redo | 可用 | 青简 History extension 原命令链可逆恢复正文，DOM 测试覆盖。 |

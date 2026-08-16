@@ -38,7 +38,7 @@ describe('external review render-model → PatchDecorations 输入', () => {
   it('固定 DocSuggestion fixture 的计数、导航、hover meta 与 decoration 输入同源', () => {
     const panelDoc = {
       sessionId: 'qing-1', docVersion: 4, contentHash: 'hash-4', state: 'pendingReview',
-      agentBusy: false, title: '审阅稿', ts: '2026-08-15T02:00:00.000Z', pmDoc: previewDoc,
+      agentBusy: false, title: '审阅稿', ts: '2026-08-15T02:00:00.000Z', charCount: 4, pmDoc: previewDoc,
     } satisfies ExternalPmDocReadResponse
     const renderModel = {
       sessionId: 'qing-1', docVersion: 4, state: 'pendingReview', agentBusy: false,
