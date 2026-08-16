@@ -248,6 +248,8 @@ export class EngineConnection {
   private authorizedFetch(path: string, init: RequestInit, token: string): Promise<Response> {
     const headers = new Headers(init.headers)
     headers.set('Authorization', `Bearer ${token}`)
+    // 来源归属:引擎按 x-qa-client 把外部改动记为 DeepSeek Harness(客户端展示专用图标)。
+    headers.set('x-qa-client', 'deepseek')
     if (init.body !== undefined && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
     return this.dependencies.fetch(`${this.config.engineUrl.replace(/\/$/, '')}/api/v1/external${path}`, { ...init, headers })
   }
