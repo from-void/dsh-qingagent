@@ -133,5 +133,13 @@
     "vitest": "^4.1.8",
     "zustand": "5.0.13"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/from-void/dsh-qingagent.git"
+  },
+  "homepage": "https://github.com/from-void/dsh-qingagent#readme",
+  "bugs": {
+    "url": "https://github.com/from-void/dsh-qingagent/issues"
+  }
 }
