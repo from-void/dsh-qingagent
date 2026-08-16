@@ -32,10 +32,11 @@ const RUNTIME_CSS = `
 /* 写作/繁忙态内发光呼吸(青简原版 ws-paper-breathe 逐值移植):亮起规则的全部视觉在
    keyframes 的 box-shadow 里,dsh 管线可能剥 @keyframes(同 backdrop-filter 前科),
    故整段走运行时注入并改名防撞。 */
-[data-qingagent-doc-panel][data-tool="agentBusy"] .ws-paper-surface > .ws-editor-glow,
-[data-qingagent-doc-panel][data-tool="imageProgress"] .ws-paper-surface > .ws-editor-glow,
-[data-qingagent-doc-panel][data-patch-revealing="1"] .ws-paper-surface > .ws-editor-glow {
-  opacity: 1;
+:is([data-qingagent-doc-panel][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
+:is([data-qingagent-doc-panel][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
+:is([data-qingagent-doc-panel][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow {
+  /* !important:基础规则(opacity:0)在 dsh 的 constructed stylesheet 里,同 specificity 平局必输。 */
+  opacity: 1 !important;
   animation: qingdoc-paper-breathe 3.6s ease-in-out infinite;
 }
 @keyframes qingdoc-paper-breathe {
@@ -62,9 +63,9 @@ const RUNTIME_CSS = `
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  [data-qingagent-doc-panel][data-tool="agentBusy"] .ws-paper-surface > .ws-editor-glow,
-  [data-qingagent-doc-panel][data-tool="imageProgress"] .ws-paper-surface > .ws-editor-glow,
-  [data-qingagent-doc-panel][data-patch-revealing="1"] .ws-paper-surface > .ws-editor-glow {
+  :is([data-qingagent-doc-panel][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
+  :is([data-qingagent-doc-panel][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
+  :is([data-qingagent-doc-panel][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow {
     animation: none;
     box-shadow:
       inset 0 0 42px 6px rgba(181, 154, 99, 0.32),
