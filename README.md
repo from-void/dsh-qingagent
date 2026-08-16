@@ -20,26 +20,25 @@
 
 要求 Node.js 20+、DSH `0.1.0-rc.6`(profile 已组合 storage hub、storage-domain 及一个 KV 后端,通常是 `@deepseek-ai/dsh-storage-json`)。
 
+**普通安装(npm,推荐)**:
+
 ```bash
-git clone --recursive <本仓地址> dsh-qingagent
+dsh plugin --profile web add dsh-qingagent
+```
+
+装完重启 `dsh web` 即生效。
+
+**从源码开发**:
+
+```bash
+git clone --recursive https://github.com/from-void/dsh-qingagent.git
 cd dsh-qingagent
 npm install
 npm run check   # CSS 钉扎校验 + 类型 + 测试 + 构建
+dsh plugin --profile web add link:$(pwd)
 ```
 
 > 忘了 `--recursive` 就补一句 `git submodule update --init`。青简源码以 submodule 钉在 `vendor/qingagent`(构建期依赖,详见下文)。
-
-在 `~/.dsh/profiles/web/package.json` 的 `dependencies` 中加入(路径换成你的检出位置):
-
-```json
-{ "dsh-qingagent": "link:/path/to/dsh-qingagent" }
-```
-
-或直接:
-
-```bash
-dsh plugin --profile web add link:/path/to/dsh-qingagent
-```
 
 `package.json` 中的 `dsh.bundle.patch` 会合并仓内 `cordis.patch.yml`;不要同时保留手写挂载与 bundle 挂载,以免双重注册。重启 `dsh web` 生效。
 
