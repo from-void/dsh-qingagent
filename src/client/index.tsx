@@ -6,6 +6,13 @@ import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import { QingDocPanel } from './QingDocPanel.js'
 import { QingSelectionDock } from './QingSelectionDock.js'
 import { QingWriteToolCard } from './QingWriteToolCard.js'
+import {
+  QingEditToolCard,
+  QingFocusToolCard,
+  QingListDocsToolCard,
+  QingReadToolCard,
+  QingReviewCommitToolCard,
+} from './QingToolCard.js'
 import { qingClientStore } from './store.js'
 
 export const name = 'dsh-qingagent-client'
@@ -136,6 +143,33 @@ export function apply(ctx: ClientContext): void {
     key: 'qing_write_draft',
     inject: () => ({ qingLayout: layout }),
   }, QingWriteToolCard))
+
+  // #23 具名状态卡:全部 qing 工具都有自己的名字与状态摘要,不落到通用卡。
+  slots.inject('tool.call.toolview', () => slots.register({
+    name: 'tool.call.toolview',
+    key: 'qing_edit_draft',
+    inject: () => ({ qingLayout: layout }),
+  }, QingEditToolCard))
+  slots.inject('tool.call.toolview', () => slots.register({
+    name: 'tool.call.toolview',
+    key: 'qing_review_commit',
+    inject: () => ({ qingLayout: layout }),
+  }, QingReviewCommitToolCard))
+  slots.inject('tool.call.toolview', () => slots.register({
+    name: 'tool.call.toolview',
+    key: 'qing_read_draft',
+    inject: () => ({ qingLayout: layout }),
+  }, QingReadToolCard))
+  slots.inject('tool.call.toolview', () => slots.register({
+    name: 'tool.call.toolview',
+    key: 'qing_list_docs',
+    inject: () => ({ qingLayout: layout }),
+  }, QingListDocsToolCard))
+  slots.inject('tool.call.toolview', () => slots.register({
+    name: 'tool.call.toolview',
+    key: 'qing_focus_doc',
+    inject: () => ({ qingLayout: layout }),
+  }, QingFocusToolCard))
 
   slots.inject('conversation.input.dock', () => slots.register({
     name: 'conversation.input.dock',

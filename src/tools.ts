@@ -548,6 +548,7 @@ function readDraftTool(services: ToolServices) {
         },
       },
       render: (_args, value) => textBlock(`${docStateLine(value.state, value.docVersion)}\n《${value.title}》｜${value.blocks} 块｜约 ${value.words} 字\n${value.content}`),
+      presentationMeta: (_args, value) => ({ title: value.title, words: value.words, mode: value.mode }),
     },
     presentCall: () => ({ card: 'generic', title: '读取青简文稿', kind: 'read' }),
     presentResult: (_args, result) => ({ card: 'generic', title: result.isError ? '读取青简文稿失败' : '已读取青简文稿' }),
@@ -647,6 +648,7 @@ function listDocsTool(services: ToolServices) {
       render: (args, value) => textBlock(value.docs.length
         ? `青简引擎：${value.engine}\n${value.docs.map((doc) => `${doc.active ? '→' : ' '} ${doc.title}｜${doc.state}｜${doc.engineSessionId}${doc.bound === false ? '｜未绑定(可用 qing_focus_doc 收养)' : ''}`).join('\n')}`
         : `青简引擎：${value.engine}\n${args.scope === 'library' ? '文库暂无文稿。' : '当前会话还没有绑定文稿。'}`),
+      presentationMeta: (args, value) => ({ count: value.docs.length, scope: args.scope ?? 'session' }),
     },
     presentCall: (args) => ({ card: 'generic', title: args.scope === 'library' ? '查看青简文库' : '查看青简文稿', kind: 'read' }),
     execute: async (args, exec) => {
