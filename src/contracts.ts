@@ -216,8 +216,32 @@ export type ExternalProposalResponse =
   | { status: 'committed'; docVersion: number; seq?: number }
   | { status: 'review'; patchIds: string[]; count: number; seq?: number }
 
+// TODO(vendor 4e6a1dd4):vendor bump 至含 4e6a1dd4 后收敛回 @qingagent/contract-ts 契约引用。
+export const DRAFT_MARK_COLORS = [
+  'ink', 'gray', 'slate', 'brown', 'red', 'orange', 'amber', 'yellow',
+  'lime', 'green', 'sage', 'mint', 'teal', 'cyan', 'sky', 'blue',
+  'indigo', 'violet', 'purple', 'magenta', 'pink', 'rose', 'sand', 'lavender',
+] as const
+
+export type DraftMarkColor = (typeof DRAFT_MARK_COLORS)[number]
+
+export type DraftTextMark =
+  | { type: 'bold' | 'italic' | 'strike' | 'underline' | 'code' }
+  | { type: 'highlight'; color: DraftMarkColor }
+  | { type: 'textColor'; color: DraftMarkColor }
+  | { type: 'link'; href: string; title?: string | null }
+
 export type ExternalEditProposalOp =
   | { kind: 'strReplace'; old: string; new: string; nth?: number }
+  | {
+      kind: 'markText'
+      find: string
+      mark: DraftTextMark
+      op: 'add' | 'remove'
+      all?: boolean
+      isRegex?: boolean
+      withinRef?: string
+    }
   | { kind: 'insertAfterLine'; line: number; markdown: string }
   | { kind: 'appendSection'; markdown: string }
   | { kind: 'setTitle'; title: string }

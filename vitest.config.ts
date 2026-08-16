@@ -86,6 +86,8 @@ export default defineConfig({
     },
   }],
   test: {
+    // vendor/qingagent 作为源码依赖参与编译，但上游仓测试不属于本插件测试套件。
+    include: ['tests/**/*.test.{ts,tsx}'],
     environment: 'node',
     server: {
       deps: {

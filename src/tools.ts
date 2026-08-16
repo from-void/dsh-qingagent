@@ -15,6 +15,7 @@ import type {
   ExternalReviewRenderModelResponse,
   SideModelConfig,
 } from './contracts.js'
+import { DRAFT_MARK_COLORS } from './contracts.js'
 import { EngineHttpError, EngineUnavailableError, type EngineService } from './engine.js'
 import {
   QINGML_SYSTEM,
@@ -43,7 +44,7 @@ const STR_REPLACE_PLAIN_TEXT_ERROR = 'old 必须是纯文本内容,不要带 ## 
 const STR_REPLACE_LINES_NOTICE = '注意:strReplace 的 old 用纯文本,不要带行首 ## - 等标记。'
 // 局部 op 只接受纯文本/Markdown;QingML/HTML 原始标签会被当普通文字刻进正文(用户实测颜色事故)。
 const RAW_TAG_PATTERN = /<\/?\s*(article|title|h[1-6]|p|ul|ol|li|tasks?|blockquote|hr|pre|table|tr|td|th|callout|columns?|mermaid|drawio|math(?:-block)?|img|file|pennote|b|strong|i|em|u|s|del|code|a|mark|color|footnote|br|span|div)\b[^>]*>/i
-const RAW_TAG_ERROR = '检测到 QingML/HTML 标签:局部操作(strReplace/insertAfterLine/appendSection)只接受纯文本或 Markdown,不支持 <mark>/<color> 等行内标记——直接写入会把标签当普通文字刻进正文。样式类修改请如实告知用户当前局部编辑不支持,如用户明确同意整篇重构可用 qing_write_draft(携 docRef)。'
+const RAW_TAG_ERROR = '检测到 QingML/HTML 标签:局部操作(strReplace/insertAfterLine/appendSection)只接受纯文本或 Markdown；直接写入 <mark>/<color> 等标签会把它们当普通文字刻进正文。样式类修改请改用 qing_edit_draft 的 markText 操作。'
 
 /** P14(RC13):每个工具返回带当前聚焦文稿,纠偏模型沿用旧 docRef。 */
 /** mode:"blocks" 用的宽松 PM 节点形状(只读 blockId/type/文本摘要,不承诺完整 schema)。 */
@@ -274,7 +275,7 @@ function writeDraftTool(services: ToolServices) {
 function editDraftTool(services: ToolServices) {
   return defineTool({
     name: 'qing_edit_draft',
-    description: '对已有青简文稿做结构化局部修改。改标题用 setTitle 操作(标题不在正文,strReplace 打不到);删除整段/整节/清单项用 deleteBlock/deleteListItem(先 qing_read_draft mode:"blocks" 取块 ID,严禁用 strReplace 置空留残壳);改一句、插入一段或追加一节用相应操作;严禁用 qing_write_draft 整篇重写。strReplace 的 old/new 必须是纯文本内容，不含 ##、-、** 等 Markdown 语法标记。多处修改必须放进同一次调用的 ops 数组一次提交；逐条调用会因首条进入审阅态而被 REVIEW_PENDING 拒绝。insertAfterLine 前先调用 qing_read_draft(mode:"lines") 取得当前 Markdown 行号。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
+    description: '对已有青简文稿做结构化局部修改。改标题用 setTitle 操作(标题不在正文,strReplace 打不到);删除整段/整节/清单项用 deleteBlock/deleteListItem(先 qing_read_draft mode:"blocks" 取块 ID,严禁用 strReplace 置空留残壳);改一句、插入一段或追加一节用相应操作;高亮、文字颜色、加粗一句话等行内标记用 markText,严禁为加标记用 qing_write_draft 整篇重写。markText add 会替换命中内容已有的同类型不同属性标记,同类型同属性则幂等提示;remove 仅移除属性全等的标记,调用前必须先用 qing_read_draft(mode:"blocks") 或读稿确认现有标记的确切 attrs;代码块内文本不支持行内标记;命中列表项时审阅卡会按顶层块呈现为整列表替换。strReplace 的 old/new 必须是纯文本内容，不含 ##、-、** 等 Markdown 语法标记。多处修改必须放进同一次调用的 ops 数组一次提交；逐条调用会因首条进入审阅态而被 REVIEW_PENDING 拒绝。insertAfterLine 前先调用 qing_read_draft(mode:"lines") 取得当前 Markdown 行号。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
     parameters: {
       docRef: { type: 'string', description: '要局部修改的青简会话 ID；省略时使用当前激活文稿。' },
       ops: {
@@ -291,6 +292,73 @@ function editDraftTool(services: ToolServices) {
                 old: { type: 'string', required: true, description: '要匹配的纯文本内容，不含行首 ##、-、数字. 或包裹性 **/__ 等 Markdown 标记。' },
                 new: { type: 'string', required: true, description: '替换后的纯文本内容，不含行首 ##、-、数字. 或包裹性 **/__ 等 Markdown 标记。' },
                 nth: { type: 'integer' },
+              },
+            },
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                kind: { type: 'string', const: 'markText', required: true },
+                find: { type: 'string', required: true },
+                mark: {
+                  required: true,
+                  oneOf: [
+                    {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: { type: { type: 'string', const: 'bold', required: true } },
+                    },
+                    {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: { type: { type: 'string', const: 'italic', required: true } },
+                    },
+                    {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: { type: { type: 'string', const: 'strike', required: true } },
+                    },
+                    {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: { type: { type: 'string', const: 'underline', required: true } },
+                    },
+                    {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: { type: { type: 'string', const: 'code', required: true } },
+                    },
+                    {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: {
+                        type: { type: 'string', const: 'highlight', required: true },
+                        color: { type: 'string', enum: DRAFT_MARK_COLORS, required: true },
+                      },
+                    },
+                    {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: {
+                        type: { type: 'string', const: 'textColor', required: true },
+                        color: { type: 'string', enum: DRAFT_MARK_COLORS, required: true },
+                      },
+                    },
+                    {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: {
+                        type: { type: 'string', const: 'link', required: true },
+                        href: { type: 'string', required: true },
+                        title: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+                      },
+                    },
+                  ],
+                },
+                op: { type: 'string', enum: ['add', 'remove'], required: true },
+                all: { type: 'boolean' },
+                isRegex: { type: 'boolean' },
+                withinRef: { type: 'string' },
               },
             },
             {
