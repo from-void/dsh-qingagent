@@ -34,7 +34,49 @@ function buildChip(title: string, quote: string): HTMLSpanElement {
   return chip
 }
 
+
+/** 审核结果回流消息(【审核结果】开头)的结构化排版:标题行+计数徽记+逐条被拒行(直角,贴用户审美)。 */
+const REVIEW_HEAD_RE = /^【审核结果】本轮审阅我已处理[:：]采纳 (\d+) 处[,，]拒绝 (\d+) 处。(.*)$/
+
+function decorateReviewOutcomeNode(node: Text): boolean {
+  const lines = node.data.split('\n')
+  const head = REVIEW_HEAD_RE.exec(lines[0] ?? '')
+  if (!head) return false
+  const wrap = document.createElement('span')
+  wrap.setAttribute(DECORATED, '1')
+  wrap.style.cssText = 'display:block'
+  const header = document.createElement('span')
+  header.style.cssText = 'display:flex;align-items:center;gap:8px;font-weight:600'
+  const title = document.createElement('span')
+  title.textContent = '审核结果'
+  const stat = (text: string, color: string) => {
+    const el = document.createElement('span')
+    el.textContent = text
+    el.style.cssText = `font-weight:400;font-size:.9em;padding:0 6px;border:1px solid ${color};color:${color}`
+    return el
+  }
+  header.append(title, stat(`采纳 ${head[1]}`, 'rgba(63,125,88,.9)'), stat(`拒绝 ${head[2]}`, 'rgba(176,84,64,.9)'))
+  wrap.append(header)
+  const note = (head[3] ?? '').trim()
+  if (note) {
+    const sub = document.createElement('span')
+    sub.textContent = note
+    sub.style.cssText = 'display:block;margin-top:2px;font-size:.9em;opacity:.72'
+    wrap.append(sub)
+  }
+  for (const line of lines.slice(1)) {
+    if (!line.trim()) continue
+    const row = document.createElement('span')
+    row.textContent = line.replace(/^\d+\.\s*/, '')
+    row.style.cssText = 'display:block;margin-top:4px;padding-left:8px;border-left:2px solid rgba(176,84,64,.55);font-size:.94em'
+    wrap.append(row)
+  }
+  node.replaceWith(wrap)
+  return true
+}
+
 function decorateTextNode(node: Text): void {
+  if (decorateReviewOutcomeNode(node)) return
   const text = node.data
   SELECTION_RE.lastIndex = 0
   if (!SELECTION_RE.test(text)) return
@@ -66,7 +108,8 @@ function decorateWithin(root: Node): void {
       if (!parent || parent.closest(`[${DECORATED}], textarea, [data-qingagent-doc-panel], [class*="mirror"], [class*="backdrop"]`)) {
         return NodeFilter.FILTER_REJECT
       }
-      return (node as Text).data.includes('[选段]') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
+      const data = (node as Text).data
+      return data.includes('[选段]') || data.startsWith('【审核结果】') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
     },
   })
   const hits: Text[] = []
