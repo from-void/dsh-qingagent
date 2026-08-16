@@ -330,6 +330,15 @@ function editDraftTool(services: ToolServices) {
               type: 'object',
               additionalProperties: false,
               properties: {
+                kind: { type: 'string', const: 'insertAfterBlock', required: true },
+                blockId: { type: 'string', required: true, description: '锚点块 ID(qing_read_draft mode:"blocks" 获取)。锚点为清单项→同清单同深度插入兄弟项(markdown 须恰 1 条同类列表项);锚点为顶层块→其后插入顶层块。清单内插入用它,不要用 insertAfterLine。' },
+                markdown: { type: 'string', required: true, description: '要插入的 Markdown 内容;禁止 HTML/QingML 标签。' },
+              },
+            },
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
                 kind: { type: 'string', const: 'setTitle', required: true },
                 title: { type: 'string', required: true, description: '新标题;引擎约束:去空白后 1-48 字,同一批最多一个 setTitle,不与整篇 draft 混用。' },
               },
@@ -883,7 +892,7 @@ function proposeOps(
   ops: ExternalEditProposalOp[] | Array<{ kind: 'qingmlDraft'; qingml: string }>,
 ): Promise<ExternalProposalResponse> {
   // 引擎契约:结构操作批(deleteBlock/deleteListItem)必须携带请求级 opId(幂等寻址)。
-  const structural = ops.some((op) => op.kind === 'deleteBlock' || op.kind === 'deleteListItem')
+  const structural = ops.some((op) => op.kind === 'deleteBlock' || op.kind === 'deleteListItem' || op.kind === 'insertAfterBlock')
   return engine.fetchJson<ExternalProposalResponse>(`/sessions/${encodeURIComponent(engineSessionId)}/proposals`, {
     method: 'POST',
     body: JSON.stringify({

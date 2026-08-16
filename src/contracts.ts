@@ -167,6 +167,7 @@ export type ExternalEditProposalOp =
   | { kind: 'setTitle'; title: string }
   | { kind: 'deleteBlock'; blockId: string }
   | { kind: 'deleteListItem'; blockId: string }
+  | { kind: 'insertAfterBlock'; blockId: string; markdown: string }
 
 export interface ExternalReviewCommitRequest {
   expectedDocVersion: number
