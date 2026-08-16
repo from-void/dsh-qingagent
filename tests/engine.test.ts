@@ -107,6 +107,28 @@ describe('EngineConnection', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 
+  it('引擎地址以 instance.json 的 port 为权威(客户端内置引擎端口随机,配置默认 8080 不再劫持)', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      expect(String(input)).toBe('http://127.0.0.1:21823/api/v1/external/health')
+      return Response.json({ version: '1.0.0', attachProtocolVersion: 1 })
+    })
+    const engine = new EngineConnection(
+      { engineUrl: 'http://127.0.0.1:8080', autoLaunch: false },
+      logger,
+      undefined,
+      dependencies({
+        fetch: fetchMock,
+        readInstance: async () => instance({ port: 21823 }),
+      }),
+    )
+
+    await expect(engine.status()).resolves.toMatchObject({
+      state: 'online',
+      engineUrl: 'http://127.0.0.1:21823',
+    })
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
   it('资产读取访问 external 会话端点并只在宿主侧附加 Bearer', async () => {
     const seen: Array<{ url: string; authorization: string | null }> = []
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {

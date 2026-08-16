@@ -178,6 +178,11 @@ export class EngineConnection {
     return status
   }
 
+  /** 引擎地址以 instance.json 的 port 为权威(单库:连的就是写出该文件的引擎);读不到实例时回退配置值。 */
+  private baseUrl(): string {
+    return this.instance ? `http://127.0.0.1:${this.instance.port}` : this.config.engineUrl.replace(/\/$/, '')
+  }
+
   private instancePath(): string {
     return this.config.instancePath ?? `${homedir()}/.qingagent/instance.json`
   }
@@ -199,18 +204,18 @@ export class EngineConnection {
       instance = await this.reloadInstance()
     } catch (error) {
       const reason = instanceReadFailureReason(error)
-      return this.publish(disconnectedStatus(this.config.engineUrl, reason, instanceReadFailureMessage(reason)))
+      return this.publish(disconnectedStatus(this.baseUrl(), reason, instanceReadFailureMessage(reason)))
     }
     if (instance.attachProtocolVersion !== ATTACH_PROTOCOL_VERSION) {
       return this.publish(handshakeFailure(
-        this.config.engineUrl,
+        this.baseUrl(),
         'protocol-incompatible',
         `attachProtocolVersion 不兼容：青简为 ${instance.attachProtocolVersion}，插件需要 ${ATTACH_PROTOCOL_VERSION}。`,
       ))
     }
     if (!this.dependencies.isProcessAlive(instance.pid)) {
       return this.publish(disconnectedStatus(
-        this.config.engineUrl,
+        this.baseUrl(),
         'instance-process-exited',
         'instance.json 存在，但记录的青简进程已退出。',
       ))
@@ -224,20 +229,20 @@ export class EngineConnection {
           instance = await this.reloadInstance()
         } catch (error) {
           const reason = instanceReadFailureReason(error)
-          return this.publish(disconnectedStatus(this.config.engineUrl, reason, instanceReadFailureMessage(reason)))
+          return this.publish(disconnectedStatus(this.baseUrl(), reason, instanceReadFailureMessage(reason)))
         }
         response = await this.healthFetch(instance.token, signal)
       }
       if (response.status === 401 || response.status === 403) {
         return this.publish(handshakeFailure(
-          this.config.engineUrl,
+          this.baseUrl(),
           'unauthorized',
           `青简拒绝了实例令牌（HTTP ${response.status}），instance.json 可能已经过期。`,
         ))
       }
       if (!response.ok) {
         return this.publish(handshakeFailure(
-          this.config.engineUrl,
+          this.baseUrl(),
           'health-http-error',
           `青简健康检查返回 HTTP ${response.status}。`,
         ))
@@ -247,38 +252,38 @@ export class EngineConnection {
         body = parseHealth(await response.json())
       } catch {
         return this.publish(handshakeFailure(
-          this.config.engineUrl,
+          this.baseUrl(),
           'health-response-invalid',
           '青简健康检查响应格式无效。',
         ))
       }
       if (body.attachProtocolVersion !== ATTACH_PROTOCOL_VERSION) {
         return this.publish(handshakeFailure(
-          this.config.engineUrl,
+          this.baseUrl(),
           'protocol-incompatible',
           `attachProtocolVersion 不兼容：青简为 ${body.attachProtocolVersion}，插件需要 ${ATTACH_PROTOCOL_VERSION}。`,
         ))
       }
       if (body.version !== instance.version) {
         return this.publish(handshakeFailure(
-          this.config.engineUrl,
+          this.baseUrl(),
           'version-mismatch',
           `版本不符：instance.json 记录 ${instance.version}，实际引擎为 ${body.version}。`,
         ))
       }
       return this.publish({
         state: 'online',
-        engineUrl: this.config.engineUrl,
+        engineUrl: this.baseUrl(),
         version: body.version,
       })
     } catch (error) {
       const reason = networkFailureReason(error)
-      return this.publish(disconnectedStatus(this.config.engineUrl, reason, networkFailureMessage(reason)))
+      return this.publish(disconnectedStatus(this.baseUrl(), reason, networkFailureMessage(reason)))
     }
   }
 
   private healthFetch(token: string, signal: AbortSignal): Promise<Response> {
-    return this.dependencies.fetch(`${this.config.engineUrl.replace(/\/$/, '')}/api/v1/external/health`, {
+    return this.dependencies.fetch(`${this.baseUrl()}/api/v1/external/health`, {
       headers: { Authorization: `Bearer ${token}` },
       signal,
     })
@@ -292,7 +297,7 @@ export class EngineConnection {
   }
 
   private async launchAndPoll(): Promise<EngineStatusSnapshot> {
-    this.publish({ state: 'starting', engineUrl: this.config.engineUrl, message: '正在启动青简…' })
+    this.publish({ state: 'starting', engineUrl: this.baseUrl(), message: '正在启动青简…' })
     this.logger.info('执行青简启动命令：%s', this.config.engineCommand)
     this.dependencies.launch(this.config.engineCommand!, this.config.engineCwd, this.logger)
     const deadline = Date.now() + 20_000
@@ -304,9 +309,9 @@ export class EngineConnection {
       }
       const status = await this.status()
       if (status.state === 'online') return status
-      this.publish({ state: 'starting', engineUrl: this.config.engineUrl, message: '正在等待青简就绪…' })
+      this.publish({ state: 'starting', engineUrl: this.baseUrl(), message: '正在等待青简就绪…' })
     }
-    return this.publish({ state: 'offline', engineUrl: this.config.engineUrl, message: '20 秒内未等到青简就绪' })
+    return this.publish({ state: 'offline', engineUrl: this.baseUrl(), message: '20 秒内未等到青简就绪' })
   }
 
   async fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -335,7 +340,7 @@ export class EngineConnection {
     } catch (error) {
       const reason = instanceReadFailureReason(error)
       throw new EngineUnavailableError(this.publish(
-        disconnectedStatus(this.config.engineUrl, reason, instanceReadFailureMessage(reason)),
+        disconnectedStatus(this.baseUrl(), reason, instanceReadFailureMessage(reason)),
       ))
     }
     let response: Response
@@ -344,7 +349,7 @@ export class EngineConnection {
     } catch (error) {
       const reason = networkFailureReason(error)
       throw new EngineUnavailableError(this.publish(
-        disconnectedStatus(this.config.engineUrl, reason, networkFailureMessage(reason)),
+        disconnectedStatus(this.baseUrl(), reason, networkFailureMessage(reason)),
       ))
     }
     if (response.status === 401) {
@@ -353,7 +358,7 @@ export class EngineConnection {
       } catch (error) {
         const reason = instanceReadFailureReason(error)
         throw new EngineUnavailableError(this.publish(
-          disconnectedStatus(this.config.engineUrl, reason, instanceReadFailureMessage(reason)),
+          disconnectedStatus(this.baseUrl(), reason, instanceReadFailureMessage(reason)),
         ))
       }
       try {
@@ -361,12 +366,12 @@ export class EngineConnection {
       } catch (error) {
         const reason = networkFailureReason(error)
         throw new EngineUnavailableError(this.publish(
-          disconnectedStatus(this.config.engineUrl, reason, networkFailureMessage(reason)),
+          disconnectedStatus(this.baseUrl(), reason, networkFailureMessage(reason)),
         ))
       }
       if (response.status === 401 || response.status === 403) {
         throw new EngineUnavailableError(this.publish(handshakeFailure(
-          this.config.engineUrl,
+          this.baseUrl(),
           'unauthorized',
           `青简拒绝了实例令牌（HTTP ${response.status}），instance.json 可能已经过期。`,
         )))
@@ -399,7 +404,7 @@ export class EngineConnection {
     // 来源归属:引擎按 x-qa-client 把外部改动记为 DeepSeek Harness(客户端展示专用图标)。
     headers.set('x-qa-client', 'deepseek')
     if (init.body !== undefined && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
-    return this.dependencies.fetch(`${this.config.engineUrl.replace(/\/$/, '')}/api/v1/external${path}`, { ...init, headers })
+    return this.dependencies.fetch(`${this.baseUrl()}/api/v1/external${path}`, { ...init, headers })
   }
 
   /** 引擎内部(非 external)只读接口,当前仅导出用;仍带 Bearer(无全局令牌时被忽略,无副作用)。 */
@@ -407,7 +412,7 @@ export class EngineConnection {
     return this.fetchReadyResponse((token) => {
       const headers = new Headers(init.headers)
       headers.set('Authorization', `Bearer ${token}`)
-      return this.dependencies.fetch(`${this.config.engineUrl.replace(/\/$/, '')}/api/v1${path}`, { ...init, headers })
+      return this.dependencies.fetch(`${this.baseUrl()}/api/v1${path}`, { ...init, headers })
     })
   }
 
