@@ -13,6 +13,8 @@
     "resolveJsonModule": true,
     "types": ["node", "vitest/globals"],
     "paths": {
+      "@qingagent/ui-kit": ["./vendor/qingagent/packages/ui-kit/src/index.ts"],
+      "@qingagent/ui-kit/*": ["./vendor/qingagent/packages/ui-kit/src/*"],
       "@qingagent/contract-ts": ["./vendor/qingagent/packages/contract-ts/src/index.ts"],
       "@qingagent/contract-ts/*": ["./vendor/qingagent/packages/contract-ts/src/*"],
       "@qingagent/pm-schema": ["./vendor/qingagent/packages/pm-schema/src/index.ts"],

@@ -45,6 +45,7 @@ export default defineConfig({
       { find: /^react-dom$/, replacement: resolve('node_modules/react-dom/index.js') },
       { find: /^react-dom\/client$/, replacement: resolve('node_modules/react-dom/client.js') },
       ...tiptapAliases,
+      { find: /^@qingagent\/ui-kit$/, replacement: `${qingRoot}/packages/ui-kit/src/index.ts` },
       { find: '@qingagent/pm-schema/tiptap', replacement: `${qingRoot}/packages/pm-schema/src/tiptap/createQingagentExtensions.ts` },
       { find: '@qingagent/pm-schema', replacement: `${qingRoot}/packages/pm-schema/src/index.ts` },
       { find: '@qingagent/contract-ts/schemas', replacement: `${qingRoot}/packages/contract-ts/src/schemas/index.ts` },
