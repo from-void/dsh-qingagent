@@ -10,7 +10,6 @@ import { BindingDomainSpec, BindingStore } from './bindings.js'
 import { BridgeHub } from './bridge.js'
 import { EngineService } from './engine.js'
 import { QINGAGENT_SYSTEM_PROMPT } from './system-prompt.js'
-import { selectionSystemPrompt } from './selection.js'
 import { registerTools } from './tools.js'
 import type { SideModelConfig } from './contracts.js'
 
@@ -62,11 +61,6 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     name: 'plugin:qingagent-writing-discipline',
     order: 160,
     text: QINGAGENT_SYSTEM_PROMPT,
-  }))
-  ctx.effect(() => ctx.systemPrompt.section({
-    name: 'plugin:qingagent-selection',
-    order: 161,
-    text: ({ agent }) => selectionSystemPrompt(agent ? bridge?.getSelection(String(agent.id)) : undefined),
   }))
   registerTools({ ctx, engine, bindings, bridge, sideModel: config.sideModel })
 }
