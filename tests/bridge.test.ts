@@ -236,12 +236,22 @@ describe('BridgeHub', () => {
     expect(pm.status).toBe(200)
     expect(fetchJson).toHaveBeenCalledWith('/sessions/qing-a/doc?format=pm')
 
+    fetchJson.mockResolvedValueOnce({
+      sessionId: 'qing-a', docVersion: 2, state: 'editing', agentBusy: false,
+      baseVersion: 2, suggestions: [], annotations: [{
+        id: 'annotation-1', summary: '事实有误', note: '与材料不一致', origin: 'source-check',
+        status: 'reviewing', anchors: [{ blockId: 'p-1', pmFrom: 1, pmTo: 3, quote: '正文' }],
+      }],
+    })
     const review = response()
     await handler(
       request('GET', '/qingagent-bridge/review-render-model?dshSessionId=dsh-a&engineSessionId=qing-a'),
       review as unknown as ServerResponse,
     )
     expect(fetchJson).toHaveBeenCalledWith('/sessions/qing-a/review?format=render-model')
+    expect(JSON.parse(review.body)).toMatchObject({
+      annotations: [{ id: 'annotation-1', status: 'reviewing' }],
+    })
 
     const verdictBody = { expectedDocVersion: 3, patchId: 'p-1', verdict: 'rejected' }
     const verdict = response()
@@ -256,6 +266,21 @@ describe('BridgeHub', () => {
     )
     expect(fetchJson).toHaveBeenCalledWith('/sessions/qing-a/review/verdicts', {
       method: 'POST', body: JSON.stringify(verdictBody),
+    })
+
+    const ignoreBody = { expectedDocVersion: 3, annotationIds: ['annotation-1'] }
+    const ignore = response()
+    await handler(
+      request(
+        'POST',
+        '/qingagent-bridge/review-annotations-ignore?dshSessionId=dsh-a&engineSessionId=qing-a',
+        '127.0.0.1',
+        ignoreBody,
+      ),
+      ignore as unknown as ServerResponse,
+    )
+    expect(fetchJson).toHaveBeenCalledWith('/sessions/qing-a/review/annotations/ignore', {
+      method: 'POST', body: JSON.stringify(ignoreBody),
     })
 
     const commitBody = { expectedDocVersion: 3, action: 'commit' }

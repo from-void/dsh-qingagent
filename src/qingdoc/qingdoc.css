@@ -3811,7 +3811,7 @@
   --bg-canvas: var(--bg-paper-deep);
 }
 
-/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:1863-2033 */
+/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:1863-2071 */
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-export-anchor {
   position: relative;
   pointer-events: auto;
@@ -3983,6 +3983,45 @@
   color: var(--ink-3);
   transition: color 120ms ease, transform 120ms ease;
 }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .annotation-hover-card { position:fixed; z-index:41; display:flex; flex-direction:column; box-sizing:border-box; width:min(540px,calc(100vw - 24px)); max-height:calc(100vh - 24px); overflow:hidden; padding:16px; border:1px solid var(--line-2); border-radius:0; background:var(--bg-canvas); color:var(--ink-1); box-shadow:0 8px 24px color-mix(in srgb,var(--ink-1) 16%,transparent); font-family:var(--font-zh-serif); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-body { min-height:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-color:var(--line-3) transparent; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-head { padding-bottom:8px; border-bottom:1px solid var(--line-1); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-title-row { display:flex; align-items:center; justify-content:space-between; gap:18px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-title-row>strong { flex:1; min-width:0; color:var(--ink-1); font-size:15px; line-height:1.45; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-nav { flex:none; display:flex; align-items:center; gap:4px; color:var(--ink-3); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-count { margin-right:2px; white-space:nowrap; font-size:11px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-nav button { appearance:none; display:grid; place-items:center; width:24px; height:24px; padding:0; border:1px solid transparent; border-radius:0; background:transparent; color:var(--ink-3); cursor:pointer; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-nav button:hover:not(:disabled) { border-color:var(--line-2); background:var(--bg-hover); color:var(--ink-1); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-nav button:disabled { color:var(--ink-4); cursor:default; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-meta { display:flex; align-items:center; gap:8px; margin-top:1px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-origin { display:block; color:var(--ink-4); font-size:10.5px; line-height:1.5; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-severity { font-size:10.5px; line-height:1.5; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-severity[data-severity="error"] { color:var(--diff-del-ink); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-severity[data-severity="warn"] { color:var(--mark); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-severity[data-severity="info"] { color:var(--ink-4); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-reason { padding:10px 0 11px; border-bottom:1px solid var(--line-1); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-reason>span,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-suggestion>label { color:var(--mark); font-size:12px; font-weight:600; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-reason p { margin:5px 0 0; color:var(--ink-1); font-size:13.5px; line-height:1.7; white-space:pre-wrap; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-suggestion { display:grid; gap:6px; padding-top:10px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-suggestion textarea { box-sizing:border-box; width:100%; height:68px; min-height:68px; max-height:68px; overflow-y:auto; resize:none; padding:8px 10px; border:1px solid var(--line-2); border-radius:0; outline:none; background:var(--bg-canvas); color:var(--ink-1); font:13px/1.6 var(--font-zh-serif); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-suggestion textarea:focus { border-color:var(--mark); box-shadow:inset 0 0 0 1px var(--mark); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .annotation-hover-card footer { flex:none; display:flex; justify-content:flex-end; gap:8px; margin-top:13px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .annotation-hover-card footer button { appearance:none; min-width:76px; padding:6px 14px; border-radius:0; cursor:pointer; font:600 12.5px/1.4 var(--font-zh-serif); transition:background 120ms ease,border-color 120ms ease,color 120ms ease; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .annotation-hover-card button:focus-visible { outline:2px solid var(--mark); outline-offset:2px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-accept-actions { display:flex; align-items:center; gap:8px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-accept { border:1px solid var(--ink-1); background:var(--ink-1); color:var(--bg-canvas); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-accept:hover:not(:disabled) { border-color:var(--mark); background:var(--mark); color:var(--ink-surface); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-accept:disabled { border-color:var(--line-2); background:var(--bg-subtle); color:var(--ink-4); cursor:not-allowed; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-ignore { border:1px solid var(--line-2); background:transparent; color:var(--ink-2); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-ignore:hover { border-color:var(--line-3); background:var(--bg-hover); color:var(--ink-1); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-ignore-actions { display:flex; align-items:center; justify-content:flex-end; margin-right:auto; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .annotation-anchor-active { text-decoration-line:underline; text-decoration-style:wavy; text-decoration-color:var(--mark); text-decoration-thickness:1.5px; text-underline-offset:3px; background:color-mix(in srgb,var(--mark) 9%,transparent); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .annotation-anchor-active[data-annotation-severity="error"] { text-decoration-color:var(--diff-del-ink); background:color-mix(in srgb,var(--diff-del-bg) 55%,transparent); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .annotation-anchor-active[data-annotation-severity="warn"] { text-decoration-color:var(--mark); background:color-mix(in srgb,var(--mark) 9%,transparent); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .annotation-anchor-active[data-annotation-severity="info"] { text-decoration-color:var(--ink-4); text-decoration-thickness:1px; background:var(--bg-subtle); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .annotation-anchor-active[data-annotation-overlap="true"] { background:color-mix(in srgb,var(--mark) 16%,transparent); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .annotation-anchor-accepted { text-decoration-line:underline; text-decoration-style:wavy; text-decoration-color:var(--ink-4); text-decoration-thickness:1px; text-underline-offset:3px; background:transparent; }
 
 /* source: apps/web/src/pages/workspace/workspace-ink-skin.css:2093-2151 */
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-lexicon-open:hover .ws-lexicon-chevron { color: var(--mark); transform: translateX(2px); }

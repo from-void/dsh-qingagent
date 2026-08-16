@@ -108,7 +108,7 @@ describe('青简纸面审查/导出入口', () => {
   })
 
   it('八类 ReviewMenu 原生菜单齐全，普通类型经 assembleDshReviewQuery 发回当前 dsh 会话', async () => {
-    const onSendMessage = vi.fn(async () => undefined)
+    const onSendMessage = vi.fn(async (_dshSessionId: string, _text: string) => undefined)
     renderFunctions({ onSendMessage })
 
     act(() => reviewButton().click())
@@ -129,7 +129,7 @@ describe('青简纸面审查/导出入口', () => {
   })
 
   it('去AI味使用产品 DeaiReviewModal，所选模板规则与补充说明同路发送', async () => {
-    const onSendMessage = vi.fn(async () => undefined)
+    const onSendMessage = vi.fn(async (_dshSessionId: string, _text: string) => undefined)
     renderFunctions({ onSendMessage })
 
     act(() => reviewButton().click())

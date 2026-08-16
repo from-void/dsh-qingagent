@@ -23,7 +23,7 @@ const sources = [
   ['packages/ui-kit/src/components.css', [[181, 274]]],
   ['apps/web/src/app.css', [[1, 15], [293, 515]]],
   ['apps/web/src/pages/workspace/workspace.css', [[169, 169], [197, 214], [304, 386], [1299, 3662]]],
-  ['apps/web/src/pages/workspace/workspace-ink-skin.css', [[20, 60], [119, 204], [592, 682], [1111, 1220], [1527, 1667], [1669, 1802], [1863, 2033], [2093, 2151], [2558, 2682], [3193, 3508]]],
+  ['apps/web/src/pages/workspace/workspace-ink-skin.css', [[20, 60], [119, 204], [592, 682], [1111, 1220], [1527, 1667], [1669, 1802], [1863, 2071], [2093, 2151], [2558, 2682], [3193, 3508]]],
   ['apps/web/src/pages/workspace/workspace-responsive.css', [[1, 30]]],
 ]
 

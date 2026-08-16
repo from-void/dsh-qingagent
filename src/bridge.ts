@@ -7,6 +7,8 @@ import type {
   EngineStatusSnapshot,
   ExternalAssetUploadJsonRequest,
   ExternalAssetUploadResponse,
+  ExternalAnnotationIgnoreRequest,
+  ExternalAnnotationIgnoreResponse,
   ExternalDoc,
   ExternalDocReplaceRequest,
   ExternalDocReplaceResponse,
@@ -259,6 +261,15 @@ export class BridgeHub {
         const body = await readJsonBody(request) as ExternalReviewVerdictRequest
         writeJson(response, 200, await this.engine.fetchJson<ExternalReviewVerdictResponse>(
           `/sessions/${encodeURIComponent(engineSessionId)}/review/verdicts`,
+          { method: 'POST', body: JSON.stringify(body) },
+        ))
+        return
+      }
+      if (request.method === 'POST' && url.pathname === '/qingagent-bridge/review-annotations-ignore') {
+        const engineSessionId = this.authorizedEngineSessionId(url)
+        const body = await readJsonBody(request) as ExternalAnnotationIgnoreRequest
+        writeJson(response, 200, await this.engine.fetchJson<ExternalAnnotationIgnoreResponse>(
+          `/sessions/${encodeURIComponent(engineSessionId)}/review/annotations/ignore`,
           { method: 'POST', body: JSON.stringify(body) },
         ))
         return

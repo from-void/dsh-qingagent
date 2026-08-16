@@ -45,15 +45,51 @@ export interface ExternalDoc {
 }
 
 /** external PM / 直写 / 审阅模型直接复用青简公开 wire 类型。 */
-export type ExternalPmDocReadResponse = QingExternalPmDocReadResponse
+type OptionalCharCount<T> = T extends { charCount: number }
+  ? Omit<T, 'charCount'> & { charCount?: number }
+  : T
+
+export type ExternalPmDocReadResponse = OptionalCharCount<QingExternalPmDocReadResponse>
 export type ExternalDocReplaceRequest = QingExternalDocReplaceRequest
-export type ExternalDocReplaceResponse = QingExternalDocReplaceResponse
+export type ExternalDocReplaceResponse = OptionalCharCount<QingExternalDocReplaceResponse>
 /**
  * 当前青简公开契约携带 wholeDocument/previewDoc/editedDoc；部分引擎版本还会直接给出
  * changeRatio。后者保持可选，缺失时由客户端按青简产品侧同式派生。
  */
 export type ExternalReviewRenderModelResponse = QingExternalReviewRenderModelResponse & {
   changeRatio?: number
+  /** 新版 external render-model 直接携带批注；旧引擎缺失时客户端按空数组兼容。 */
+  annotations?: ExternalAnnotation[]
+}
+/** ExternalApi.ts 已声明但 contract-ts/index.ts 尚未公开导出的批注 wire DTO。 */
+export interface ExternalAnnotation {
+  id: string
+  summary: string
+  note: string
+  origin: string
+  suggestion?: string
+  severity?: 'error' | 'warn' | 'info'
+  status: 'reviewing' | 'accepted' | 'ignored'
+  anchors: Array<{
+    blockId: string
+    pmFrom: number
+    pmTo: number
+    quote: string
+    prefix?: string
+    suffix?: string
+    /** 新版引擎若选择保留内部 hash，客户端原样沿用。 */
+    textHash?: string
+  }>
+}
+export interface ExternalAnnotationIgnoreRequest {
+  expectedDocVersion: number
+  annotationIds: string[]
+}
+export interface ExternalAnnotationIgnoreResponse {
+  status: 'ignored'
+  annotationIds: string[]
+  remainingAnnotationCount: number
+  seq: number | null
 }
 export type ExternalAssetUploadJsonRequest = QingExternalAssetUploadJsonRequest
 export type ExternalAssetUploadResponse = QingExternalAssetUploadResponse
