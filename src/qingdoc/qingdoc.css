@@ -4535,11 +4535,15 @@
   background: transparent;
   /* 青简桌面是 400/800 双定宽列,纸列宽以整窗 100vw 计;dsh 里纸列=整个详情面板,
      必须回归弹性,否则列窄于 800 时纸面连同滚动条一起溢出被裁(用户实测「没有滚动条」)。 */
-  flex: 1 1 auto;
-  width: auto;
-  min-width: 0;
+  /* !important:产品侧同选择器规则(ink-skin:141-146)本身带 !important 固定 800,
+     不带就永远输,窄列时纸面被 overflow:hidden 静默裁切(2026-08-16 #34 实测)。 */
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
 }
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .wf-doc,
-:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-paper-shell {
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-paper-shell,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-paper-surface {
   max-width: min(800px, 100%);
 }
