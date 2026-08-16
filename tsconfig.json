@@ -13,15 +13,15 @@
     "resolveJsonModule": true,
     "types": ["node", "vitest/globals"],
     "paths": {
-      "@qingagent/contract-ts": ["/home/jimmy/proj/qingagent/wt/dsh-bridge/packages/contract-ts/src/index.ts"],
-      "@qingagent/contract-ts/*": ["/home/jimmy/proj/qingagent/wt/dsh-bridge/packages/contract-ts/src/*"],
-      "@qingagent/pm-schema": ["/home/jimmy/proj/qingagent/wt/dsh-bridge/packages/pm-schema/src/index.ts"],
-      "@qingagent/pm-schema/tiptap": ["/home/jimmy/proj/qingagent/wt/dsh-bridge/packages/pm-schema/src/tiptap/createQingagentExtensions.ts"],
-      "@qingagent/pm-schema/*": ["/home/jimmy/proj/qingagent/wt/dsh-bridge/packages/pm-schema/src/*"],
-      "@qingagent/diagram-engine": ["/home/jimmy/proj/qingagent/wt/dsh-bridge/packages/diagram-engine/src/index.ts"],
-      "@qingagent/diagram-engine/*": ["/home/jimmy/proj/qingagent/wt/dsh-bridge/packages/diagram-engine/src/*"],
-      "@qingweb/*": ["/home/jimmy/proj/qingagent/wt/dsh-bridge/apps/web/src/*"],
-      "@qingcore/*": ["/home/jimmy/proj/qingagent/wt/dsh-bridge/packages/core/src/*"]
+      "@qingagent/contract-ts": ["./vendor/qingagent/packages/contract-ts/src/index.ts"],
+      "@qingagent/contract-ts/*": ["./vendor/qingagent/packages/contract-ts/src/*"],
+      "@qingagent/pm-schema": ["./vendor/qingagent/packages/pm-schema/src/index.ts"],
+      "@qingagent/pm-schema/tiptap": ["./vendor/qingagent/packages/pm-schema/src/tiptap/createQingagentExtensions.ts"],
+      "@qingagent/pm-schema/*": ["./vendor/qingagent/packages/pm-schema/src/*"],
+      "@qingagent/diagram-engine": ["./vendor/qingagent/packages/diagram-engine/src/index.ts"],
+      "@qingagent/diagram-engine/*": ["./vendor/qingagent/packages/diagram-engine/src/*"],
+      "@qingweb/*": ["./vendor/qingagent/apps/web/src/*"],
+      "@qingcore/*": ["./vendor/qingagent/packages/core/src/*"]
     }
   },
   "include": ["src", "tests"]

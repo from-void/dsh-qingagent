@@ -1,15 +1,21 @@
 import { readFile, stat } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { extname, isAbsolute, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export const DRAWIO_ROUTE_PATH = '/drawio'
 
 /**
  * 青简产品仓已经把 draw.io v31.0.2 裁成离线、同源运行时；插件只通过宿主桥只读发布，
  * 不再引入第二份 vendor，也不会回退到 embed.diagrams.net。
+ * 资产位置:QING_ROOT(或 QINGAGENT_DRAWIO_ROOT 直指资产目录)可覆盖,
+ * 默认取 vendor/qingagent submodule(相对本模块 lib/ 上一级)。
  */
 export const DEFAULT_DRAWIO_VENDOR_ROOT =
-  '/home/jimmy/proj/qingagent/wt/dsh-bridge/apps/web/public/drawio'
+  process.env.QINGAGENT_DRAWIO_ROOT
+  ?? (process.env.QING_ROOT
+    ? resolve(process.env.QING_ROOT, 'apps/web/public/drawio')
+    : fileURLToPath(new URL('../vendor/qingagent/apps/web/public/drawio', import.meta.url)))
 
 export const DRAWIO_DOCUMENT_CSP = [
   "default-src 'self'",

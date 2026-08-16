@@ -21,7 +21,9 @@ const NODE_BUILTINS = new Set([...builtinModules, ...builtinModules.map((id) => 
 const INLINE_SAFE = /^@deepseek-ai\/dsh-(session|llm|tools|brand)(\/|$)/
 const CSS_PREFIX = '\0dsh-qing-css:'
 const CSS_SUFFIX = '.mjs'
-const QING_ROOT = '/home/jimmy/proj/qingagent/wt/dsh-bridge'
+// 青简仓位置:默认 vendor/qingagent submodule(钉 commit);环境变量 QING_ROOT 可覆盖。
+// 与 scripts/extract-qingdoc-css.mjs 的解析规则保持一致。
+const QING_ROOT = process.env.QING_ROOT ?? resolvePath('vendor/qingagent')
 const QING_WEB_SOURCE = `${QING_ROOT}/apps/web/src`
 const QING_SYSTEM_SOURCE = `${QING_WEB_SOURCE}/system`
 const QING_UPLOAD_ASSET_SOURCE = `${QING_WEB_SOURCE}/pages/workspace/data/uploadAsset`

@@ -1,7 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-const qingRoot = '/home/jimmy/proj/qingagent/wt/dsh-bridge'
+// 青简仓位置:默认用 vendor/qingagent submodule(钉 commit,与下方行号钉扎配套);
+// 本地开发可用环境变量 QING_ROOT 指向任意青简工作树。
+const qingRoot = process.env.QING_ROOT ?? new URL('../vendor/qingagent', import.meta.url).pathname
 const panelRoot = '[data-qingagent-doc-panel]'
 // :is() takes the specificity of its strongest arm. The never-matching ID arm
 // keeps #view-workspace's original ID specificity while the attribute arm keeps

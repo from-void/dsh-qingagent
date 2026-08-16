@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
 
-const qingRoot = '/home/jimmy/proj/qingagent/wt/dsh-bridge'
+const qingRoot = process.env.QING_ROOT ?? resolve('vendor/qingagent')
 const execFileAsync = promisify(execFile)
 
 describe('青简纸面移植契约', () => {

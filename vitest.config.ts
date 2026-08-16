@@ -2,7 +2,8 @@ import { defineConfig } from 'vitest/config'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const qingRoot = '/home/jimmy/proj/qingagent/wt/dsh-bridge'
+// 青简仓位置:默认 vendor/qingagent submodule,环境变量 QING_ROOT 可覆盖(与构建/提取脚本一致)。
+const qingRoot = process.env.QING_ROOT ?? resolve('vendor/qingagent')
 const qingWebSource = `${qingRoot}/apps/web/src`
 const systemSource = `${qingWebSource}/system`
 const systemShim = resolve('src/qingdoc/shims/system.tsx')
