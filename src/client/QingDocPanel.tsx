@@ -48,7 +48,6 @@ import { createQingmlCompileThrottle, type QingmlCompileThrottle } from './strea
 import { buildReviewPresentationModel } from './reviewPresentation.js'
 import { installDetailsColumnWidth } from './detailsWidth.js'
 import { decideIncomingPanelDocument } from './incomingPanelDocument.js'
-import { serializeReviewOutcome } from '@qingcore/doc-engine/reviewOutcome'
 import { QINGJIAN_ICON_DATA_URI } from './qingjianIcon.js'
 import { ensureQingdocRuntimeCss } from './runtimeCss.js'
 import { BridgeHttpError, qingClientStore } from './store.js'
@@ -689,12 +688,20 @@ export function QingDocPanel(props: QingDocPanelProps) {
         beforeText: suggestion.preview?.deleteText ?? '',
         afterText: suggestion.preview?.insertText ?? '',
       }))
-      const outcome = {
-        acceptedCount: hunks.filter((hunk) => hunk.verdict === 'accepted').length,
-        rejectedCount: hunks.filter((hunk) => hunk.verdict === 'rejected').length,
-        hunks,
+      const rejected = hunks.filter((hunk) => hunk.verdict === 'rejected')
+      // 全部采纳时不回流:落盘对模型透明(下次工具返回自带【文稿状态】权威态),
+      // 对话流不值得为「照单全收」加一条气泡(用户拍板 2026-08-16)。
+      if (rejected.length === 0) return
+      const clip = (text: string) => {
+        const plain = text.replace(/\s+/g, ' ').trim()
+        return plain.length > 40 ? `${plain.slice(0, 39)}…` : plain || '(空)'
       }
-      void props.qingSendMessage(sessionId, serializeReviewOutcome(outcome)).then(() => {
+      const message = [
+        `【审核结果】本轮审阅我已处理:采纳 ${hunks.length - rejected.length} 处,拒绝 ${rejected.length} 处。被拒绝的修改已还原为原文:`,
+        ...rejected.map((hunk, index) =>
+          `${index + 1}. ${hunk.blockSummary ? `${clip(hunk.blockSummary)}:` : ''}拒绝「${clip(hunk.afterText)}」,保留原文「${clip(hunk.beforeText)}」`),
+      ].join('\n')
+      void props.qingSendMessage(sessionId, message).then(() => {
         // 消息已 durable 入队;有未裁决问答卡时对话流暂不显示,说明去向以免误判丢失。
         if (hasPendingInteractionRef.current) setToast('审核结果已排队,回答当前问题卡后会送达对话')
       }).catch((error) => {
