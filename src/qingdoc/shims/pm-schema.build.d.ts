@@ -51,6 +51,30 @@ export interface DocSuggestion {
   kind?: 'revision' | 'annotation'
 }
 
+export interface ExternalReviewAnchor {
+  blockId: string
+  pmFrom: number
+  pmTo: number
+  quote: string
+  prefix?: string
+  suffix?: string
+}
+
+export interface ExternalAnnotation {
+  id: string
+  summary: string
+  note: string
+  origin: string
+  suggestion?: string
+  severity?: 'error' | 'warn' | 'info'
+  status: 'reviewing' | 'accepted' | 'ignored'
+  anchors: ExternalReviewAnchor[]
+}
+
+export interface AnnotationGroup extends ExternalAnnotation {
+  anchors: Array<ExternalReviewAnchor & { textHash: string }>
+}
+
 export interface ExternalPmDocReadResponse {
   sessionId: string
   docVersion: number
@@ -90,6 +114,19 @@ export interface ExternalReviewRenderModelResponse {
   wholeDocument?: boolean
   previewDoc?: PmDoc
   editedDoc?: PmDoc
+  annotations?: ExternalAnnotation[]
+}
+
+export interface ExternalAnnotationIgnoreRequest {
+  expectedDocVersion: number
+  annotationIds: string[]
+}
+
+export interface ExternalAnnotationIgnoreResponse {
+  status: 'ignored'
+  annotationIds: string[]
+  remainingAnnotationCount: number
+  seq: number | null
 }
 
 export interface ExternalAssetUploadJsonRequest {

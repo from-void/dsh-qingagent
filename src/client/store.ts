@@ -1,6 +1,8 @@
 import type {
   BridgeEvent,
   BridgeState,
+  ExternalAnnotationIgnoreRequest,
+  ExternalAnnotationIgnoreResponse,
   ExternalDoc,
   ExternalDocReplaceRequest,
   ExternalDocReplaceResponse,
@@ -301,11 +303,16 @@ export class QingClientStore {
       const panelDoc = await bridgeJson<ExternalPmDocReadResponse>(
         panelUrl('/qingagent-bridge/doc-pm', sessionId, engineSessionId),
       )
+      const reviewModelRequest = bridgeJson<ExternalReviewRenderModelResponse>(
+        panelUrl('/qingagent-bridge/review-render-model', sessionId, engineSessionId),
+      )
+      // 批注不进入 pendingReview；编辑态也必须读 render-model。旧引擎或旧测试桥没有该
+      // 能力时仅把批注视为空，不能连带阻断正文 PM 的加载。
       const reviewModel = panelDoc.state === 'pendingReview'
-        ? await bridgeJson<ExternalReviewRenderModelResponse>(
-            panelUrl('/qingagent-bridge/review-render-model', sessionId, engineSessionId),
-          )
-        : undefined
+        ? await reviewModelRequest
+        : await reviewModelRequest
+            .then((model) => Array.isArray(model.suggestions) ? model : undefined)
+            .catch(() => undefined)
       if (entry.panelLoadToken !== token) return
       // 冲突封锁按文稿隔离:只有当前刷新的正是冲突稿才跳过应用,换稿刷新照常。
       if (entry.snapshot.conflicts?.[engineSessionId]) {
@@ -469,6 +476,38 @@ export class QingClientStore {
       reviewModel,
       reviewCount: reviewModel.suggestions.filter((suggestion) => suggestion.status === 'reviewing').length,
     })
+  }
+
+  async ignoreAnnotation(
+    sessionId: string,
+    engineSessionId: string,
+    expectedDocVersion: number,
+    annotationId: string,
+  ): Promise<void> {
+    const entry = this.entry(sessionId)
+    const previous = entry.snapshot.reviewModel
+    if (entry.snapshot.panelEngineSessionId !== engineSessionId || !previous?.annotations) return
+    const reviewModel: ExternalReviewRenderModelResponse = {
+      ...previous,
+      annotations: previous.annotations.map((annotation) =>
+        annotation.id === annotationId ? { ...annotation, status: 'ignored' } : annotation),
+    }
+    this.update(entry, { ...entry.snapshot, reviewModel })
+    try {
+      const body: ExternalAnnotationIgnoreRequest = {
+        expectedDocVersion,
+        annotationIds: [annotationId],
+      }
+      await bridgeJson<ExternalAnnotationIgnoreResponse>(
+        panelUrl('/qingagent-bridge/review-annotations-ignore', sessionId, engineSessionId),
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+      )
+    } catch (error) {
+      if (entry.snapshot.reviewModel === reviewModel) {
+        this.update(entry, { ...entry.snapshot, reviewModel: previous })
+      }
+      throw error
+    }
   }
 
   applyReviewCommit(

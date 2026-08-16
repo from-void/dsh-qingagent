@@ -1,5 +1,5 @@
 import type { ComponentType, ForwardRefExoticComponent, RefAttributes, RefObject } from 'react'
-import type { DocSuggestion, PmDoc } from '@qingagent/contract-ts'
+import type { AnnotationGroup, DocSuggestion, PmDoc } from '@qingagent/contract-ts'
 import type { Editor } from '@tiptap/react'
 
 /** declaration-only facade；运行时由 tsdown alias 直连青简源码。 */
@@ -14,6 +14,21 @@ export interface DocumentSnapshotViewHandle {
 export const DocumentSnapshotView: ForwardRefExoticComponent<
   Record<string, unknown> & RefAttributes<DocumentSnapshotViewHandle>
 >
+export const AnnotationCarousel: ComponentType<{
+  groups: readonly AnnotationGroup[]
+  editorDom: HTMLElement | null
+  onAccept: (group: AnnotationGroup, suggestion: string) => boolean
+  onIgnore: (group: AnnotationGroup) => void
+}>
+export function buildAnnotationInstruction(group: AnnotationGroup, editedSuggestion?: string): string
+export function installAnnotationGroupDecorations(
+  editor: Editor,
+  groups: readonly AnnotationGroup[],
+): () => void
+export function updateAnnotationGroupDecorations(
+  editor: Editor,
+  groups: readonly AnnotationGroup[],
+): void
 export interface PatchNavProps {
   remainingCount: number
   totalCount: number

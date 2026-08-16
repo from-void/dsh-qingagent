@@ -13,6 +13,7 @@ import {
   DocumentSnapshotView,
   type DocumentSnapshotViewHandle,
 } from '@qingweb/pages/workspace/components/DocumentSnapshotView'
+import { buildAnnotationInstruction } from '@qingweb/pages/workspace/components/AnnotationCarousel'
 import { DocFindBar } from '@qingweb/pages/workspace/components/DocFindBar'
 import { DocToolbar } from '@qingweb/pages/workspace/components/DocToolbar'
 import { PatchNav } from '@qingweb/pages/workspace/components/PatchNav'
@@ -45,6 +46,7 @@ import { AssetBridgeProvider } from '../qingdoc/AssetBridgeProvider.js'
 import { ConfirmProvider } from '../qingdoc/shims/system.js'
 import { DocumentSaveCoordinator, type DocumentSaveState } from './documentSaveCoordinator.js'
 import { createQingmlCompileThrottle, type QingmlCompileThrottle } from './streamingDocument.js'
+import { QingAnnotationCarousel } from './annotationCarousel.js'
 import { buildReviewPresentationModel } from './reviewPresentation.js'
 import { installDetailsColumnWidth } from './detailsWidth.js'
 import { decideIncomingPanelDocument } from './incomingPanelDocument.js'
@@ -71,6 +73,7 @@ interface InjectedProps {
 export type QingDocPanelProps = PropsRuntime<'details'> & InjectedProps
 
 const EMPTY_PATCH_IDS = new Set<string>()
+const EMPTY_ANNOTATIONS: never[] = []
 const WHOLE_DOC_REVIEW_THRESHOLD = 0.7
 
 export function QingDocPanel(props: QingDocPanelProps) {
@@ -359,9 +362,19 @@ export function QingDocPanel(props: QingDocPanelProps) {
     : undefined
   if (panelDoc && activeEngineSessionId) editorEngineSessionIdRef.current = activeEngineSessionId
   // 审阅展示只认 PM 面板域；activeDoc/activeBound 是旧状态通道，可能晚于 commit 回执。
+  const hasPatchReview = Boolean(snapshot.reviewModel?.suggestions.some((suggestion) =>
+    suggestion.kind !== 'annotation' && (
+      suggestion.status === 'reviewing' ||
+      suggestion.status === 'accepted' ||
+      suggestion.status === 'rejected'
+    )))
   const pendingReview = Boolean(panelDoc && (
-    panelDoc.state === 'pendingReview' || snapshot.reviewModel !== undefined
+    panelDoc.state === 'pendingReview' || hasPatchReview
   ))
+  // 产品在 pendingReview 时主动卸下批注装饰；纯批注审查仍处于 editing，继续展示。
+  const annotations = pendingReview
+    ? EMPTY_ANNOTATIONS
+    : snapshot.reviewModel?.annotations ?? EMPTY_ANNOTATIONS
   const busy = snapshot.streaming || panelDoc?.agentBusy === true || activeBound?.agentBusy === true
   // 冲突态按文稿隔离(权威在 conflicts 分槽映射):当前稿有冲突记录就呈现冲突(含切走再切回),
   // 别的文稿的冲突不影响当前稿;瞬态保存状态照常走单槽。
@@ -972,6 +985,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
                     rejectedPatches={EMPTY_PATCH_IDS}
                     patchMeta={reviewPresentation?.patchMeta}
                     activePatchId={null}
+                    {...{ annotations }}
                     onEditorReady={handleEditorReady}
                   />
                 </div>
@@ -1000,6 +1014,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
                   reviewAppliedPatches={reviewPresentation?.applied}
                   reviewTargets={reviewPresentation?.reviewTargets}
                   activeReviewTargetId={activeReviewTargetId}
+                  {...{ annotations }}
                   onEditorReady={handleEditorReady}
                   onEditorChange={interactiveEditable ? handleEditorChange : undefined}
                   onAiModify={handleAiModify}
@@ -1028,6 +1043,33 @@ export function QingDocPanel(props: QingDocPanelProps) {
               onAiModify={handleAiModify}
               onToast={setToast}
               sessionId={assetSessionId}
+            />
+            <QingAnnotationCarousel
+              annotations={annotations}
+              editor={tiptapEditor}
+              onAccept={(group, suggestion) => {
+                if (!props.qingSendMessage || turnRunningEffective) {
+                  setToast('输入框当前不可用，请稍后再回填批注')
+                  return false
+                }
+                void props.qingSendMessage(
+                  sessionId,
+                  buildAnnotationInstruction(group, suggestion),
+                ).catch(() => setToast('批注意见回填失败，请重试'))
+                return true
+              }}
+              onIgnore={(group) => {
+                if (!activeEngineSessionId || !panelDoc) {
+                  setToast('连接还没准备好')
+                  return
+                }
+                void qingClientStore.ignoreAnnotation(
+                  sessionId,
+                  activeEngineSessionId,
+                  panelDoc.docVersion,
+                  group.id,
+                ).catch(() => setToast('忽略批注失败，请重试'))
+              }}
             />
           </div>
         </main>

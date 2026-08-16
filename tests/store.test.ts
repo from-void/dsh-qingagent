@@ -179,6 +179,41 @@ describe('QingClientStore 生成终态', () => {
     ])
   })
 
+  it('编辑态也装配 render-model annotations，缺省补丁不会误计审阅数', async () => {
+    const pmDoc = {
+      type: 'doc', attrs: { schemaVersion: 1 },
+      content: [{ type: 'paragraph', attrs: { blockId: 'p-1' }, content: [{ type: 'text', text: '批注正文' }] }],
+    }
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/qingagent-bridge/doc-pm?')) {
+        return Response.json({
+          sessionId: 'qing-1', docVersion: 4, contentHash: 'hash-4', state: 'editing',
+          agentBusy: false, title: '批注文稿', ts: 't4', pmDoc,
+        })
+      }
+      if (url.startsWith('/qingagent-bridge/review-render-model?')) {
+        return Response.json({
+          sessionId: 'qing-1', docVersion: 4, state: 'editing', agentBusy: false,
+          baseVersion: 4, suggestions: [], annotations: [{
+            id: 'annotation-1', summary: '事实有误', note: '与材料不一致', origin: 'source-check',
+            severity: 'error', status: 'reviewing',
+            anchors: [{ blockId: 'p-1', pmFrom: 1, pmTo: 3, quote: '批注' }],
+          }],
+        })
+      }
+      throw new Error(`unexpected ${url}`)
+    }))
+    const store = new QingClientStore()
+
+    await store.refreshPanel('dsh-annotations', 'qing-1')
+
+    expect(store.getSnapshot('dsh-annotations').reviewModel?.annotations).toEqual([
+      expect.objectContaining({ id: 'annotation-1', status: 'reviewing' }),
+    ])
+    expect(store.getSnapshot('dsh-annotations').reviewCount).toBe(0)
+  })
+
   it('commit 成功回执立即清空审阅域并恢复可编辑终态', async () => {
     const pmDoc = { type: 'doc', attrs: { schemaVersion: 1 }, content: [] } as PmDoc
     vi.stubGlobal('EventSource', FakeEventSource)
