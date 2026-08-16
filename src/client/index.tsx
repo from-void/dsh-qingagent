@@ -128,6 +128,9 @@ export function apply(ctx: ClientContext): void {
             },
           }),
         }, QingDocPanel)
+        if (currentSessionId && qingClientStore.getSnapshot(currentSessionId).state?.engine.state !== 'online') {
+          layout.openDetails()
+        }
       } else if (!shouldRegister && disposePanel) {
         disposePanel()
         disposePanel = undefined

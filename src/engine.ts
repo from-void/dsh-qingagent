@@ -2,14 +2,19 @@ import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { Service, type Context, type Logger } from '@deepseek-ai/cordis'
-import type { EngineStatusSnapshot } from './contracts.js'
+import type { EngineStatusReason, EngineStatusSnapshot } from './contracts.js'
+import { qingjianUnavailableMessage } from './onboarding.js'
 
-const DEFAULT_INSTANCE_PATH = `${homedir()}/.qingagent/instance.json`
+const ATTACH_PROTOCOL_VERSION = 1
+const INITIAL_RETRY_MS = 5_000
+const MAX_RETRY_MS = 30_000
 
 interface EngineInstance {
+  schemaVersion: number
   port: number
   pid: number
   version: string
+  attachProtocolVersion: number
   token: string
   startedAt: string
 }
@@ -19,11 +24,13 @@ export interface EngineConfig {
   engineCommand?: string
   engineCwd?: string
   autoLaunch: boolean
+  /** 测试与受控部署可覆盖；默认始终读取当前用户 ~/.qingagent/instance.json。 */
+  instancePath?: string
 }
 
 export interface EngineDependencies {
   fetch: typeof globalThis.fetch
-  readInstance: () => Promise<EngineInstance>
+  readInstance: (path: string) => Promise<unknown>
   isProcessAlive: (pid: number) => boolean
   launch: (command: string, cwd: string | undefined, logger: Logger) => void
   wait: (milliseconds: number, signal: AbortSignal) => Promise<void>
@@ -102,17 +109,25 @@ function defaultAlive(pid: number): boolean {
 
 function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, milliseconds)
-    signal.addEventListener('abort', () => {
+    if (signal.aborted) {
+      reject(signal.reason ?? new Error('等待已取消'))
+      return
+    }
+    const onAbort = () => {
       clearTimeout(timer)
       reject(signal.reason ?? new Error('等待已取消'))
-    }, { once: true })
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, milliseconds)
+    signal.addEventListener('abort', onAbort, { once: true })
   })
 }
 
 const defaultDependencies: EngineDependencies = {
   fetch: globalThis.fetch,
-  readInstance: async () => JSON.parse(await readFile(DEFAULT_INSTANCE_PATH, 'utf8')) as EngineInstance,
+  readInstance: async (path) => JSON.parse(await readFile(path, 'utf8')) as unknown,
   isProcessAlive: defaultAlive,
   launch: (command, cwd, logger) => {
     const child = spawn(command, { cwd, shell: true, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
@@ -130,6 +145,8 @@ const defaultDependencies: EngineDependencies = {
 export class EngineConnection {
   private instance?: EngineInstance
   private launchPromise?: Promise<EngineStatusSnapshot>
+  private probePromise?: Promise<EngineStatusSnapshot>
+  private monitorPromise?: Promise<void>
   private readonly controller = new AbortController()
   private lastStatus?: EngineStatusSnapshot
 
@@ -144,6 +161,15 @@ export class EngineConnection {
     this.controller.abort(new Error('dsh-qingagent 已卸载'))
   }
 
+  /** 插件启动即探测；失败后 5s 起指数退避到 30s，恢复后继续轻量健康检查。 */
+  startMonitoring(): void {
+    this.monitorPromise ??= this.monitor()
+      .catch((error) => {
+        if (!this.controller.signal.aborted) this.logger.warn('青简后台探测意外中断：%s', readableError(error))
+      })
+      .finally(() => { this.monitorPromise = undefined })
+  }
+
   private publish(status: EngineStatusSnapshot): EngineStatusSnapshot {
     if (JSON.stringify(status) !== JSON.stringify(this.lastStatus)) {
       this.lastStatus = status
@@ -152,35 +178,102 @@ export class EngineConnection {
     return status
   }
 
+  private instancePath(): string {
+    return this.config.instancePath ?? `${homedir()}/.qingagent/instance.json`
+  }
+
   private async reloadInstance(): Promise<EngineInstance> {
-    const instance = await this.dependencies.readInstance()
-    if (!Number.isInteger(instance.pid) || !this.dependencies.isProcessAlive(instance.pid)) {
-      throw new Error('青简实例记录不存在或进程已退出')
-    }
-    if (!instance.token?.trim()) throw new Error('青简实例 token 缺失')
+    const instance = parseInstance(await this.dependencies.readInstance(this.instancePath()))
     this.instance = instance
     return instance
   }
 
   async status(timeoutMs = 1_500): Promise<EngineStatusSnapshot> {
+    this.probePromise ??= this.probe(timeoutMs).finally(() => { this.probePromise = undefined })
+    return this.probePromise
+  }
+
+  private async probe(timeoutMs: number): Promise<EngineStatusSnapshot> {
+    let instance: EngineInstance
     try {
-      let instance = await this.reloadInstance()
+      instance = await this.reloadInstance()
+    } catch (error) {
+      const reason = instanceReadFailureReason(error)
+      return this.publish(disconnectedStatus(this.config.engineUrl, reason, instanceReadFailureMessage(reason)))
+    }
+    if (instance.attachProtocolVersion !== ATTACH_PROTOCOL_VERSION) {
+      return this.publish(handshakeFailure(
+        this.config.engineUrl,
+        'protocol-incompatible',
+        `attachProtocolVersion 不兼容：青简为 ${instance.attachProtocolVersion}，插件需要 ${ATTACH_PROTOCOL_VERSION}。`,
+      ))
+    }
+    if (!this.dependencies.isProcessAlive(instance.pid)) {
+      return this.publish(disconnectedStatus(
+        this.config.engineUrl,
+        'instance-process-exited',
+        'instance.json 存在，但记录的青简进程已退出。',
+      ))
+    }
+    try {
       const signal = AbortSignal.timeout(timeoutMs)
       let response = await this.healthFetch(instance.token, signal)
       // feat/external-qingml 当前 external 子树（health 也在内）要求独立 Bearer；实例重启后只重读一次。
       if (response.status === 401) {
-        instance = await this.reloadInstance()
+        try {
+          instance = await this.reloadInstance()
+        } catch (error) {
+          const reason = instanceReadFailureReason(error)
+          return this.publish(disconnectedStatus(this.config.engineUrl, reason, instanceReadFailureMessage(reason)))
+        }
         response = await this.healthFetch(instance.token, signal)
       }
-      if (!response.ok) throw new Error(`health 返回 HTTP ${response.status}`)
-      const body = await response.json() as { version?: string }
+      if (response.status === 401 || response.status === 403) {
+        return this.publish(handshakeFailure(
+          this.config.engineUrl,
+          'unauthorized',
+          `青简拒绝了实例令牌（HTTP ${response.status}），instance.json 可能已经过期。`,
+        ))
+      }
+      if (!response.ok) {
+        return this.publish(handshakeFailure(
+          this.config.engineUrl,
+          'health-http-error',
+          `青简健康检查返回 HTTP ${response.status}。`,
+        ))
+      }
+      let body: EngineHealth
+      try {
+        body = parseHealth(await response.json())
+      } catch {
+        return this.publish(handshakeFailure(
+          this.config.engineUrl,
+          'health-response-invalid',
+          '青简健康检查响应格式无效。',
+        ))
+      }
+      if (body.attachProtocolVersion !== ATTACH_PROTOCOL_VERSION) {
+        return this.publish(handshakeFailure(
+          this.config.engineUrl,
+          'protocol-incompatible',
+          `attachProtocolVersion 不兼容：青简为 ${body.attachProtocolVersion}，插件需要 ${ATTACH_PROTOCOL_VERSION}。`,
+        ))
+      }
+      if (body.version !== instance.version) {
+        return this.publish(handshakeFailure(
+          this.config.engineUrl,
+          'version-mismatch',
+          `版本不符：instance.json 记录 ${instance.version}，实际引擎为 ${body.version}。`,
+        ))
+      }
       return this.publish({
         state: 'online',
         engineUrl: this.config.engineUrl,
-        version: body.version ?? instance.version,
+        version: body.version,
       })
     } catch (error) {
-      return this.publish({ state: 'offline', engineUrl: this.config.engineUrl, message: readableError(error) })
+      const reason = networkFailureReason(error)
+      return this.publish(disconnectedStatus(this.config.engineUrl, reason, networkFailureMessage(reason)))
     }
   }
 
@@ -234,15 +327,70 @@ export class EngineConnection {
   private async fetchReadyResponse(request: (token: string) => Promise<Response>): Promise<Response> {
     const ready = await this.ensureReady()
     if (ready.state !== 'online') {
-      throw new Error(`青简当前离线：${ready.message ?? '请先启动引擎，或在插件配置中启用 autoLaunch。'}`)
+      throw new EngineUnavailableError(ready)
     }
-    let instance = this.instance ?? await this.reloadInstance()
-    let response = await request(instance.token)
-    if (response.status === 401) {
-      instance = await this.reloadInstance()
+    let instance: EngineInstance
+    try {
+      instance = this.instance ?? await this.reloadInstance()
+    } catch (error) {
+      const reason = instanceReadFailureReason(error)
+      throw new EngineUnavailableError(this.publish(
+        disconnectedStatus(this.config.engineUrl, reason, instanceReadFailureMessage(reason)),
+      ))
+    }
+    let response: Response
+    try {
       response = await request(instance.token)
+    } catch (error) {
+      const reason = networkFailureReason(error)
+      throw new EngineUnavailableError(this.publish(
+        disconnectedStatus(this.config.engineUrl, reason, networkFailureMessage(reason)),
+      ))
+    }
+    if (response.status === 401) {
+      try {
+        instance = await this.reloadInstance()
+      } catch (error) {
+        const reason = instanceReadFailureReason(error)
+        throw new EngineUnavailableError(this.publish(
+          disconnectedStatus(this.config.engineUrl, reason, instanceReadFailureMessage(reason)),
+        ))
+      }
+      try {
+        response = await request(instance.token)
+      } catch (error) {
+        const reason = networkFailureReason(error)
+        throw new EngineUnavailableError(this.publish(
+          disconnectedStatus(this.config.engineUrl, reason, networkFailureMessage(reason)),
+        ))
+      }
+      if (response.status === 401 || response.status === 403) {
+        throw new EngineUnavailableError(this.publish(handshakeFailure(
+          this.config.engineUrl,
+          'unauthorized',
+          `青简拒绝了实例令牌（HTTP ${response.status}），instance.json 可能已经过期。`,
+        )))
+      }
     }
     return response
+  }
+
+  private async monitor(): Promise<void> {
+    let retryMs = INITIAL_RETRY_MS
+    let initialProbe = true
+    while (!this.controller.signal.aborted) {
+      const status = initialProbe ? await this.ensureReady() : await this.status()
+      initialProbe = false
+      const nextWait = status.state === 'online' ? INITIAL_RETRY_MS : retryMs
+      retryMs = status.state === 'online'
+        ? INITIAL_RETRY_MS
+        : Math.min(MAX_RETRY_MS, retryMs * 2)
+      try {
+        await this.dependencies.wait(nextWait, this.controller.signal)
+      } catch {
+        return
+      }
+    }
   }
 
   private authorizedFetch(path: string, init: RequestInit, token: string): Promise<Response> {
@@ -276,9 +424,91 @@ export class EngineService extends Service {
 
   status(): Promise<EngineStatusSnapshot> { return this.connection.status() }
   ensureReady(): Promise<EngineStatusSnapshot> { return this.connection.ensureReady() }
+  startMonitoring(): void { this.connection.startMonitoring() }
   fetchJson<T>(path: string, init?: RequestInit): Promise<T> { return this.connection.fetchJson<T>(path, init) }
   fetchAsset(path: string, init?: RequestInit): Promise<Response> { return this.connection.fetchAsset(path, init) }
   fetchInternal(path: string, init?: RequestInit): Promise<Response> { return this.connection.fetchInternal(path, init) }
+}
+
+export class EngineUnavailableError extends Error {
+  constructor(readonly status: EngineStatusSnapshot) {
+    super(qingjianUnavailableMessage(status))
+    this.name = 'EngineUnavailableError'
+  }
+}
+
+interface EngineHealth {
+  version: string
+  attachProtocolVersion: number
+}
+
+function parseInstance(value: unknown): EngineInstance {
+  if (!value || typeof value !== 'object') throw new SyntaxError('instance.json 不是对象')
+  const instance = value as Partial<EngineInstance>
+  if (
+    instance.schemaVersion !== 2
+    || !Number.isInteger(instance.port) || instance.port! < 1 || instance.port! > 65_535
+    || !Number.isInteger(instance.pid) || instance.pid! < 1
+    || typeof instance.version !== 'string' || !instance.version.trim()
+    || !Number.isInteger(instance.attachProtocolVersion)
+    || typeof instance.token !== 'string' || !instance.token.trim()
+    || typeof instance.startedAt !== 'string' || !Number.isFinite(Date.parse(instance.startedAt))
+  ) throw new SyntaxError('instance.json 字段无效')
+  return instance as EngineInstance
+}
+
+function parseHealth(value: unknown): EngineHealth {
+  if (!value || typeof value !== 'object') throw new Error('invalid health')
+  const body = value as Partial<EngineHealth>
+  if (!body.version?.trim() || !Number.isInteger(body.attachProtocolVersion)) {
+    throw new Error('invalid health')
+  }
+  return body as EngineHealth
+}
+
+function instanceReadFailureReason(error: unknown): Extract<EngineStatusReason, 'instance-missing' | 'instance-invalid'> {
+  return (error as NodeJS.ErrnoException)?.code === 'ENOENT' ? 'instance-missing' : 'instance-invalid'
+}
+
+function instanceReadFailureMessage(reason: 'instance-missing' | 'instance-invalid'): string {
+  return reason === 'instance-missing'
+    ? '未找到 ~/.qingagent/instance.json；青简可能尚未安装或从未启动。'
+    : 'instance.json 存在但已损坏、不可读或字段不完整。'
+}
+
+function networkFailureReason(error: unknown): Extract<EngineStatusReason, 'connection-refused' | 'connection-timeout'> {
+  const code = (error as { cause?: { code?: unknown }; code?: unknown })?.cause?.code
+    ?? (error as { code?: unknown })?.code
+  return code === 'ETIMEDOUT' || code === 'UND_ERR_CONNECT_TIMEOUT' || (error as Error)?.name === 'TimeoutError'
+    ? 'connection-timeout'
+    : 'connection-refused'
+}
+
+function networkFailureMessage(reason: 'connection-refused' | 'connection-timeout'): string {
+  return reason === 'connection-timeout'
+    ? '连接青简超时；引擎可能仍在启动。'
+    : '无法连接青简服务；青简可能尚未启动或已经退出。'
+}
+
+function disconnectedStatus(
+  engineUrl: string,
+  reason: Extract<EngineStatusReason, 'instance-missing' | 'instance-invalid' | 'instance-process-exited' | 'connection-refused' | 'connection-timeout'>,
+  message: string,
+): EngineStatusSnapshot {
+  return {
+    state: reason === 'instance-invalid' ? 'handshake-failed' : 'offline',
+    engineUrl,
+    reason,
+    message,
+  }
+}
+
+function handshakeFailure(
+  engineUrl: string,
+  reason: Extract<EngineStatusReason, 'unauthorized' | 'health-http-error' | 'health-response-invalid' | 'version-mismatch' | 'protocol-incompatible'>,
+  message: string,
+): EngineStatusSnapshot {
+  return { state: 'handshake-failed', engineUrl, reason, message }
 }
 
 function readableError(error: unknown): string {

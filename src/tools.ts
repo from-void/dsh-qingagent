@@ -15,7 +15,7 @@ import type {
   ExternalReviewRenderModelResponse,
   SideModelConfig,
 } from './contracts.js'
-import { EngineHttpError, type EngineService } from './engine.js'
+import { EngineHttpError, EngineUnavailableError, type EngineService } from './engine.js'
 import {
   QINGML_SYSTEM,
   completeTopLevelBlocks,
@@ -477,8 +477,8 @@ function reviewCommitTool(services: ToolServices, reviewTurns: ReviewTurnTracker
     }),
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
-      reviewTurns.assertFirstAdjudication(exec)
       await assertEngineOnline(services.engine)
+      reviewTurns.assertFirstAdjudication(exec)
       const engineSessionId = resolveDocRef(services.bindings, dshSessionId, args.docRef)
       const before = await readDoc(services.engine, engineSessionId)
       const beforeTitle = before.title?.trim() || services.bindings.listDocs(dshSessionId)
@@ -554,6 +554,7 @@ function readDraftTool(services: ToolServices) {
     presentResult: (_args, result) => ({ card: 'generic', title: result.isError ? '读取青简文稿失败' : '已读取青简文稿' }),
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
+      await assertEngineOnline(services.engine)
       const engineSessionId = resolveDocRef(services.bindings, dshSessionId, args.docRef)
       const doc = await readDoc(services.engine, engineSessionId)
       const mode = args.mode ?? 'outline'
@@ -626,7 +627,7 @@ function listDocsTool(services: ToolServices) {
         type: 'object',
         additionalProperties: false,
         properties: {
-          engine: { type: 'string', enum: ['online', 'offline', 'starting'], required: true },
+          engine: { type: 'string', enum: ['online', 'offline', 'starting', 'handshake-failed'], required: true },
           docs: {
             type: 'array',
             required: true,
@@ -653,7 +654,7 @@ function listDocsTool(services: ToolServices) {
     presentCall: (args) => ({ card: 'generic', title: args.scope === 'library' ? '查看青简文库' : '查看青简文稿', kind: 'read' }),
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
-      const engine = await services.engine.status()
+      const engine = await assertEngineOnline(services.engine)
       const binding = services.bindings.getBinding(dshSessionId)
       if (args.scope === 'library') {
         // 文库模式:引擎全库最近文稿(含其他会话),供空会话/跨会话收养闭环(P40,K3 定案 B)。
@@ -676,7 +677,12 @@ function listDocsTool(services: ToolServices) {
       const docs = await Promise.all(binding.docs.map(async (bound) => {
         let state = 'offline'
         if (engine.state === 'online') {
-          try { state = (await readDoc(services.engine, bound.engineSessionId)).state } catch { state = 'unavailable' }
+          try {
+            state = (await readDoc(services.engine, bound.engineSessionId)).state
+          } catch (error) {
+            if (error instanceof EngineUnavailableError) throw error
+            state = 'unavailable'
+          }
         }
         return { ...bound, active: bound.engineSessionId === binding.activeEngineSessionId, state }
       }))
@@ -721,6 +727,7 @@ function focusDocTool(services: ToolServices) {
     }),
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
+      await assertEngineOnline(services.engine)
       const binding = services.bindings.getBinding(dshSessionId)
       if (binding.docs.some((item) => item.engineSessionId === args.docRef)) {
         const doc = await services.bindings.setActive(dshSessionId, args.docRef)
@@ -946,11 +953,14 @@ function resolveDocRef(bindings: BindingStore, dshSessionId: string, docRef?: st
   return active.engineSessionId
 }
 
-async function assertEngineOnline(engine: EngineService): Promise<void> {
+async function assertEngineOnline(
+  engine: EngineService,
+): Promise<Awaited<ReturnType<EngineService['ensureReady']>> & { state: 'online' }> {
   const status = await engine.ensureReady()
   if (status.state !== 'online') {
-    throw new Error(`青简引擎离线：${status.message ?? '请先启动青简；需要自动启动时配置 autoLaunch 与 engineCommand。'}`)
+    throw new EngineUnavailableError(status)
   }
+  return status as typeof status & { state: 'online' }
 }
 
 function hasDiagnostic(body: unknown): body is { diagnostic: unknown } {

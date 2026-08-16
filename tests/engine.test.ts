@@ -13,10 +13,23 @@ const logger = {
 function dependencies(overrides: Partial<EngineDependencies>): EngineDependencies {
   return {
     fetch: vi.fn(),
-    readInstance: async () => ({ port: 8080, pid: 42, version: 'test', token: 'token', startedAt: '' }),
+    readInstance: async () => instance(),
     isProcessAlive: () => true,
     launch: vi.fn(),
     wait: async () => undefined,
+    ...overrides,
+  }
+}
+
+function instance(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 2,
+    port: 8080,
+    pid: 42,
+    version: '1.0.0',
+    attachProtocolVersion: 1,
+    token: 'token',
+    startedAt: '2026-08-16T00:00:00.000Z',
     ...overrides,
   }
 }
@@ -38,9 +51,14 @@ describe('EngineConnection', () => {
       { engineUrl: 'http://127.0.0.1:8080', autoLaunch: false },
       logger,
       undefined,
-      dependencies({ fetch: fetchMock, readInstance: async () => { throw new Error('ENOENT') } }),
+      dependencies({
+        fetch: fetchMock,
+        readInstance: async () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) },
+      }),
     )
-    await expect(engine.status()).resolves.toMatchObject({ state: 'offline', message: 'ENOENT' })
+    await expect(engine.status()).resolves.toMatchObject({
+      state: 'offline', reason: 'instance-missing', message: expect.stringContaining('未找到'),
+    })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
@@ -49,7 +67,7 @@ describe('EngineConnection', () => {
     const seenTokens: string[] = []
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input)
-      if (url.endsWith('/health')) return Response.json({ version: '1.0.0' })
+      if (url.endsWith('/health')) return Response.json({ version: '1.0.0', attachProtocolVersion: 1 })
       seenTokens.push(new Headers(init?.headers).get('Authorization') ?? '')
       return seenTokens.length === 1
         ? Response.json({ error: 'expired' }, { status: 401 })
@@ -61,13 +79,7 @@ describe('EngineConnection', () => {
       undefined,
       dependencies({
         fetch: fetchMock,
-        readInstance: async () => ({
-          port: 8080,
-          pid: 42,
-          version: 'test',
-          token: ++reads === 1 ? 'old-token' : 'new-token',
-          startedAt: '',
-        }),
+        readInstance: async () => instance({ token: ++reads === 1 ? 'old-token' : 'new-token' }),
       }),
     )
 
@@ -79,7 +91,7 @@ describe('EngineConnection', () => {
   it('health 探测也携带 external Bearer', async () => {
     const fetchMock = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer health-token')
-      return Response.json({ version: '1.0.0' })
+      return Response.json({ version: '1.0.0', attachProtocolVersion: 1 })
     })
     const engine = new EngineConnection(
       { engineUrl: 'http://127.0.0.1:8080', autoLaunch: false },
@@ -87,7 +99,7 @@ describe('EngineConnection', () => {
       undefined,
       dependencies({
         fetch: fetchMock,
-        readInstance: async () => ({ port: 8080, pid: 42, version: 'test', token: 'health-token', startedAt: '' }),
+        readInstance: async () => instance({ token: 'health-token' }),
       }),
     )
 
@@ -99,7 +111,9 @@ describe('EngineConnection', () => {
     const seen: Array<{ url: string; authorization: string | null }> = []
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input)
-      if (url.endsWith('/api/v1/external/health')) return Response.json({ version: '1.0.0' })
+      if (url.endsWith('/api/v1/external/health')) {
+        return Response.json({ version: '1.0.0', attachProtocolVersion: 1 })
+      }
       seen.push({ url, authorization: new Headers(init?.headers).get('Authorization') })
       return new Response('asset-bytes', { headers: { 'Content-Type': 'image/png' } })
     })
@@ -109,9 +123,7 @@ describe('EngineConnection', () => {
       undefined,
       dependencies({
         fetch: fetchMock,
-        readInstance: async () => ({
-          port: 8080, pid: 42, version: 'test', token: 'asset-token', startedAt: '',
-        }),
+        readInstance: async () => instance({ token: 'asset-token' }),
       }),
     )
 

@@ -9,7 +9,18 @@ import type {
   PmDoc,
 } from '@qingagent/contract-ts'
 
-export type EngineState = 'online' | 'offline' | 'starting'
+export type EngineState = 'online' | 'offline' | 'starting' | 'handshake-failed'
+export type EngineStatusReason =
+  | 'instance-missing'
+  | 'instance-invalid'
+  | 'instance-process-exited'
+  | 'connection-refused'
+  | 'connection-timeout'
+  | 'unauthorized'
+  | 'health-http-error'
+  | 'health-response-invalid'
+  | 'version-mismatch'
+  | 'protocol-incompatible'
 export type QingDocumentState = 'empty' | 'editing' | 'pendingReview'
 
 export interface EngineStatusSnapshot {
@@ -17,6 +28,7 @@ export interface EngineStatusSnapshot {
   engineUrl: string
   version?: string
   message?: string
+  reason?: EngineStatusReason
 }
 
 export interface BoundDocument {

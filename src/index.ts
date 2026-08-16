@@ -56,6 +56,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const bindings = new BindingStore(domain, engine, (sessionId, binding) => bridge?.bindingChanged(sessionId, binding))
   bridge = new BridgeHub(ctx, engine, bindings)
   bridge.mount()
+  engine.startMonitoring()
 
   ctx.effect(() => ctx.systemPrompt.section({
     name: 'plugin:qingagent-writing-discipline',
@@ -68,6 +69,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
 export { BindingStore, BindingDomainSpec } from './bindings.js'
 export { BridgeHub, isLoopback } from './bridge.js'
 export { EngineConnection, EngineHttpError, EngineService } from './engine.js'
+export { QINGJIAN_DOWNLOAD_URL, qingjianUnavailableMessage } from './onboarding.js'
 export { QINGML_SYSTEM, completeTopLevelBlocks, countWords, outlineOf } from './qingml.js'
 export { selectionSystemPrompt } from './selection.js'
 export type * from './contracts.js'

@@ -136,7 +136,9 @@ export class QingClientStore {
     const entry = this.entries.get(sessionId)
     if (entry?.panelClosed) return false
     const snapshot = this.getSnapshot(sessionId)
-    return snapshot.streaming || snapshot.bindingCount > 0
+    return snapshot.streaming
+      || snapshot.bindingCount > 0
+      || (snapshot.state !== undefined && snapshot.state.engine.state !== 'online')
   }
 
   /** × 关闭:dsh 详情列显隐由插槽注册决定,layout.closeDetails 对它无效;这里置关闭位驱动注销。 */
@@ -735,7 +737,9 @@ export class QingClientStore {
       return
     }
     if (event.type === 'engine-status' && entry.snapshot.state) {
+      const recovered = entry.snapshot.state.engine.state !== 'online' && event.engine.state === 'online'
       this.update(entry, { ...entry.snapshot, state: { ...entry.snapshot.state, engine: event.engine } })
+      if (recovered) void this.loadState(sessionId, entry)
     }
   }
 

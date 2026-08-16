@@ -51,6 +51,7 @@ import { buildReviewPresentationModel } from './reviewPresentation.js'
 import { installDetailsColumnWidth } from './detailsWidth.js'
 import { decideIncomingPanelDocument } from './incomingPanelDocument.js'
 import { QINGJIAN_ICON_DATA_URI } from './qingjianIcon.js'
+import { QingConnectionGuide } from './QingConnectionGuide.js'
 import { ensureQingdocRuntimeCss } from './runtimeCss.js'
 import { BridgeHttpError, qingClientStore } from './store.js'
 import type { QingLibraryDoc } from './store.js'
@@ -154,9 +155,9 @@ export function QingDocPanel(props: QingDocPanelProps) {
   }, [activeEngineSessionId, flushPendingDocSave])
 
   useEffect(() => {
-    if (!activeEngineSessionId) return
+    if (!activeEngineSessionId || (snapshot.state && snapshot.state.engine.state !== 'online')) return
     void qingClientStore.refreshPanel(sessionId, activeEngineSessionId).catch(() => undefined)
-  }, [activeEngineSessionId, observedState, observedVersion, sessionId])
+  }, [activeEngineSessionId, observedState, observedVersion, sessionId, snapshot.state?.engine.state])
 
   useEffect(() => {
     compileThrottleRef.current?.cancel()
@@ -905,6 +906,46 @@ export function QingDocPanel(props: QingDocPanelProps) {
     '--ws-paper-top-offset': '0px',
     '--ws-paper-radius': '0',
   } as CSSProperties
+
+  const engineStatus = snapshot.state?.engine
+  if (engineStatus && engineStatus.state !== 'online') {
+    return (
+      <section
+        ref={rootRef}
+        data-qingagent-doc-panel
+        data-qingagent-connection-state={engineStatus.state}
+        style={rootStyle}
+        aria-label="青简连接引导"
+      >
+        <div
+          className="qingdoc-details-resizer"
+          data-qing-details-resizer
+          role="separator"
+          tabIndex={0}
+          aria-label="调整青简文档栏宽度"
+          aria-orientation="vertical"
+          aria-valuemin={420}
+        />
+        <header className="qingdoc-stage-controls">
+          <div className="qingdoc-heading">
+            <span className="qingdoc-brand">青简</span>
+            <span className="qingdoc-status" role="status">
+              {engineStatus.state === 'starting' ? '正在启动' : engineStatus.state === 'handshake-failed' ? '握手失败' : '未连接'}
+            </span>
+          </div>
+          <div className="qingdoc-host-actions">
+            <button
+              className="qingdoc-close"
+              type="button"
+              onClick={() => { void handleClose() }}
+              aria-label="关闭青简连接引导"
+            >×</button>
+          </div>
+        </header>
+        <QingConnectionGuide status={engineStatus} />
+      </section>
+    )
+  }
 
   return (
     <ConfirmProvider>

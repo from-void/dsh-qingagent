@@ -58,6 +58,36 @@ afterEach(() => {
 })
 
 describe('QingClientStore 生成终态', () => {
+  it('沿用 engine-status SSE 显示未连接面板，并在恢复后自动让位', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    let stateReads = 0
+    const fetchMock = vi.fn(async () => {
+      stateReads += 1
+      return Response.json({
+        dshSessionId: 'dsh-offline',
+        binding: { docs: [] },
+        docs: [],
+        engine: stateReads === 1
+          ? { state: 'offline', engineUrl: 'http://127.0.0.1:49123', reason: 'instance-missing' }
+          : { state: 'online', engineUrl: 'http://127.0.0.1:49123', version: '1.2.3' },
+      } satisfies BridgeState)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const store = new QingClientStore()
+    const release = store.retain('dsh-offline')
+    await vi.waitFor(() => expect(store.hasPanelContent('dsh-offline')).toBe(true))
+
+    FakeEventSource.instances.at(-1)?.emit({
+      type: 'engine-status',
+      engine: { state: 'online', engineUrl: 'http://127.0.0.1:49123', version: '1.2.3' },
+    })
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(store.getSnapshot('dsh-offline').state?.engine.state).toBe('online'))
+    expect(store.hasPanelContent('dsh-offline')).toBe(false)
+    release()
+  })
+
   it('draft-started 在首块前立即锁定写作态', async () => {
     vi.stubGlobal('EventSource', FakeEventSource)
     vi.stubGlobal('fetch', vi.fn(async () => Response.json(bridgeState())))

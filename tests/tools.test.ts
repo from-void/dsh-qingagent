@@ -3,7 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { BindingStore } from '../src/bindings.js'
 import type { BridgeHub } from '../src/bridge.js'
-import type { BridgeEvent, ExternalDoc } from '../src/contracts.js'
+import type { BridgeEvent, EngineStatusSnapshot, ExternalDoc } from '../src/contracts.js'
 import { EngineHttpError, type EngineService } from '../src/engine.js'
 import { registerTools } from '../src/tools.js'
 
@@ -41,7 +41,11 @@ function exec(
   } as unknown as ToolRunContext
 }
 
-function harness(outputs: string[], fetchJson: (path: string, init?: RequestInit) => Promise<unknown>) {
+function harness(
+  outputs: string[],
+  fetchJson: (path: string, init?: RequestInit) => Promise<unknown>,
+  engineStatus: EngineStatusSnapshot = { state: 'online', engineUrl: 'http://127.0.0.1:8080' },
+) {
   const tools = new Map<string, ToolDefinition>()
   const listeners = new Map<string, (...args: any[]) => any>()
   const requests: unknown[] = []
@@ -77,8 +81,8 @@ function harness(outputs: string[], fetchJson: (path: string, init?: RequestInit
     updateTitle: vi.fn(async (_sessionId: string, _engineSessionId: string, title: string) => { active.title = title }),
   } as unknown as BindingStore
   const engine = {
-    ensureReady: vi.fn(async () => ({ state: 'online', engineUrl: 'http://127.0.0.1:8080' })),
-    status: vi.fn(async () => ({ state: 'online', engineUrl: 'http://127.0.0.1:8080' })),
+    ensureReady: vi.fn(async () => engineStatus),
+    status: vi.fn(async () => engineStatus),
     fetchJson: vi.fn(fetchJson),
   } as unknown as EngineService
   const bridge = {
@@ -88,6 +92,52 @@ function harness(outputs: string[], fetchJson: (path: string, init?: RequestInit
   registerTools({ ctx, engine, bindings, bridge })
   return { tools, listeners, requests, events, stream, bindings, engine, bridge }
 }
+
+describe('qing_* 未连接结构化报错', () => {
+  const calls: Array<[string, Record<string, unknown>]> = [
+    ['qing_write_draft', { brief: '写一篇测试稿' }],
+    ['qing_edit_draft', { ops: [{ kind: 'setTitle', title: '新标题' }] }],
+    ['qing_review_commit', { action: 'accept_all' }],
+    ['qing_read_draft', {}],
+    ['qing_list_docs', {}],
+    ['qing_focus_doc', { docRef: 'qing-1' }],
+  ]
+
+  it.each(calls)('%s 在完全未检测到时返回统一安装/启动引导', async (name, args) => {
+    const fixture = harness([], async () => { throw new Error('不应访问引擎') }, {
+      state: 'offline',
+      engineUrl: 'http://127.0.0.1:49123',
+      reason: 'instance-missing',
+      message: '未找到实例文件',
+    })
+
+    await expect(fixture.tools.get(name)!.execute(args, exec(undefined, 'offline-call', name)))
+      .rejects.toThrow([
+        '【未连接青简】未检测到可用的青简引擎。',
+        '请先安装并启动青简；插件会自动连接，无需重启 DSH。',
+        '下载青简：https://github.com/from-void/qingagent/releases',
+      ].join('\n'))
+    expect(fixture.engine.fetchJson).not.toHaveBeenCalled()
+  })
+
+  it.each(calls)('%s 在握手失败时保留具体原因', async (name, args) => {
+    const fixture = harness([], async () => { throw new Error('不应访问引擎') }, {
+      state: 'handshake-failed',
+      engineUrl: 'http://127.0.0.1:49123',
+      reason: 'protocol-incompatible',
+      message: 'attachProtocolVersion 不兼容：青简为 2，插件需要 1。',
+    })
+
+    await expect(fixture.tools.get(name)!.execute(args, exec(undefined, 'handshake-call', name)))
+      .rejects.toThrow([
+        '【未连接青简】检测到青简引擎，但握手失败。',
+        '具体原因：attachProtocolVersion 不兼容：青简为 2，插件需要 1。',
+        '请修复或更新青简并保持运行；插件会自动重连，无需重启 DSH。',
+        '下载青简：https://github.com/from-void/qingagent/releases',
+      ].join('\n'))
+    expect(fixture.engine.fetchJson).not.toHaveBeenCalled()
+  })
+})
 
 function candidateDoc(heading: string, paragraph: string) {
   return {
