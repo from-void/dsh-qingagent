@@ -16,6 +16,7 @@ import {
 import { qingClientStore } from './store.js'
 import {
   insertSelectionReference,
+  installSelectionChipHoverTitles,
   qingSelectionReferenceSource,
 } from './selectionReference.js'
 
@@ -183,7 +184,13 @@ export function apply(ctx: ClientContext): void {
           currentSessionId as Parameters<typeof createScope>[1],
         )
         const inputState = selectionScope.ctx.conversation.input.for(selectionScope.ctx).state
-        unsubscribeInput = inputState.subscribe(syncSelectionReference)
+        const unsubscribeState = inputState.subscribe(syncSelectionReference)
+        // hover 出选段原始内容(chip 定宽硬裁,原生 title 补全语义)。
+        const uninstallHover = installSelectionChipHoverTitles(() => inputState.getSnapshot().occurrences)
+        unsubscribeInput = () => {
+          unsubscribeState()
+          uninstallHover()
+        }
       }
       syncPanelRegistration()
       syncSelectionReference()

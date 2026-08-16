@@ -7,7 +7,9 @@ import type { QingSelection } from '../contracts.js'
 
 export const QING_SELECTION_REFERENCE_SOURCE = 'qingagent-selection'
 
-const PREVIEW_LENGTH = 20
+// 宿主 chip 是定宽单字符单元(U+FFFC 专用字体),label 绝对居中 overflow:hidden 硬裁,
+// 视觉预算约 6 个汉字——前缀会挤掉正文,label 只放引文头 5 字+省略号,完整内容走 hover title。
+const PREVIEW_LENGTH = 5
 
 /**
  * 模型侧的选段表示。ref 自身携带文稿、块与字符范围，不能依赖 bridge 中稍后会清掉的
@@ -20,10 +22,8 @@ export function selectionReferenceText(selection: QingSelection, title?: string 
 }
 
 export function selectionReferenceLabel(quote: string): string {
-  const preview = quote.length > PREVIEW_LENGTH
-    ? `${quote.slice(0, PREVIEW_LENGTH)}…`
-    : quote
-  return `选段：「${preview}」`
+  const plain = quote.replace(/\s+/g, ' ').trim()
+  return plain.length > PREVIEW_LENGTH ? `${plain.slice(0, PREVIEW_LENGTH)}…` : plain
 }
 
 export function createSelectionReference(
@@ -82,4 +82,30 @@ export const qingSelectionReferenceSource: InputTriggerSource = {
     clipboardText: (ref) => ref,
     serialize: async (ref) => ref,
   },
+}
+
+/**
+ * chip hover 展示原始内容:宿主 chipLabel 定宽硬裁无 tooltip,这里以委托监听为可见 chip
+ * 补 title(浏览器原生悬浮)。chip DOM 顺序与 InputState.occurrences 的 offset 顺序一致,
+ * 按序配对;只给本插件来源的 occurrence 写 title(内容=完整锚点引文)。
+ * 返回卸载函数,随会话作用域清理。
+ */
+export function installSelectionChipHoverTitles(
+  getOccurrences: () => readonly { source: string; ref: string }[] | undefined,
+): () => void {
+  if (typeof document === 'undefined') return () => {}
+  const onOver = (event: MouseEvent) => {
+    const target = event.target as Element | null
+    const label = target?.closest?.('[class*="chipLabel"]') as HTMLElement | null
+    if (!label || label.title) return
+    const container = label.closest('[class*="backdrop"]') ?? label.parentElement?.parentElement
+    if (!container) return
+    const labels = [...container.querySelectorAll('[class*="chipLabel"]')]
+    const index = labels.indexOf(label)
+    if (index < 0) return
+    const occurrence = getOccurrences()?.[index]
+    if (occurrence?.source === QING_SELECTION_REFERENCE_SOURCE) label.title = occurrence.ref
+  }
+  document.addEventListener('mouseover', onOver, { capture: true, passive: true })
+  return () => document.removeEventListener('mouseover', onOver, { capture: true })
 }

@@ -742,21 +742,12 @@
   :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-right::-webkit-scrollbar-track {background:transparent}
 
 /* source: apps/web/src/pages/workspace/workspace.css:304-386 */
-  /* ============ Patch 固定顶条 ============ */
-  /* ============ Patch 审核条 · 只在 review 态出现 · 贴正文左, 横向精简 ============ */
-  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .patch-nav {
-    position:sticky;top:0;z-index:8;
-    margin:0 0 18px 0;              /* 对齐 .wf-doc 左边 */
-    max-width:660px;                /* = 860 正文 - 200 右留白 */
-    width:100%;
-    padding:7px 10px 7px 14px;
-    background:var(--bg-subtle);    /* 去 backdrop-filter 提速 */
-    border:1px solid var(--line-2);
-    border-radius:var(--r);
+    [data-qingagent-doc-panel] border-radius:var(--r);
     display:flex;align-items:center;gap:8px;
     font-size:12px;color:var(--ink-2);
     white-space:nowrap;
-    /* 改动B 微调:"打字"完成后审批条才挂载,挂载时下滑淡入 */
+    /* 改动B 微调:"打字"完成后审批条才挂载,
+[data-qingagent-doc-panel] 挂载时下滑淡入 */
     animation:pn-in .34s cubic-bezier(.2,.7,.3,1) both;
   }
   @keyframes pn-in {from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
@@ -826,21 +817,23 @@
   :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .wdr-swap {animation:wdr-swap-in .34s cubic-bezier(.22,.61,.36,1) both}
   @keyframes wdr-swap-in {from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
+  /* ============ 消息样式 · agent 平铺 / user 气泡右对齐 ============ */
+  /* 对话流式"逐段进场"动画(StreamingChars):效果/时长/分段由 streamFxConfig 默认值决定,
+     经 CSS 变量驱动。每段挂载即播一次。 */
+  [data-qingagent-doc-panel] .sfx-seg { pointer-events:none; }
+  [data-qingagent-doc-panel] .sfx-blur { animation:sfx-blur var(--sfx-dur, 700ms) ease-out; }
+  [data-qingagent-doc-panel] .sfx-rise { display:inline-block; animation:sfx-rise var(--sfx-dur, 520ms) cubic-bezier(.22,1,.36,1); }
+  [data-qingagent-doc-panel] .sfx-soft { animation:sfx-soft var(--sfx-dur, 900ms) ease-out; }
+  @keyframes sfx-blur { from{opacity:0;filter:blur(var(--sfx-blur, 6px))} to{opacity:1;filter:blur(0)} }
+  @keyframes sfx-rise { from{opacity:0;transform:translateY(var(--sfx-slide, 7px))} to{opacity:1;transform:none} }
+
 /* source: apps/web/src/pages/workspace/workspace.css:1299-3662 */
-  /* ============ 工具栏 · 浮现式 (选中文本时出现在选区上方) ============ */
-  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .doc-toolbar {
-    /* z-index 必须高于表格列/行头热区(.tbl-col-hdr/.tbl-row-hdr=100010、.tbl-dot=100020):
-       在表格单元格内选中文字时,本浮层会盖在表格顶部,层级不够会被列头热区反盖住,
-       重叠处点击穿透去触发选列(bug)。抬到 100050 让工具栏始终在最上、挡住下层点击 */
-    position:fixed;z-index:100050;
-    display:flex;align-items:center;gap:2px;
-    padding:5px 6px;
-    background:var(--ink-1);
-    border:1px solid var(--ink-1);border-radius:var(--r);
-    box-shadow:0 10px 28px rgba(20,30,38,.28),0 2px 6px rgba(20,30,38,.12);
+    [data-qingagent-doc-panel] box-shadow:0 10px 28px rgba(20,30,38,.28),
+[data-qingagent-doc-panel] 0 2px 6px rgba(20,30,38,.12);
     font-size:13px;user-select:none;
     opacity:0;pointer-events:none;transform:translate(-50%,-4px);
-    transition:opacity .14s ease,transform .14s cubic-bezier(.2,.8,.2,1);
+    transition:opacity .14s ease,
+[data-qingagent-doc-panel] transform .14s cubic-bezier(.2,.8,.2,1);
     white-space:nowrap;
   }
   :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .doc-toolbar.on {opacity:1;pointer-events:auto;transform:translate(-50%,0)}
@@ -3212,6 +3205,7 @@
 /* 审阅态双通道:命中切"只描边不填底",不与补丁底色打架(状态③) */
 [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .ws-find-hit {background:transparent; outline:1.5px solid rgba(64,120,150,.55); outline-offset:0}
 [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .ws-find-hit.is-current {background:rgba(196,150,58,.20); outline:2px solid rgba(176,128,32,.9)}
+
 
 /* source: apps/web/src/pages/workspace/workspace-ink-skin.css:20-60 */
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) {
