@@ -118,6 +118,16 @@ export class BridgeHub {
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1')
     try {
+      if (request.method === 'POST' && url.pathname === '/qingagent-bridge/launch-client') {
+        if (url.search) throw new HttpInputError('启动青简端点不接受路径或其他查询参数。')
+        const launched = await this.engine.launchInstalledClient()
+        if (!launched) {
+          writeJson(response, 409, { error: '未找到可安全启动的青简安装路径。' })
+          return
+        }
+        writeJson(response, 202, { launched: true })
+        return
+      }
       if (request.method === 'GET' && url.pathname === '/qingagent-bridge/state') {
         const dshSessionId = requiredQuery(url, 'dshSessionId')
         writeJson(response, 200, await this.state(dshSessionId))

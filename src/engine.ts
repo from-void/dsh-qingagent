@@ -3,6 +3,11 @@ import { homedir } from 'node:os'
 import { spawn } from 'node:child_process'
 import { Service, type Context, type Logger } from '@deepseek-ai/cordis'
 import type { EngineStatusReason, EngineStatusSnapshot } from './contracts.js'
+import {
+  detectQingjianClientInstallation,
+  launchDetectedQingjianClient,
+  type QingjianClientInstallation,
+} from './clientInstallation.js'
 import { qingjianUnavailableMessage } from './onboarding.js'
 
 const ATTACH_PROTOCOL_VERSION = 1
@@ -30,6 +35,8 @@ export interface EngineConfig {
 
 export interface EngineDependencies {
   fetch: typeof globalThis.fetch
+  detectClientInstallation: () => Promise<QingjianClientInstallation>
+  launchDetectedClient: () => Promise<boolean>
   readInstance: (path: string) => Promise<unknown>
   isProcessAlive: (pid: number) => boolean
   launch: (command: string, cwd: string | undefined, logger: Logger) => void
@@ -127,6 +134,8 @@ function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
 
 const defaultDependencies: EngineDependencies = {
   fetch: globalThis.fetch,
+  detectClientInstallation: detectQingjianClientInstallation,
+  launchDetectedClient: launchDetectedQingjianClient,
   readInstance: async (path) => JSON.parse(await readFile(path, 'utf8')) as unknown,
   isProcessAlive: defaultAlive,
   launch: (command, cwd, logger) => {
@@ -149,6 +158,7 @@ export class EngineConnection {
   private monitorPromise?: Promise<void>
   private readonly controller = new AbortController()
   private lastStatus?: EngineStatusSnapshot
+  private clientInstallation: QingjianClientInstallation = { installed: false }
 
   constructor(
     readonly config: EngineConfig,
@@ -171,11 +181,18 @@ export class EngineConnection {
   }
 
   private publish(status: EngineStatusSnapshot): EngineStatusSnapshot {
-    if (JSON.stringify(status) !== JSON.stringify(this.lastStatus)) {
-      this.lastStatus = status
-      this.onStatus(status)
+    const snapshot = {
+      ...status,
+      clientInstalled: this.clientInstallation.installed,
+      ...(this.clientInstallation.executablePath
+        ? { clientExecutablePath: this.clientInstallation.executablePath }
+        : {}),
     }
-    return status
+    if (JSON.stringify(snapshot) !== JSON.stringify(this.lastStatus)) {
+      this.lastStatus = snapshot
+      this.onStatus(snapshot)
+    }
+    return snapshot
   }
 
   /** 引擎地址以 instance.json 的 port 为权威(单库:连的就是写出该文件的引擎);读不到实例时回退配置值。 */
@@ -199,6 +216,8 @@ export class EngineConnection {
   }
 
   private async probe(timeoutMs: number): Promise<EngineStatusSnapshot> {
+    this.clientInstallation = await this.dependencies.detectClientInstallation()
+      .catch(() => ({ installed: false }))
     let instance: EngineInstance
     try {
       instance = await this.reloadInstance()
@@ -294,6 +313,12 @@ export class EngineConnection {
     if (current.state === 'online' || !this.config.autoLaunch || !this.config.engineCommand) return current
     this.launchPromise ??= this.launchAndPoll().finally(() => { this.launchPromise = undefined })
     return this.launchPromise
+  }
+
+  /** bridge 只触发这个无参入口，实际路径始终来自 host 检测器自己的缓存。 */
+  async launchInstalledClient(): Promise<boolean> {
+    if (!this.clientInstallation.installed || !this.clientInstallation.executablePath) return false
+    return this.dependencies.launchDetectedClient().catch(() => false)
   }
 
   private async launchAndPoll(): Promise<EngineStatusSnapshot> {
@@ -429,6 +454,7 @@ export class EngineService extends Service {
 
   status(): Promise<EngineStatusSnapshot> { return this.connection.status() }
   ensureReady(): Promise<EngineStatusSnapshot> { return this.connection.ensureReady() }
+  launchInstalledClient(): Promise<boolean> { return this.connection.launchInstalledClient() }
   startMonitoring(): void { this.connection.startMonitoring() }
   fetchJson<T>(path: string, init?: RequestInit): Promise<T> { return this.connection.fetchJson<T>(path, init) }
   fetchAsset(path: string, init?: RequestInit): Promise<Response> { return this.connection.fetchAsset(path, init) }

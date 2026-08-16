@@ -56,7 +56,12 @@ function fixture(bindingsBySession: Record<string, SessionBinding>) {
     effect: (setup: () => () => void) => { lifecycle.push(setup()); return vi.fn() },
   } as unknown as Context
   const engine = {
-    status: vi.fn(async () => ({ state: 'online', engineUrl: 'http://127.0.0.1:8080' })),
+    status: vi.fn(async () => ({
+      state: 'online',
+      engineUrl: 'http://127.0.0.1:8080',
+      clientInstalled: true,
+      clientExecutablePath: 'D:\\Qingjian\\qingagent.exe',
+    })),
     fetchJson: vi.fn(async () => ({
       sessionId: 'qing-a', docVersion: 1, state: 'editing', agentBusy: false,
       markdown: '', qingml: '<p>正文</p>', title: '文稿',
@@ -65,6 +70,7 @@ function fixture(bindingsBySession: Record<string, SessionBinding>) {
       status: 200,
       headers: { 'Content-Type': 'image/png', ETag: 'asset-v1' },
     })),
+    launchInstalledClient: vi.fn(async () => true),
   } as unknown as EngineService
   const bindings = {
     getBinding: (sessionId: string) => bindingsBySession[sessionId] ?? { docs: [] },
@@ -91,6 +97,42 @@ describe('BridgeHub', () => {
     await handler(request('GET', '/qingagent-bridge/state?dshSessionId=dsh-a', '10.0.0.8'), res as unknown as ServerResponse)
     expect(res.status).toBe(403)
     expect(JSON.parse(res.body)).toEqual({ error: 'QingAgent bridge 仅允许本机访问。' })
+    dispose()
+  })
+
+  it('/state 沿现有 engine 载荷透传客户端安装结果', async () => {
+    const { handler, dispose } = fixture({})
+    const res = response()
+    await handler(request('GET', '/qingagent-bridge/state?dshSessionId=dsh-a'), res as unknown as ServerResponse)
+
+    expect(res.status).toBe(200)
+    expect(JSON.parse(res.body).engine).toMatchObject({
+      state: 'online',
+      clientInstalled: true,
+      clientExecutablePath: 'D:\\Qingjian\\qingagent.exe',
+    })
+    dispose()
+  })
+
+  it('启动端点不解析客户端路径，只调用 host 无参启动器', async () => {
+    const { handler, engine, dispose } = fixture({})
+    const res = response()
+    await handler(
+      request('POST', '/qingagent-bridge/launch-client', '127.0.0.1', { path: 'C:\\evil.exe' }),
+      res as unknown as ServerResponse,
+    )
+
+    expect(res.status).toBe(202)
+    expect(JSON.parse(res.body)).toEqual({ launched: true })
+    expect(engine.launchInstalledClient).toHaveBeenCalledWith()
+
+    const rejected = response()
+    await handler(
+      request('POST', '/qingagent-bridge/launch-client?path=C%3A%5Cevil.exe'),
+      rejected as unknown as ServerResponse,
+    )
+    expect(rejected.status).toBe(400)
+    expect(engine.launchInstalledClient).toHaveBeenCalledTimes(1)
     dispose()
   })
 

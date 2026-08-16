@@ -86,6 +86,8 @@ describe('青简启动探测与自愈状态机', () => {
   function dependencies(wait: EngineDependencies['wait'] = defaultWait): EngineDependencies {
     return {
       fetch: localFetch,
+      detectClientInstallation: async () => ({ installed: false }),
+      launchDetectedClient: async () => false,
       readInstance: async (path) => JSON.parse(await readFile(path, 'utf8')) as unknown,
       isProcessAlive: (pid) => pid === process.pid,
       launch: vi.fn(),

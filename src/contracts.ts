@@ -26,6 +26,10 @@ export type QingDocumentState = 'empty' | 'editing' | 'pendingReview'
 export interface EngineStatusSnapshot {
   state: EngineState
   engineUrl: string
+  /** host 按系统注册锚点探测；旧 bridge 载荷缺失时客户端按 false 兼容。 */
+  clientInstalled?: boolean
+  /** 仅由 host 检测器写入；bridge 启动端点不接受客户端回传此路径。 */
+  clientExecutablePath?: string
   version?: string
   message?: string
   reason?: EngineStatusReason

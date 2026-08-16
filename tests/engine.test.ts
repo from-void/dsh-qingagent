@@ -13,6 +13,8 @@ const logger = {
 function dependencies(overrides: Partial<EngineDependencies>): EngineDependencies {
   return {
     fetch: vi.fn(),
+    detectClientInstallation: async () => ({ installed: false }),
+    launchDetectedClient: async () => false,
     readInstance: async () => instance(),
     isProcessAlive: () => true,
     launch: vi.fn(),
@@ -60,6 +62,60 @@ describe('EngineConnection', () => {
       state: 'offline', reason: 'instance-missing', message: expect.stringContaining('未找到'),
     })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('每次状态探测都刷新客户端安装结果和 host 路径并写入状态快照', async () => {
+    const detectClientInstallation = vi.fn()
+      .mockResolvedValueOnce({ installed: true, executablePath: 'D:\\Qing\\qingagent.exe' })
+      .mockResolvedValueOnce({ installed: false })
+    const engine = new EngineConnection(
+      { engineUrl: 'http://127.0.0.1:49123', autoLaunch: false },
+      logger,
+      undefined,
+      dependencies({
+        detectClientInstallation,
+        readInstance: async () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) },
+      }),
+    )
+
+    await expect(engine.status()).resolves.toMatchObject({
+      state: 'offline',
+      clientInstalled: true,
+      clientExecutablePath: 'D:\\Qing\\qingagent.exe',
+    })
+    const second = await engine.status()
+    expect(second).toMatchObject({ state: 'offline', clientInstalled: false })
+    expect(second).not.toHaveProperty('clientExecutablePath')
+    expect(detectClientInstallation).toHaveBeenCalledTimes(2)
+  })
+
+  it('安全启动只调用 host 的无参检测启动器，未检测到路径时拒绝启动', async () => {
+    const launchDetectedClient = vi.fn(async () => true)
+    const installed = new EngineConnection(
+      { engineUrl: 'http://127.0.0.1:49123', autoLaunch: false },
+      logger,
+      undefined,
+      dependencies({
+        detectClientInstallation: async () => ({
+          installed: true,
+          executablePath: 'D:\\Qing\\qingagent.exe',
+        }),
+        launchDetectedClient,
+        readInstance: async () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) },
+      }),
+    )
+    await installed.status()
+    await expect(installed.launchInstalledClient()).resolves.toBe(true)
+    expect(launchDetectedClient).toHaveBeenCalledWith()
+
+    const missing = new EngineConnection(
+      { engineUrl: 'http://127.0.0.1:49123', autoLaunch: false },
+      logger,
+      undefined,
+      dependencies({ launchDetectedClient }),
+    )
+    await expect(missing.launchInstalledClient()).resolves.toBe(false)
+    expect(launchDetectedClient).toHaveBeenCalledTimes(1)
   })
 
   it('业务请求遇到 401 时只重读 token 一次', async () => {

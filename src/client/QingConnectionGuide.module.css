@@ -131,6 +131,12 @@
   outline-offset: 3px;
 }
 
+.launchFallback {
+  margin: 8px 0 0;
+  color: var(--guide-ink-muted);
+  font: 12px/1.7 "Noto Sans SC", system-ui, sans-serif;
+}
+
 .retry {
   margin: 18px 0 0;
   color: var(--guide-ink-muted);

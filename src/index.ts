@@ -69,6 +69,11 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
 export { BindingStore, BindingDomainSpec } from './bindings.js'
 export { BridgeHub, isLoopback } from './bridge.js'
 export { EngineConnection, EngineHttpError, EngineService } from './engine.js'
+export {
+  detectQingjianClientInstallation,
+  launchDetectedQingjianClient,
+  QingjianClientInstallationDetector,
+} from './clientInstallation.js'
 export { QINGJIAN_DOWNLOAD_URL, qingjianUnavailableMessage } from './onboarding.js'
 export { QINGML_SYSTEM, completeTopLevelBlocks, countWords, outlineOf } from './qingml.js'
 export { selectionSystemPrompt } from './selection.js'
