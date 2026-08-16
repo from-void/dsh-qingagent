@@ -46,6 +46,25 @@ const RAW_TAG_PATTERN = /<\/?\s*(article|title|h[1-6]|p|ul|ol|li|tasks?|blockquo
 const RAW_TAG_ERROR = '检测到 QingML/HTML 标签:局部操作(strReplace/insertAfterLine/appendSection)只接受纯文本或 Markdown,不支持 <mark>/<color> 等行内标记——直接写入会把标签当普通文字刻进正文。样式类修改请如实告知用户当前局部编辑不支持,如用户明确同意整篇重构可用 qing_write_draft(携 docRef)。'
 
 /** P14(RC13):每个工具返回带当前聚焦文稿,纠偏模型沿用旧 docRef。 */
+/** mode:"blocks" 用的宽松 PM 节点形状(只读 blockId/type/文本摘要,不承诺完整 schema)。 */
+interface PmBlockNode {
+  type?: string
+  attrs?: { blockId?: string }
+  content?: PmBlockNode[]
+  text?: string
+}
+
+function pmNodeText(node: PmBlockNode): string {
+  if (typeof node.text === 'string') return node.text
+  return (node.content ?? []).map(pmNodeText).join('')
+}
+
+function describePmBlock(node: PmBlockNode, depth: number): string {
+  const summary = pmNodeText(node).replace(/\s+/g, ' ').trim()
+  const clipped = summary.length > 40 ? `${summary.slice(0, 40)}…` : summary || '(无文本)'
+  return `${'  '.repeat(depth)}${node.attrs?.blockId ?? '(无块ID)'}｜${node.type ?? 'unknown'}｜${clipped}`
+}
+
 /** 【文稿状态】首行:所有 qing 工具返回共用,防单工具离群(P2/P22/P38 三次同类缺口的教训)。 */
 function docStateLine(state: string, docVersion: number, patchCount?: number): string {
   return state === 'pendingReview'
@@ -255,7 +274,7 @@ function writeDraftTool(services: ToolServices) {
 function editDraftTool(services: ToolServices) {
   return defineTool({
     name: 'qing_edit_draft',
-    description: '对已有青简文稿做结构化局部修改。改标题用 setTitle 操作(标题不在正文,strReplace 打不到);改一句、插入一段或追加一节用相应操作;严禁用 qing_write_draft 整篇重写。strReplace 的 old/new 必须是纯文本内容，不含 ##、-、** 等 Markdown 语法标记。多处修改必须放进同一次调用的 ops 数组一次提交；逐条调用会因首条进入审阅态而被 REVIEW_PENDING 拒绝。insertAfterLine 前先调用 qing_read_draft(mode:"lines") 取得当前 Markdown 行号。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
+    description: '对已有青简文稿做结构化局部修改。改标题用 setTitle 操作(标题不在正文,strReplace 打不到);删除整段/整节/清单项用 deleteBlock/deleteListItem(先 qing_read_draft mode:"blocks" 取块 ID,严禁用 strReplace 置空留残壳);改一句、插入一段或追加一节用相应操作;严禁用 qing_write_draft 整篇重写。strReplace 的 old/new 必须是纯文本内容，不含 ##、-、** 等 Markdown 语法标记。多处修改必须放进同一次调用的 ops 数组一次提交；逐条调用会因首条进入审阅态而被 REVIEW_PENDING 拒绝。insertAfterLine 前先调用 qing_read_draft(mode:"lines") 取得当前 Markdown 行号。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
     parameters: {
       docRef: { type: 'string', description: '要局部修改的青简会话 ID；省略时使用当前激活文稿。' },
       ops: {
@@ -289,6 +308,22 @@ function editDraftTool(services: ToolServices) {
               properties: {
                 kind: { type: 'string', const: 'appendSection', required: true },
                 markdown: { type: 'string', required: true },
+              },
+            },
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                kind: { type: 'string', const: 'deleteBlock', required: true },
+                blockId: { type: 'string', required: true, description: '要整块删除的块 ID(先用 qing_read_draft mode:"blocks" 获取)。删节/删段用它,严禁用 strReplace 置空留残壳。' },
+              },
+            },
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                kind: { type: 'string', const: 'deleteListItem', required: true },
+                blockId: { type: 'string', required: true, description: '要删除的清单项/任务项块 ID(qing_read_draft mode:"blocks" 获取);删掉最后一项时父清单自动清壳。' },
               },
             },
             {
@@ -483,10 +518,10 @@ function reviewCommitTool(services: ToolServices, reviewTurns: ReviewTurnTracker
 function readDraftTool(services: ToolServices) {
   return defineTool({
     name: 'qing_read_draft',
-    description: '读取当前会话绑定的青简文稿。审阅态下 outline/full 默认读取尚未生效的待审候选；mode:"base" 才读取已提交基线。局部插入前用 mode:"lines" 取得已提交 Markdown 行号。',
+    description: '读取当前会话绑定的青简文稿。审阅态下 outline/full 默认读取尚未生效的待审候选；mode:"base" 才读取已提交基线。局部插入前用 mode:"lines" 取得已提交 Markdown 行号;删除块/清单项前用 mode:"blocks" 取得块 ID 清单。',
     parameters: {
       docRef: { type: 'string', description: '青简会话 ID；省略时读取当前激活文稿。' },
-      mode: { type: 'string', enum: ['outline', 'full', 'base', 'lines'], default: 'outline', description: 'outline 返回提纲；full 返回完整候选；base 返回已提交基线 QingML；lines 返回带行号的已提交 Markdown。' },
+      mode: { type: 'string', enum: ['outline', 'full', 'base', 'lines', 'blocks'], default: 'outline', description: 'outline 返回提纲；full 返回完整候选；base 返回已提交基线 QingML；lines 返回带行号的已提交 Markdown；blocks 返回已提交基线的块 ID 清单(deleteBlock/deleteListItem 用)。' },
     },
     output: {
       schema: {
@@ -496,7 +531,7 @@ function readDraftTool(services: ToolServices) {
           title: { type: 'string', required: true },
           words: { type: 'integer', required: true },
           blocks: { type: 'integer', required: true },
-          mode: { type: 'string', enum: ['outline', 'full', 'base', 'lines'], required: true },
+          mode: { type: 'string', enum: ['outline', 'full', 'base', 'lines', 'blocks'], required: true },
           content: { type: 'string', required: true },
           engineSessionId: { type: 'string', required: true },
           state: { type: 'string', required: true },
@@ -512,6 +547,29 @@ function readDraftTool(services: ToolServices) {
       const engineSessionId = resolveDocRef(services.bindings, dshSessionId, args.docRef)
       const doc = await readDoc(services.engine, engineSessionId)
       const mode = args.mode ?? 'outline'
+      if (mode === 'blocks') {
+        const pm = await services.engine.fetchJson<{ pmDoc: { content?: PmBlockNode[] } }>(
+          `/sessions/${encodeURIComponent(engineSessionId)}/doc?format=pm`,
+        )
+        const outline = outlineOf(doc.qingml, doc.title)
+        const lines = ['以下为已提交基线的块 ID 清单(供 deleteBlock/deleteListItem 使用;缩进项为清单项)。']
+        for (const node of pm.pmDoc.content ?? []) {
+          lines.push(describePmBlock(node, 0))
+          if (node.type === 'orderedList' || node.type === 'bulletList' || node.type === 'taskList') {
+            for (const item of node.content ?? []) lines.push(describePmBlock(item, 1))
+          }
+        }
+        return {
+          title: outline.title,
+          words: outline.words,
+          blocks: outline.blocks,
+          mode,
+          content: lines.join('\n'),
+          engineSessionId,
+          state: doc.state,
+          docVersion: doc.docVersion,
+        }
+      }
       if (mode === 'lines') {
         const lined = await readDocWithLines(services.engine, engineSessionId)
         const outline = outlineOf(doc.qingml, doc.title)
@@ -824,11 +882,14 @@ function proposeOps(
   expectedDocVersion: number,
   ops: ExternalEditProposalOp[] | Array<{ kind: 'qingmlDraft'; qingml: string }>,
 ): Promise<ExternalProposalResponse> {
+  // 引擎契约:结构操作批(deleteBlock/deleteListItem)必须携带请求级 opId(幂等寻址)。
+  const structural = ops.some((op) => op.kind === 'deleteBlock' || op.kind === 'deleteListItem')
   return engine.fetchJson<ExternalProposalResponse>(`/sessions/${encodeURIComponent(engineSessionId)}/proposals`, {
     method: 'POST',
     body: JSON.stringify({
       expectedDocVersion,
       clientMutationId: `dsh-${randomUUID()}`,
+      ...(structural ? { opId: `dsh-op-${randomUUID()}` } : {}),
       ops,
     }),
   })
