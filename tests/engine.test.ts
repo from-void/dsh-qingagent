@@ -47,7 +47,7 @@ describe('EngineConnection', () => {
     expect(new EngineHttpError(status, body).message).toBe(message)
   })
 
-  it('instance 缺失时 status 安全降级为 offline', async () => {
+  it('instance 撕裂读首击时处于 starting 宽限态', async () => {
     const fetchMock = vi.fn()
     const engine = new EngineConnection(
       { engineUrl: 'http://127.0.0.1:8080', autoLaunch: false },
@@ -55,9 +55,88 @@ describe('EngineConnection', () => {
       undefined,
       dependencies({
         fetch: fetchMock,
+        readInstance: async () => { throw new SyntaxError('Unexpected end of JSON input') },
+      }),
+    )
+
+    await expect(engine.status()).resolves.toMatchObject({
+      state: 'starting',
+      reason: 'instance-invalid',
+      message: '青简实例信息正在写入，等待完成…',
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('instance 持续残缺超过宽限期后升级为 handshake-failed', async () => {
+    let now = 1_000
+    const engine = new EngineConnection(
+      { engineUrl: 'http://127.0.0.1:8080', autoLaunch: false },
+      logger,
+      undefined,
+      dependencies({
+        now: () => now,
+        readInstance: async () => { throw new SyntaxError('instance.json 字段无效') },
+      }),
+    )
+
+    await expect(engine.status()).resolves.toMatchObject({
+      state: 'starting', reason: 'instance-invalid',
+    })
+    now += 9_999
+    await expect(engine.status()).resolves.toMatchObject({
+      state: 'starting', reason: 'instance-invalid',
+    })
+    now += 2
+    await expect(engine.status()).resolves.toMatchObject({
+      state: 'handshake-failed',
+      reason: 'instance-invalid',
+      message: expect.stringContaining('损坏'),
+    })
+  })
+
+  it('instance 宽限内自愈后再次残缺会重新计时', async () => {
+    let now = 1_000
+    const readInstance = vi.fn()
+      .mockRejectedValueOnce(new SyntaxError('Unexpected end of JSON input'))
+      .mockResolvedValueOnce(instance())
+      .mockRejectedValueOnce(new SyntaxError('Unexpected end of JSON input'))
+    const fetchMock = vi.fn(async () => Response.json({ version: '1.0.0', attachProtocolVersion: 1 }))
+    const engine = new EngineConnection(
+      { engineUrl: 'http://127.0.0.1:8080', autoLaunch: false },
+      logger,
+      undefined,
+      dependencies({ fetch: fetchMock, now: () => now, readInstance }),
+    )
+
+    await expect(engine.status()).resolves.toMatchObject({
+      state: 'starting', reason: 'instance-invalid',
+    })
+    now += 5_000
+    await expect(engine.status()).resolves.toMatchObject({ state: 'online' })
+    now += 5_001
+    await expect(engine.status()).resolves.toMatchObject({
+      state: 'starting', reason: 'instance-invalid',
+    })
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('instance 缺失不受宽限影响，status 立即降级为 offline', async () => {
+    const fetchMock = vi.fn()
+    let now = 1_000
+    const engine = new EngineConnection(
+      { engineUrl: 'http://127.0.0.1:8080', autoLaunch: false },
+      logger,
+      undefined,
+      dependencies({
+        fetch: fetchMock,
+        now: () => now,
         readInstance: async () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) },
       }),
     )
+    await expect(engine.status()).resolves.toMatchObject({
+      state: 'offline', reason: 'instance-missing', message: expect.stringContaining('未找到'),
+    })
+    now += 10_001
     await expect(engine.status()).resolves.toMatchObject({
       state: 'offline', reason: 'instance-missing', message: expect.stringContaining('未找到'),
     })

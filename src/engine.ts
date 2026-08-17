@@ -13,6 +13,7 @@ import { qingjianUnavailableMessage } from './onboarding.js'
 const ATTACH_PROTOCOL_VERSION = 1
 const INITIAL_RETRY_MS = 5_000
 const MAX_RETRY_MS = 30_000
+const INSTANCE_INVALID_GRACE_MS = 10_000
 
 interface EngineInstance {
   schemaVersion: number
@@ -41,6 +42,7 @@ export interface EngineDependencies {
   isProcessAlive: (pid: number) => boolean
   launch: (command: string, cwd: string | undefined, logger: Logger) => void
   wait: (milliseconds: number, signal: AbortSignal) => Promise<void>
+  now?: () => number
 }
 
 export class EngineHttpError extends Error {
@@ -148,6 +150,7 @@ const defaultDependencies: EngineDependencies = {
     child.unref()
   },
   wait,
+  now: Date.now,
 }
 
 /** 可注入依赖的连接器让 401 降级、离线和自启动路径可被单测覆盖。 */
@@ -156,6 +159,7 @@ export class EngineConnection {
   private launchPromise?: Promise<EngineStatusSnapshot>
   private probePromise?: Promise<EngineStatusSnapshot>
   private monitorPromise?: Promise<void>
+  private instanceInvalidSince?: number
   private readonly controller = new AbortController()
   private lastStatus?: EngineStatusSnapshot
   private clientInstallation: QingjianClientInstallation = { installed: false }
@@ -206,8 +210,29 @@ export class EngineConnection {
 
   private async reloadInstance(): Promise<EngineInstance> {
     const instance = parseInstance(await this.dependencies.readInstance(this.instancePath()))
+    this.instanceInvalidSince = undefined
     this.instance = instance
     return instance
+  }
+
+  private instanceReadFailureStatus(error: unknown): EngineStatusSnapshot {
+    const reason = instanceReadFailureReason(error)
+    if (reason === 'instance-missing') {
+      this.instanceInvalidSince = undefined
+      return disconnectedStatus(this.baseUrl(), reason, instanceReadFailureMessage(reason))
+    }
+
+    const now = this.dependencies.now?.() ?? Date.now()
+    this.instanceInvalidSince ??= now
+    if (now - this.instanceInvalidSince < INSTANCE_INVALID_GRACE_MS) {
+      return {
+        state: 'starting',
+        engineUrl: this.baseUrl(),
+        reason,
+        message: '青简实例信息正在写入，等待完成…',
+      }
+    }
+    return disconnectedStatus(this.baseUrl(), reason, instanceReadFailureMessage(reason))
   }
 
   async status(timeoutMs = 1_500): Promise<EngineStatusSnapshot> {
@@ -222,8 +247,7 @@ export class EngineConnection {
     try {
       instance = await this.reloadInstance()
     } catch (error) {
-      const reason = instanceReadFailureReason(error)
-      return this.publish(disconnectedStatus(this.baseUrl(), reason, instanceReadFailureMessage(reason)))
+      return this.publish(this.instanceReadFailureStatus(error))
     }
     if (instance.attachProtocolVersion !== ATTACH_PROTOCOL_VERSION) {
       return this.publish(handshakeFailure(
@@ -247,8 +271,7 @@ export class EngineConnection {
         try {
           instance = await this.reloadInstance()
         } catch (error) {
-          const reason = instanceReadFailureReason(error)
-          return this.publish(disconnectedStatus(this.baseUrl(), reason, instanceReadFailureMessage(reason)))
+          return this.publish(this.instanceReadFailureStatus(error))
         }
         response = await this.healthFetch(instance.token, signal)
       }
@@ -363,10 +386,7 @@ export class EngineConnection {
     try {
       instance = this.instance ?? await this.reloadInstance()
     } catch (error) {
-      const reason = instanceReadFailureReason(error)
-      throw new EngineUnavailableError(this.publish(
-        disconnectedStatus(this.baseUrl(), reason, instanceReadFailureMessage(reason)),
-      ))
+      throw new EngineUnavailableError(this.publish(this.instanceReadFailureStatus(error)))
     }
     let response: Response
     try {
@@ -381,10 +401,7 @@ export class EngineConnection {
       try {
         instance = await this.reloadInstance()
       } catch (error) {
-        const reason = instanceReadFailureReason(error)
-        throw new EngineUnavailableError(this.publish(
-          disconnectedStatus(this.baseUrl(), reason, instanceReadFailureMessage(reason)),
-        ))
+        throw new EngineUnavailableError(this.publish(this.instanceReadFailureStatus(error)))
       }
       try {
         response = await request(instance.token)

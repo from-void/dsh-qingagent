@@ -130,7 +130,7 @@ describe('青简启动探测与自愈状态机', () => {
     }, logger, onStatus, deps)
   }
 
-  it('覆盖未安装、已连接、握手失败各态，并可从失败恢复', async () => {
+  it('覆盖未安装、启动宽限、已连接、握手失败各态，并可从失败恢复', async () => {
     const seen: EngineStatusSnapshot[] = []
     const engine = connection((status) => seen.push(status))
 
@@ -140,7 +140,7 @@ describe('青简启动探测与自愈状态机', () => {
 
     await writeFile(instancePath, '{not-json', 'utf8')
     await expect(engine.status()).resolves.toMatchObject({
-      state: 'handshake-failed', reason: 'instance-invalid', message: expect.stringContaining('损坏'),
+      state: 'starting', reason: 'instance-invalid', message: expect.stringContaining('正在写入'),
     })
 
     await writeInstance()
