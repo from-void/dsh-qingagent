@@ -39,7 +39,7 @@ const textBlock = (text: string) => [{ type: 'text' as const, text }]
 
 const REVIEW_END_MESSAGE = '改动已提交审阅，右侧面板等待用户逐处裁决。本回合结束——不要重写、不要读稿复核、不要自动裁决'
 const REVIEW_REPEAT_ERROR = '本回合已裁决过一次，禁止连环裁决；等待用户指示'
-const REVIEW_PENDING_ERROR = '文稿正在审阅中。注意:当前待审内容可能来自其他会话或此前轮次的提案,并非你刚才的修改——严禁把它描述成自己的改写,也不得代为提交或放弃他人待审稿。先用 ask_user 向用户说明待审稿的存在与可能来源,经用户明确授权后才可处置。'
+const REVIEW_PENDING_ERROR = '文稿正在审阅中。待审内容可能是你此前轮次提交的,也可能来自其他会话——不要断言归属。先用 ask_user 向用户说明存在待审稿,经用户明确授权后才可处置;不得代为提交或放弃。'
 const STR_REPLACE_PLAIN_TEXT_ERROR = 'old 必须是纯文本内容,不要带 ## 等 markdown 标记'
 const STR_REPLACE_LINES_NOTICE = '注意:strReplace 的 old 用纯文本,不要带行首 ## - 等标记。'
 // 局部 op 只接受纯文本/Markdown;QingML/HTML 原始标签会被当普通文字刻进正文(用户实测颜色事故)。
@@ -71,6 +71,18 @@ function docStateLine(state: string, docVersion: number, patchCount?: number): s
   return state === 'pendingReview'
     ? `【文稿状态】审阅中·${patchCount !== undefined ? `${patchCount} 处` : ''}待用户裁决(基线 v${docVersion})。`
     : `【文稿状态】已落库生效 v${docVersion},无待审稿。`
+}
+
+const DOC_STATE_LABELS: Record<string, string> = {
+  pendingReview: '审阅中(待用户裁决)',
+  editing: '已落库生效',
+  empty: '空文稿',
+  offline: '引擎离线',
+  unavailable: '暂不可读',
+}
+
+function docStateLabel(state: string): string {
+  return DOC_STATE_LABELS[state] ?? '暂不可读'
 }
 
 function focusSuffix(services: ToolServices, dshSessionId: string): string {
@@ -507,7 +519,7 @@ function editDraftTool(services: ToolServices) {
 function reviewCommitTool(services: ToolServices, reviewTurns: ReviewTurnTracker) {
   return defineTool({
     name: 'qing_review_commit',
-    description: '全量接受或拒绝青简文稿的待审变更。仅当用户在原话中明确授权（如“直接改不用问”“全部接受”“全部放弃”）才可调用；默认必须让用户逐处裁决。审阅中收到新的修改指令时，先用 ask_user 征询用户如何处理当前待审稿，禁止擅自 accept_all/reject_all。同一 DSH 会话回合最多调用一次。docRef 省略时使用活跃文稿。',
+    description: '全量接受或拒绝青简文稿的待审变更。仅当用户在原话中明确授权（如“直接改不用问”“全部接受”“全部放弃”）才可调用；默认必须让用户逐处裁决。审阅中收到新的修改指令时，先调 qing_list_docs 确认文稿仍在审阅中，确认后用 ask_user 征询用户如何处理当前待审稿，禁止擅自 accept_all/reject_all。同一 DSH 会话回合最多调用一次。docRef 省略时使用活跃文稿。',
     parameters: {
       docRef: { type: 'string', description: '青简会话 ID；省略时处理当前激活文稿。' },
       action: { type: 'string', enum: ['accept_all', 'reject_all'], required: true, description: 'accept_all 全部接受；reject_all 全部拒绝。' },
@@ -554,7 +566,7 @@ function reviewCommitTool(services: ToolServices, reviewTurns: ReviewTurnTracker
       if (before.state !== 'pendingReview') {
         return {
           status: 'no_pending_review' as const,
-          message: `【文稿状态】已落库 v${before.docVersion},当前无待审稿——此前的审阅已由用户在面板处理完毕。不要再次询问如何处置待审稿,直接按用户最新指令继续。${focusSuffix(services, dshSessionId)}`,
+          message: `【文稿状态】已落库生效 v${before.docVersion},当前无待审稿——此前的审阅已由用户在面板处理完毕。不要再次询问如何处置待审稿,直接按用户最新指令继续。${focusSuffix(services, dshSessionId)}`,
           engineSessionId,
           title: beforeTitle,
           acceptedCount: 0,
@@ -707,6 +719,7 @@ function listDocsTool(services: ToolServices) {
                 title: { type: 'string', required: true },
                 active: { type: 'boolean', required: true },
                 state: { type: 'string', required: true },
+                docVersion: { type: 'integer' },
                 createdAt: { type: 'string', required: true },
                 bound: { type: 'boolean', description: 'library 模式下:是否已绑定到本会话。' },
               },
@@ -714,9 +727,18 @@ function listDocsTool(services: ToolServices) {
           },
         },
       },
-      render: (args, value) => textBlock(value.docs.length
-        ? `青简引擎：${value.engine}\n${value.docs.map((doc) => `${doc.active ? '→' : ' '} ${doc.title}｜${doc.state}｜${doc.engineSessionId}${doc.bound === false ? '｜未绑定(可用 qing_focus_doc 收养)' : ''}`).join('\n')}`
-        : `青简引擎：${value.engine}\n${args.scope === 'library' ? '文库暂无文稿。' : '当前会话还没有绑定文稿。'}`),
+      render: (args, value) => {
+        const active = args.scope !== 'library'
+          ? value.docs.find((doc) => doc.active && typeof doc.docVersion === 'number')
+          : undefined
+        return textBlock([
+          `青简引擎：${value.engine}`,
+          ...(active ? [docStateLine(active.state, active.docVersion!)] : []),
+          value.docs.length
+            ? value.docs.map((doc) => `${doc.active ? '→' : ' '} ${doc.title}｜${docStateLabel(doc.state)}｜${doc.engineSessionId}${doc.bound === false ? '｜未绑定(可用 qing_focus_doc 收养)' : ''}`).join('\n')
+            : args.scope === 'library' ? '文库暂无文稿。' : '当前会话还没有绑定文稿。',
+        ].join('\n'))
+      },
       presentationMeta: (args, value) => ({ count: value.docs.length, scope: args.scope ?? 'session' }),
     },
     presentCall: (args) => ({ card: 'generic', title: args.scope === 'library' ? '查看青简文库' : '查看青简文稿', kind: 'read' }),
@@ -744,15 +766,23 @@ function listDocsTool(services: ToolServices) {
       }
       const docs = await Promise.all(binding.docs.map(async (bound) => {
         let state = 'offline'
+        let docVersion: number | undefined
         if (engine.state === 'online') {
           try {
-            state = (await readDoc(services.engine, bound.engineSessionId)).state
+            const current = await readDoc(services.engine, bound.engineSessionId)
+            state = current.state
+            docVersion = current.docVersion
           } catch (error) {
             if (error instanceof EngineUnavailableError) throw error
             state = 'unavailable'
           }
         }
-        return { ...bound, active: bound.engineSessionId === binding.activeEngineSessionId, state }
+        return {
+          ...bound,
+          active: bound.engineSessionId === binding.activeEngineSessionId,
+          state,
+          ...(docVersion !== undefined ? { docVersion } : {}),
+        }
       }))
       return { engine: engine.state, docs }
     },
@@ -774,11 +804,14 @@ function focusDocTool(services: ToolServices) {
           engineSessionId: { type: 'string', required: true },
           title: { type: 'string', required: true },
           focused: { type: 'boolean', const: true, required: true },
+          state: { type: 'string', required: true },
+          docVersion: { type: 'integer', required: true },
           adopted: { type: 'boolean', description: '本次是否为从文库收养(跨会话)。' },
           warning: { type: 'string' },
         },
       },
       render: (_args, value) => textBlock([
+        docStateLine(value.state, value.docVersion),
         value.adopted
           ? `已从文库收养《${value.title}》(${value.engineSessionId})并切换右侧预览。`
           : `右侧预览已切换到《${value.title}》（${value.engineSessionId}）。`,
@@ -799,8 +832,15 @@ function focusDocTool(services: ToolServices) {
       const binding = services.bindings.getBinding(dshSessionId)
       if (binding.docs.some((item) => item.engineSessionId === args.docRef)) {
         const doc = await services.bindings.setActive(dshSessionId, args.docRef)
+        const current = await readDoc(services.engine, doc.engineSessionId)
         services.bridge.emit(dshSessionId, { type: 'focus-changed', engineSessionId: doc.engineSessionId })
-        return { engineSessionId: doc.engineSessionId, title: doc.title, focused: true as const }
+        return {
+          engineSessionId: doc.engineSessionId,
+          title: doc.title,
+          focused: true as const,
+          state: current.state,
+          docVersion: current.docVersion,
+        }
       }
       // 收养路径(P40,K3 定案):先按 ID 探测引擎确有此稿;未命中再按标题精确匹配,须唯一——
       // 模糊匹配是误收养的最大事故面,多命中一律报错并列候选让用户选。
@@ -824,13 +864,16 @@ function focusDocTool(services: ToolServices) {
         throw new Error('未找到该文稿:既不是本会话绑定稿,ID/标题在文库中也未精确命中。先用 qing_list_docs scope:"library" 查看文库。')
       }
       const doc = await services.bindings.adoptDoc(dshSessionId, target.id, target.title)
+      const current = await readDoc(services.engine, doc.engineSessionId)
       services.bridge.emit(dshSessionId, { type: 'focus-changed', engineSessionId: doc.engineSessionId })
       return {
         engineSessionId: doc.engineSessionId,
         title: doc.title,
         focused: true as const,
+        state: current.state,
+        docVersion: current.docVersion,
         adopted: true,
-        ...(target.state === 'pendingReview'
+        ...(current.state === 'pendingReview'
           ? { warning: '该稿有待审内容,可能来自其他会话——不得代为提交/放弃,先向用户说明。' }
           : {}),
       }
