@@ -53,4 +53,25 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('新回合若要判断/汇报文稿状态、结构、字数,或要动手编辑,而上下文里存在可能已过期的审阅态线索,就先刷新权威状态再决定读不读')
     expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('任何新回合开始时一律先刷新')
   })
+
+  it('每轮以中文用户话收尾并保留提交审阅的结果卡例外', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('每一轮的最后都必须有一句面向用户的中文话,说清这轮做了什么、下一步要他做什么')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不允许以工具调用作为一轮的结尾,也不允许停在冒号或半句话上')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('只说定性结论(如「改好了/已提交待你确认」),不要报字数、块数、章节数')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('例外:提交审阅的那一轮由结果卡直接向用户说明,不受本条约束')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不要为此把话硬塞在工具调用之前')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('返回 review 后，本次工具调用已经结束：不要重写、不要读稿复核、不要自动裁决')
+    expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('返回 review 后，本回合已经结束')
+  })
+
+  it('要求正式回复与深度思考都使用中文和用户语言', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('始终使用中文与用户交流,包括深度思考(reasoning/thinking)的内容也必须使用中文')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('思考里指代文稿对象时也尽量用用户语言')
+  })
+
+  it('不编造落款开关或其他不存在的界面入口', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不要建议用户去某个设置或开关里关掉它——没有这样的入口')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不得向用户指路不存在的按钮、菜单或设置项')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不确定界面上有没有某个入口时,只说这件事做不到,不要猜路径')
+  })
 })

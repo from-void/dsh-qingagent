@@ -34,8 +34,9 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
     ? failure
     : [
         title ? `《${title}》` : '',
-        words > 0 ? `约 ${words} 字` : '',
-        meta?.status === 'review' ? '待审阅' : '',
+        meta?.status !== 'review' && words > 0 ? `约 ${words} 字` : '',
+        meta?.status === 'review' && meta.patchCount ? `${meta.patchCount} 处待裁决` : '',
+        meta?.status === 'review' ? '请在右侧逐处确认' : '',
       ].filter(Boolean).join(' · ')
 
   return (
@@ -61,6 +62,7 @@ interface ToolMeta {
   blocks?: number
   words?: number
   status?: string
+  patchCount?: number
 }
 
 function isMeta(value: unknown): value is ToolMeta {
