@@ -10,6 +10,7 @@ import { registerTools } from '../src/tools.js'
 
 const DRAFT_ONE = '<title>测试稿</title><h1>开篇</h1><p>第一版正文。</p>'
 const DRAFT_TWO = '<title>测试稿</title><h1>开篇</h1><p>修正后的正文。</p>'
+const EMPTY_DRAFT = '<title>测试稿</title><h1>测试稿</h1>'
 
 function doc(overrides: Partial<ExternalDoc> = {}): ExternalDoc {
   return {
@@ -171,6 +172,63 @@ describe('qing_write_draft', () => {
     expect(result).toMatchObject({ status: 'committed', engineSessionId: 'qing-1', title: '测试稿', blocks: 2 })
     expect(fixture.stream).toHaveBeenCalledOnce()
     expect(fixture.events.at(-1)?.event.type).toBe('doc-committed')
+  })
+
+  it('首次只有标题时换 generation 纠正一次,并用第二次 generation 发送终态', async () => {
+    let proposed = false
+    const fixture = harness([EMPTY_DRAFT, DRAFT_TWO], async (path, init) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return proposed ? doc({ docVersion: 1, state: 'editing', qingml: DRAFT_TWO, title: '测试稿' }) : doc()
+      }
+      if (path.endsWith('/proposals')) {
+        proposed = true
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          expectedDocVersion: 0,
+          ops: [{ kind: 'qingmlDraft', qingml: DRAFT_TWO }],
+        })
+        return { status: 'committed', docVersion: 1 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    await expect(fixture.tools.get('qing_write_draft')!.execute({ brief: '写一篇测试稿' }, exec()))
+      .resolves.toMatchObject({ status: 'committed', blocks: 2 })
+
+    expect(fixture.stream).toHaveBeenCalledTimes(2)
+    expect(JSON.stringify(fixture.requests[1])).toContain('上一次只产出了标题、缺少正文')
+    expect(JSON.stringify(fixture.requests[1])).not.toContain('上一次 QingML 被青简拒绝')
+    const draftStarts = fixture.events
+      .filter(({ event }) => event.type === 'draft-started')
+      .map(({ event }) => event.type === 'draft-started' ? event.generation : '')
+    expect(draftStarts).toEqual([expect.any(String), expect.any(String)])
+    expect(draftStarts[1]).not.toBe(draftStarts[0])
+    expect(fixture.events.filter(({ event }) =>
+      event.type === 'draft-started' || event.type === 'doc-committed').map(({ event }) => event.type))
+      .toEqual(['draft-started', 'draft-started', 'doc-committed'])
+    expect(fixture.events.find(({ event }) => event.type === 'doc-committed')?.event)
+      .toMatchObject({ generation: draftStarts[1] })
+  })
+
+  it('连续两次只有标题时报错且绝不提案落库', async () => {
+    let proposals = 0
+    const fixture = harness([EMPTY_DRAFT, EMPTY_DRAFT], async (path) => {
+      if (path.endsWith('/doc?format=qingml')) return doc()
+      if (path.endsWith('/proposals')) {
+        proposals += 1
+        throw new Error('不应提交空壳提案')
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    await expect(fixture.tools.get('qing_write_draft')!.execute({ brief: '写一篇测试稿' }, exec()))
+      .rejects.toThrow('侧模型修正后仍只返回标题,缺少正文块,未提交文稿')
+    expect(fixture.stream).toHaveBeenCalledTimes(2)
+    expect(proposals).toBe(0)
+    const draftStarts = fixture.events
+      .filter(({ event }) => event.type === 'draft-started')
+      .map(({ event }) => event.type === 'draft-started' ? event.generation : '')
+    expect(fixture.events.find(({ event }) => event.type === 'draft-failed')?.event)
+      .toMatchObject({ generation: draftStarts[1] })
   })
 
   it('400 diagnostic 恰好纠错一次，第二次 prompt 含修正段', async () => {
