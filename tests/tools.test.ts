@@ -331,8 +331,10 @@ describe('qing_write_draft', () => {
     expect(new Set(generationEvents.map(({ event }) => 'generation' in event ? event.generation : undefined)).size).toBe(1)
     expect(fixture.tools.get('qing_write_draft')!.output?.render({}, result as never)).toEqual([{
       type: 'text',
-      text: '【文稿状态】审阅中·1 处待用户裁决(基线 v1)。\n改动已提交审阅，右侧面板等待用户逐处裁决。本回合结束——不要重写、不要读稿复核、不要自动裁决',
+      text: '【文稿状态】审阅中·1 处待用户裁决(基线 v1)。\n改动已提交审阅，右侧面板等待用户逐处裁决。本次工具调用结束——不要重写、不要读稿复核、不要自动裁决；仍要用一句话告诉用户本轮做了什么、下一步做什么（提交审阅时由结果卡直接说明）',
     }])
+    expect(fixture.tools.get('qing_write_draft')!.output?.presentationMeta?.({}, result as never))
+      .toMatchObject({ status: 'review', patchCount: 1 })
   })
 
   it('失败也清理 host 选段，并在失败卡提取首行原因摘要', async () => {
@@ -499,6 +501,16 @@ describe('qing_edit_draft', () => {
     expect(tool.description).toContain('两者必须在同一次 ops 里一起提交,文字保持一致')
     expect(tool.description).toContain('正文没有大标题块时,用 insertAfterLine 在文首补一个与稿名一致的「# 标题」一级标题')
     expect(JSON.stringify(tool.parameters)).toContain('改标题时必须在同一次 ops 里一起提交正文标题同步操作')
+  })
+
+  it('描述明确同批行号逐 op 推进、多行块与块级锚点约束', () => {
+    const fixture = harness([], async () => { throw new Error('不应访问引擎') })
+    const description = fixture.tools.get('qing_edit_draft')!.description
+    expect(description).toContain('同一批 ops 里一旦有插入或删除,其后所有行号都会整体偏移')
+    expect(description).toContain('改用 insertAfterBlock 这类块级锚点(不受行号偏移影响),或留到下一回合重读后再改')
+    expect(description).toContain('命中待办清单、表格、嵌套列表这类多行块时,优先用 insertAfterBlock 等项级/块级 op')
+    expect(description).toContain('例外:指向多行块的最后一行是合法的,语义是插到整块之后(不是块内)')
+    expect(description).toContain('想在清单尾部追加子项时别用它,那会插到清单外面')
   })
 
   it('schema 接受全部合法 markText 标记与受控色板，拒绝任意 CSS 色值', () => {
@@ -720,6 +732,7 @@ describe('qing_edit_draft', () => {
       status: 'review', reviewCount: 3,
       message: expect.stringContaining('改动已提交审阅，右侧面板等待用户逐处裁决'),
     })
+    expect((result as { message: string }).message).toContain('仍要用一句话告诉用户')
     expect(context.concludeTurn).toHaveBeenCalledOnce()
     expect(fixture.bridge.clearSelection).toHaveBeenCalledWith('dsh-1')
     expect(fixture.events.at(-1)?.event).toMatchObject({ type: 'doc-review-pending', count: 3, blocks: 2 })

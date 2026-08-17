@@ -91,6 +91,7 @@ export const QingEditToolCard = createQingToolCard({
   summary: (meta) => [
     titled(meta),
     meta.status === 'review' && meta.reviewCount ? `${meta.reviewCount} 处待裁决` : '',
+    meta.status === 'review' ? '请在右侧逐处确认' : '',
   ].filter(Boolean).join(' · '),
 })
 
