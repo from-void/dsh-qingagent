@@ -39,6 +39,7 @@ function instance(overrides: Record<string, unknown> = {}) {
 describe('EngineConnection', () => {
   it.each([
     [409, { error: '还有修改未裁决', code: 'REVIEW_PENDING', nextStep: '先处理审阅' }, '审阅待处理：还有修改未裁决（先处理审阅）'],
+    [409, { error: '还有修改未裁决', code: 'REVIEW_PENDING' }, '审阅待处理：还有修改未裁决（待审稿归属不明,先向用户说明其存在;仅在用户明确授权后才可 qing_review_commit,不得代为处置）'],
     [409, { error: 'AGENT_BUSY', code: 'AGENT_BUSY', nextStep: '稍后再试' }, '青简正在处理其他任务（稍后再试）'],
     [409, { error: '版本已变化', code: 'VERSION_CONFLICT', nextStep: '重新读取文稿' }, '文稿版本冲突：版本已变化（重新读取文稿）'],
     [404, { error: 'missing' }, '青简会话或资源不存在：missing（请用 qing_list_docs 重新确认文稿引用，不要重试原引用）'],

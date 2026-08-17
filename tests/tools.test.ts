@@ -236,7 +236,7 @@ describe('qing_write_draft', () => {
     })
 
     await expect(fixture.tools.get('qing_write_draft')!.execute({ brief: '覆盖重写', docRef: 'qing-1' }, exec()))
-      .rejects.toThrow('文稿正在审阅中')
+      .rejects.toThrow('文稿正在审阅中。待审内容可能是你此前轮次提交的,也可能来自其他会话——不要断言归属。先用 ask_user 向用户说明存在待审稿,经用户明确授权后才可处置;不得代为提交或放弃。')
     expect(fixture.stream).not.toHaveBeenCalled()
   })
 
@@ -334,7 +334,10 @@ describe('qing_review_commit', () => {
     })
 
     await expect(fixture.tools.get('qing_review_commit')!.execute({ action: 'reject_all' }, exec()))
-      .resolves.toMatchObject({ status: 'no_pending_review', message: expect.stringContaining('当前无待审稿') })
+      .resolves.toMatchObject({
+        status: 'no_pending_review',
+        message: expect.stringContaining('【文稿状态】已落库生效 v0,当前无待审稿'),
+      })
   })
 
   it('同一 agent 回合第二次调用在访问引擎前硬拦截', async () => {
@@ -369,6 +372,7 @@ describe('qing_review_commit', () => {
     await expect(tool.execute({ action: 'accept_all' }, exec(undefined, 'third-root', 'qing_review_commit')))
       .resolves.toMatchObject({ status: 'no_pending_review' })
     expect(tool.description).toContain('ask_user')
+    expect(tool.description).toContain('先调 qing_list_docs 确认文稿仍在审阅中')
     expect(tool.description).toContain('直接改不用问')
   })
 })
@@ -694,6 +698,70 @@ describe('qing_list_docs', () => {
     })
     const schema = tool.output?.schema as { properties?: { docs?: { items?: { properties?: Record<string, unknown> } } } }
     expect(schema.properties?.docs?.items?.properties).toHaveProperty('createdAt')
+    expect(schema.properties?.docs?.items?.properties).toHaveProperty('docVersion')
+  })
+
+  it.each([
+    ['pendingReview', 3, '【文稿状态】审阅中·待用户裁决(基线 v3)。', '审阅中(待用户裁决)'],
+    ['editing', 4, '【文稿状态】已落库生效 v4,无待审稿。', '已落库生效'],
+  ] as const)('session render 将 %s 映射为中文状态并为聚焦稿输出权威状态行', async (state, docVersion, stateLine, stateLabel) => {
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({ state, docVersion, qingml: DRAFT_ONE, title: '测试稿' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+    const tool = fixture.tools.get('qing_list_docs')!
+
+    const result = await tool.execute({}, exec(undefined, `list-${state}`, 'qing_list_docs'))
+
+    expect(tool.output?.render({}, result as never)).toEqual([{
+      type: 'text',
+      text: `青简引擎：online\n${stateLine}\n→ 测试稿｜${stateLabel}｜qing-1`,
+    }])
+  })
+
+  it('render 覆盖 empty/offline/unavailable 的中文状态词', () => {
+    const fixture = harness([], async () => { throw new Error('不应访问引擎') })
+    const tool = fixture.tools.get('qing_list_docs')!
+    const rendered = tool.output?.render({ scope: 'library' }, {
+      engine: 'online',
+      docs: [
+        { engineSessionId: 'empty-1', title: '空稿', active: false, state: 'empty', createdAt: '2026-08-15T00:00:00.000Z' },
+        { engineSessionId: 'offline-1', title: '离线稿', active: false, state: 'offline', createdAt: '2026-08-15T00:00:00.000Z' },
+        { engineSessionId: 'unavailable-1', title: '异常稿', active: false, state: 'unavailable', createdAt: '2026-08-15T00:00:00.000Z' },
+      ],
+    } as never)
+
+    expect(rendered).toEqual([{
+      type: 'text',
+      text: [
+        '青简引擎：online',
+        '  空稿｜空文稿｜empty-1',
+        '  离线稿｜引擎离线｜offline-1',
+        '  异常稿｜暂不可读｜unavailable-1',
+      ].join('\n'),
+    }])
+  })
+})
+
+describe('qing_focus_doc', () => {
+  it('切换已绑定文稿后返回并渲染目标稿权威状态行', async () => {
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({ state: 'pendingReview', docVersion: 7, qingml: DRAFT_ONE, title: '测试稿' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+    const tool = fixture.tools.get('qing_focus_doc')!
+
+    const result = await tool.execute({ docRef: 'qing-1' }, exec(undefined, 'focus-doc', 'qing_focus_doc'))
+
+    expect(result).toMatchObject({ state: 'pendingReview', docVersion: 7 })
+    expect(tool.output?.render({ docRef: 'qing-1' }, result as never)).toEqual([{
+      type: 'text',
+      text: '【文稿状态】审阅中·待用户裁决(基线 v7)。\n右侧预览已切换到《测试稿》（qing-1）。',
+    }])
   })
 })
 
