@@ -434,6 +434,15 @@ describe('qing_read_draft', () => {
 })
 
 describe('qing_edit_draft', () => {
+  it('描述要求改标题时同批同步稿名和纸面大标题', () => {
+    const fixture = harness([], async () => { throw new Error('不应访问引擎') })
+    const tool = fixture.tools.get('qing_edit_draft')!
+    expect(tool.description).toContain('正文首个大标题块用 strReplace 改')
+    expect(tool.description).toContain('两者必须在同一次 ops 里一起提交,文字保持一致')
+    expect(tool.description).toContain('正文没有大标题块时,用 insertAfterLine 在文首补一个与稿名一致的「# 标题」一级标题')
+    expect(JSON.stringify(tool.parameters)).toContain('改标题时必须在同一次 ops 里一起提交正文标题同步操作')
+  })
+
   it('schema 接受全部合法 markText 标记与受控色板，拒绝任意 CSS 色值', () => {
     const fixture = harness([], async () => { throw new Error('不应访问引擎') })
     const schema = fixture.tools.get('qing_edit_draft')!.parameters
