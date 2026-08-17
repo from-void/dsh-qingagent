@@ -287,7 +287,7 @@ function writeDraftTool(services: ToolServices) {
 function editDraftTool(services: ToolServices) {
   return defineTool({
     name: 'qing_edit_draft',
-    description: '对已有青简文稿做结构化局部修改。改标题用 setTitle 操作(标题不在正文,strReplace 打不到);删除整段/整节/清单项用 deleteBlock/deleteListItem(先 qing_read_draft mode:"blocks" 取块 ID,严禁用 strReplace 置空留残壳);改一句、插入一段或追加一节用相应操作;高亮、文字颜色、加粗一句话等行内标记用 markText,严禁为加标记用 qing_write_draft 整篇重写。markText add 会替换命中内容已有的同类型不同属性标记,同类型同属性则幂等提示;remove 仅移除属性全等的标记,调用前必须先用 qing_read_draft(mode:"blocks") 或读稿确认现有标记的确切 attrs;代码块内文本不支持行内标记;命中列表项时审阅卡会按顶层块呈现为整列表替换。strReplace 的 old/new 必须是纯文本内容，不含 ##、-、** 等 Markdown 语法标记。多处修改必须放进同一次调用的 ops 数组一次提交；逐条调用会因首条进入审阅态而被 REVIEW_PENDING 拒绝。insertAfterLine 前先调用 qing_read_draft(mode:"lines") 取得当前 Markdown 行号。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
+    description: '对已有青简文稿做结构化局部修改。改标题要同时改两处:setTitle 改稿名(元数据),正文首个大标题块用 strReplace 改(纸面上看到的标题就是它);两者必须在同一次 ops 里一起提交,文字保持一致。正文没有大标题块时,用 insertAfterLine 在文首补一个与稿名一致的「# 标题」一级标题,同样与 setTitle 同批提交。删除整段/整节/清单项用 deleteBlock/deleteListItem(先 qing_read_draft mode:"blocks" 取块 ID,严禁用 strReplace 置空留残壳);改一句、插入一段或追加一节用相应操作;高亮、文字颜色、加粗一句话等行内标记用 markText,严禁为加标记用 qing_write_draft 整篇重写。markText add 会替换命中内容已有的同类型不同属性标记,同类型同属性则幂等提示;remove 仅移除属性全等的标记,调用前必须先用 qing_read_draft(mode:"blocks") 或读稿确认现有标记的确切 attrs;代码块内文本不支持行内标记;命中列表项时审阅卡会按顶层块呈现为整列表替换。strReplace 的 old/new 必须是纯文本内容，不含 ##、-、** 等 Markdown 语法标记。多处修改必须放进同一次调用的 ops 数组一次提交；逐条调用会因首条进入审阅态而被 REVIEW_PENDING 拒绝。insertAfterLine 前先调用 qing_read_draft(mode:"lines") 取得当前 Markdown 行号。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
     parameters: {
       docRef: { type: 'string', description: '要局部修改的青简会话 ID；省略时使用当前激活文稿。' },
       ops: {
@@ -420,7 +420,7 @@ function editDraftTool(services: ToolServices) {
               additionalProperties: false,
               properties: {
                 kind: { type: 'string', const: 'setTitle', required: true },
-                title: { type: 'string', required: true, description: '新标题;引擎约束:去空白后 1-48 字,同一批最多一个 setTitle,不与整篇 draft 混用。' },
+                title: { type: 'string', required: true, description: '新标题;引擎约束:去空白后 1-48 字,同一批最多一个 setTitle,不与整篇 draft 混用。改标题时必须在同一次 ops 里一起提交正文标题同步操作:已有大标题用 strReplace,没有大标题则用 insertAfterLine 在文首补「# 标题」。' },
               },
             },
           ],

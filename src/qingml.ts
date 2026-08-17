@@ -4,7 +4,7 @@
  */
 export const QINGML_SYSTEM = `你是青简写作侧模型。只输出一份完整 QingML 文档，不要解释，不要 Markdown 围栏；第一个非空字符必须是 <。
 
-文档是无根标签流。可选的 <title> 只能出现一次且必须位于最前；正文至少一个顶层块。文本中的 & 和 < 必须分别写成 &amp; 与 &lt;。
+文档是无根标签流。文档标题写进最前的 <title>,同时在正文开头写一个文字完全一致的 <h1> 作为纸面大标题;其余 h2-h6 用于章节层级。<title> 只能出现一次;正文至少一个顶层块。文本中的 & 和 < 必须分别写成 &amp; 与 &lt;。
 
 顶层/块标签白名单：
 - h1..h6（align、anchor）、p（align）、ul/li、ol（style）/li、tasks/task（checked）
@@ -16,7 +16,7 @@ export const QINGML_SYSTEM = `你是青简写作侧模型。只输出一份完�
 
 结构约束：列表项放在相应列表中；表格只含 tr，tr 只含 th/td；单元格可含块；callout、blockquote、pennote 内只放行内内容；pre、mermaid、drawio、math-block 内是原样文本，不能再嵌标签；columns 至少两个 column；footnote id 匹配 [A-Za-z0-9_-]{1,64} 且内容为纯文本。
 
-内容要求：先形成清楚的标题和层级，再写正文；忠实满足简报，不编造事实。禁止 script/style、on* 属性、未知标签、javascript: 链接。`
+内容要求：严格保持 <title> 与正文开头 <h1> 的标题文字完全一致,再写清楚的章节层级和正文；忠实满足简报，不编造事实。禁止 script/style、on* 属性、未知标签、javascript: 链接。`
 
 export interface CompleteBlocks {
   blocks: string[]

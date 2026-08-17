@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { completeTopLevelBlocks, countWords, outlineOf } from '../src/qingml.js'
+import { QINGML_SYSTEM, completeTopLevelBlocks, countWords, outlineOf } from '../src/qingml.js'
 
 describe('QingML 流边界与摘要', () => {
+  it('要求元数据标题与正文纸面大标题双写且文字一致', () => {
+    expect(QINGML_SYSTEM).toContain('文档标题写进最前的 <title>')
+    expect(QINGML_SYSTEM).toContain('同时在正文开头写一个文字完全一致的 <h1> 作为纸面大标题')
+    expect(QINGML_SYSTEM).toContain('其余 h2-h6 用于章节层级')
+    expect(QINGML_SYSTEM).not.toContain('可选的 <title>')
+  })
+
   it('只发布已经闭合的顶层块', () => {
     const partial = '<title>题</title><h1>章</h1><p>未完成'
     expect(completeTopLevelBlocks(partial).blocks).toEqual(['<title>题</title>', '<h1>章</h1>'])
