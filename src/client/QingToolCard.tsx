@@ -14,6 +14,8 @@ export interface QingToolCardConfig {
   failedTitle: string
   /** 完成态摘要;返回空串则不渲染摘要段。 */
   summary: (meta: ToolCardMeta, snapshot: QingClientSnapshot) => string
+  /** 完成态叙述;返回空串则不渲染第二行。 */
+  narrative?: (meta: ToolCardMeta, snapshot: QingClientSnapshot) => string
   /** 运行态摘要(如写作流式字数);缺省为空。 */
   runningSummary?: (snapshot: QingClientSnapshot) => string
   /** 失败态是否隐藏「查看」按钮以外,默认所有卡都带「查看」入口(与写作卡一致)。 */
@@ -59,21 +61,25 @@ export function createQingToolCard(config: QingToolCardConfig) {
       : settled
         ? config.summary(meta, snapshot)
         : config.runningSummary?.(snapshot) ?? ''
+    const narrativeText = settled && !failed ? config.narrative?.(meta, snapshot) ?? '' : ''
 
     return (
       <div className={styles.toolCard} data-state={state}>
-        <strong className={styles.toolTitle}>
-          {failed ? config.failedTitle : settled ? config.doneTitle(meta) : config.runningTitle}
-        </strong>
-        {summaryText ? <span className={styles.separator} aria-hidden="true" /> : null}
-        {summaryText ? <span className={styles.toolSummary}>{summaryText}</span> : null}
-        {!failed && config.showViewButton !== false ? (
-          <button
-            type="button"
-            className={styles.viewButton}
-            onClick={() => { qingClientStore.reopenPanel(sessionId); props.qingLayout.openDetails() }}
-          >查看</button>
-        ) : null}
+        <div className={styles.toolSummaryLine}>
+          <strong className={styles.toolTitle}>
+            {failed ? config.failedTitle : settled ? config.doneTitle(meta) : config.runningTitle}
+          </strong>
+          {summaryText ? <span className={styles.separator} aria-hidden="true" /> : null}
+          {summaryText ? <span className={styles.toolSummary}>{summaryText}</span> : null}
+          {!failed && config.showViewButton !== false ? (
+            <button
+              type="button"
+              className={styles.viewButton}
+              onClick={() => { qingClientStore.reopenPanel(sessionId); props.qingLayout.openDetails() }}
+            >查看</button>
+          ) : null}
+        </div>
+        {narrativeText ? <p className={styles.toolNarrative}>{narrativeText}</p> : null}
       </div>
     )
   }
@@ -92,10 +98,14 @@ export const QingEditToolCard = createQingToolCard({
   summary: (meta) => [
     titled(meta),
     meta.status === 'review' && meta.reviewCount ? `${meta.reviewCount} 处待裁决` : '',
-    meta.status === 'review'
-      ? meta.wholeDocReview ? '请在右侧确认是否应用新版' : '请在右侧逐处确认'
-      : '',
   ].filter(Boolean).join(' · '),
+  narrative: (meta) => {
+    if (meta.status !== 'review') return ''
+    if (meta.wholeDocReview) return '新版已写好,在右侧等你确认采用或退回。'
+    return typeof meta.reviewCount === 'number' && Number.isFinite(meta.reviewCount)
+      ? `改好了 ${meta.reviewCount} 处,都在右侧面板,逐条确认或驳回即可。`
+      : '改动已完成,都在右侧面板,逐条确认或驳回即可。'
+  },
 })
 
 export const QingReviewCommitToolCard = createQingToolCard({

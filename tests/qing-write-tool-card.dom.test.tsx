@@ -54,8 +54,8 @@ describe('QingWriteToolCard theme styles', () => {
   })
 })
 
-describe('Qing write/edit review tool card summaries', () => {
-  it('两张卡都按整篇/逐处审模式给出真实 DOM 指引，生效态不显示指引', () => {
+describe('Qing write/edit review tool card narratives', () => {
+  it('通过真实 DOM 在摘要下方渲染待审叙述，生效态不渲染第二行', () => {
     vi.stubGlobal('EventSource', FakeEventSource)
     const host = document.createElement('div')
     document.body.append(host)
@@ -73,7 +73,11 @@ describe('Qing write/edit review tool card summaries', () => {
           title: '局部修改稿', status: 'review', reviewCount: 3, wholeDocReview: false,
         }) as unknown as ComponentProps<typeof QingEditToolCard>} />,
       ))
-      expect(host.textContent).toContain('《局部修改稿》 · 3 处待裁决 · 请在右侧逐处确认')
+      expect(host.firstElementChild?.children).toHaveLength(2)
+      expect(host.querySelector('p')?.textContent)
+        .toBe('改好了 3 处,都在右侧面板,逐条确认或驳回即可。')
+      expect(host.firstElementChild?.firstElementChild?.textContent).toContain('《局部修改稿》 · 3 处待裁决')
+      expect(host.firstElementChild?.firstElementChild?.textContent).not.toContain('逐条确认')
       expect(host.textContent).not.toMatch(/\bv\d+\b|ai-block-|qing_edit_draft|字数|块/)
 
       act(() => root.render(
@@ -81,22 +85,23 @@ describe('Qing write/edit review tool card summaries', () => {
           title: '整篇修改稿', status: 'review', reviewCount: 8, wholeDocReview: true,
         }) as unknown as ComponentProps<typeof QingEditToolCard>} />,
       ))
-      expect(host.textContent).toContain('《整篇修改稿》 · 8 处待裁决 · 请在右侧确认是否应用新版')
-      expect(host.textContent).not.toContain('逐处')
+      expect(host.querySelector('p')?.textContent).toBe('新版已写好,在右侧等你确认采用或退回。')
 
       act(() => root.render(
         <QingEditToolCard {...props('edit-committed-card', {
           title: '局部修改稿', status: 'committed', reviewCount: 0,
         }) as unknown as ComponentProps<typeof QingEditToolCard>} />,
       ))
-      expect(host.textContent).not.toContain('请在右侧逐处确认')
+      expect(host.querySelector('p')).toBeNull()
 
       act(() => root.render(
         <QingWriteToolCard {...props('write-review-card', {
           title: '新稿', status: 'review', words: 688, patchCount: 2, wholeDocReview: false,
         }) as unknown as ComponentProps<typeof QingWriteToolCard>} />,
       ))
-      expect(host.textContent).toContain('《新稿》 · 2 处待裁决 · 请在右侧逐处确认')
+      expect(host.querySelector('p')?.textContent).toBe('新版已写好,在右侧等你确认采用或退回。')
+      expect(host.firstElementChild?.firstElementChild?.textContent).toContain('《新稿》 · 2 处待裁决')
+      expect(host.firstElementChild?.firstElementChild?.textContent).not.toContain('新版已写好')
       expect(host.textContent).not.toMatch(/约\s*688\s*字|\bv\d+\b|ai-block-|qing_write_draft|字数|块/)
 
       act(() => root.render(
@@ -104,15 +109,56 @@ describe('Qing write/edit review tool card summaries', () => {
           title: '整篇新稿', status: 'review', words: 688, patchCount: 9, wholeDocReview: true,
         }) as unknown as ComponentProps<typeof QingWriteToolCard>} />,
       ))
-      expect(host.textContent).toContain('《整篇新稿》 · 9 处待裁决 · 请在右侧确认是否应用新版')
-      expect(host.textContent).not.toContain('逐处')
+      expect(host.querySelector('p')?.textContent).toBe('新版已写好,在右侧等你确认采用或退回。')
 
       act(() => root.render(
         <QingWriteToolCard {...props('write-committed-card', {
           title: '新稿', status: 'committed', words: 688, patchCount: 0,
         }) as unknown as ComponentProps<typeof QingWriteToolCard>} />,
       ))
-      expect(host.textContent).not.toContain('请在右侧逐处确认')
+      expect(host.querySelector('p')).toBeNull()
+    } finally {
+      act(() => root.unmount())
+      host.remove()
+    }
+  })
+
+  it('reviewCount 缺失或非法时使用无数字降级文案，且所有叙述不含未来承诺词', () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    const props = (sessionId: string, meta: Record<string, unknown>) => ({
+      block: { kind: 'tool-result', isError: false, content: [], meta },
+      useSession: (selector: (session: { sessionId: string }) => unknown) => selector({ sessionId }),
+      qingLayout: { openDetails: vi.fn() },
+    })
+    const narratives: string[] = []
+
+    try {
+      for (const [sessionId, meta] of [
+        ['missing-count', { title: '缺计数', status: 'review', wholeDocReview: false }],
+        ['nan-count', { title: '坏计数', status: 'review', reviewCount: Number.NaN, wholeDocReview: false }],
+      ] as const) {
+        act(() => root.render(
+          <QingEditToolCard {...props(sessionId, meta) as unknown as ComponentProps<typeof QingEditToolCard>} />,
+        ))
+        const narrative = host.querySelector('p')?.textContent ?? ''
+        narratives.push(narrative)
+        expect(narrative).toBe('改动已完成,都在右侧面板,逐条确认或驳回即可。')
+        expect(host.textContent).not.toMatch(/undefined|NaN/)
+      }
+
+      act(() => root.render(
+        <QingWriteToolCard {...props('whole-review', {
+          title: '整篇稿', status: 'review', wholeDocReview: true,
+        }) as unknown as ComponentProps<typeof QingWriteToolCard>} />,
+      ))
+      narratives.push(host.querySelector('p')?.textContent ?? '')
+
+      for (const forbidden of ['再接着', '稍后', '接下来我']) {
+        expect(narratives.join('\n')).not.toContain(forbidden)
+      }
     } finally {
       act(() => root.unmount())
       host.remove()

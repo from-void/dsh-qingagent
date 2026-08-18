@@ -36,25 +36,28 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
         title ? `《${title}》` : '',
         meta?.status !== 'review' && words > 0 ? `约 ${words} 字` : '',
         meta?.status === 'review' && meta.patchCount ? `${meta.patchCount} 处待裁决` : '',
-        meta?.status === 'review'
-          ? meta.wholeDocReview ? '请在右侧确认是否应用新版' : '请在右侧逐处确认'
-          : '',
       ].filter(Boolean).join(' · ')
+  const narrativeText = settled && !failed && meta?.status === 'review'
+    ? '新版已写好,在右侧等你确认采用或退回。'
+    : ''
 
   return (
     <div className={styles.toolCard} data-state={state}>
-      <strong className={styles.toolTitle}>
-        {failed ? '青简写作未完成' : settled ? '青简文稿已生成' : '正在写作'}
-      </strong>
-      {summaryText ? <span className={styles.separator} aria-hidden="true" /> : null}
-      {summaryText ? <span className={styles.toolSummary}>{summaryText}</span> : null}
-      {!failed ? (
-        <button
-          type="button"
-          className={styles.viewButton}
-          onClick={() => { qingClientStore.reopenPanel(sessionId); props.qingLayout.openDetails() }}
-        >查看</button>
-      ) : null}
+      <div className={styles.toolSummaryLine}>
+        <strong className={styles.toolTitle}>
+          {failed ? '青简写作未完成' : settled ? '青简文稿已生成' : '正在写作'}
+        </strong>
+        {summaryText ? <span className={styles.separator} aria-hidden="true" /> : null}
+        {summaryText ? <span className={styles.toolSummary}>{summaryText}</span> : null}
+        {!failed ? (
+          <button
+            type="button"
+            className={styles.viewButton}
+            onClick={() => { qingClientStore.reopenPanel(sessionId); props.qingLayout.openDetails() }}
+          >查看</button>
+        ) : null}
+      </div>
+      {narrativeText ? <p className={styles.toolNarrative}>{narrativeText}</p> : null}
     </div>
   )
 }

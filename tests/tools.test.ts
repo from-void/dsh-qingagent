@@ -43,6 +43,15 @@ function exec(
   } as unknown as ToolRunContext
 }
 
+function expectReviewEndMessage(message: string): void {
+  expect(message).not.toContain('仍要用一句话')
+  expect(message).toContain('收尾说明由工具卡向用户展示')
+  expect(message).toContain('本回合不再产生任何输出')
+  for (const instruction of ['不要重写', '不要读稿复核', '不要自动裁决']) {
+    expect(message).toContain(instruction)
+  }
+}
+
 function harness(
   outputs: string[],
   fetchJson: (path: string, init?: RequestInit) => Promise<unknown>,
@@ -332,8 +341,10 @@ describe('qing_write_draft', () => {
     expect(new Set(generationEvents.map(({ event }) => 'generation' in event ? event.generation : undefined)).size).toBe(1)
     expect(fixture.tools.get('qing_write_draft')!.output?.render({}, result as never)).toEqual([{
       type: 'text',
-      text: '【文稿状态】审阅中·1 处待用户裁决(基线 v1)。\n改动已提交审阅，右侧面板等待用户裁决。本次工具调用结束——不要重写、不要读稿复核、不要自动裁决；仍要用一句话告诉用户本轮做了什么、下一步做什么（提交审阅时由结果卡直接说明）',
+      text: '【文稿状态】审阅中·1 处待用户裁决(基线 v1)。\n改动已提交审阅，右侧面板等待用户裁决。本次工具调用结束——不要重写、不要读稿复核、不要自动裁决；收尾说明由工具卡向用户展示，本回合不再产生任何输出。',
     }])
+    const rendered = fixture.tools.get('qing_write_draft')!.output?.render({}, result as never)
+    expectReviewEndMessage((rendered?.[0] as { text: string }).text)
     expect(fixture.tools.get('qing_write_draft')!.output?.presentationMeta?.({}, result as never))
       .toMatchObject({ status: 'review', patchCount: 1, wholeDocReview: true })
   })
@@ -733,7 +744,7 @@ describe('qing_edit_draft', () => {
       status: 'review', reviewCount: 3,
       message: expect.stringContaining('改动已提交审阅，右侧面板等待用户裁决'),
     })
-    expect((result as { message: string }).message).toContain('仍要用一句话告诉用户')
+    expectReviewEndMessage((result as { message: string }).message)
     expect(context.concludeTurn).toHaveBeenCalledOnce()
     expect(fixture.bridge.clearSelection).toHaveBeenCalledWith('dsh-1')
     expect(fixture.events.at(-1)?.event).toMatchObject({ type: 'doc-review-pending', count: 3, blocks: 2 })
