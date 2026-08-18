@@ -60,4 +60,24 @@ describe('DocStateCache', () => {
       content: [{ type: 'text', text: '【文稿状态】已落库生效,无待审稿。' }],
     })
   })
+
+  // 注入是追加到消息末尾、不改前缀,所以重复注入不会掉缓存命中率,但会白占 token。
+  // 与 DSH runtimeContext.project() 同口径:内容相同就不发。
+  it('同一 agent 上重复注入相同状态只发一次,内容变了才再发', () => {
+    const inject = vi.fn()
+    const agent = { id: 'dsh-2', inject } as unknown as Agent
+    const same = '【文稿状态】已落库生效,无待审稿。'
+
+    injectDocState(agent, same)
+    injectDocState(agent, same)
+    injectDocState(agent, same)
+    expect(inject).toHaveBeenCalledOnce()
+
+    injectDocState(agent, '【文稿状态】有 3 处待裁决。')
+    expect(inject).toHaveBeenCalledTimes(2)
+
+    // 变回原文本也算变化,应当再发一次(否则模型会停留在旧状态)
+    injectDocState(agent, same)
+    expect(inject).toHaveBeenCalledTimes(3)
+  })
 })

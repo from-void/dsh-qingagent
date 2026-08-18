@@ -106,8 +106,17 @@ export class AgentIndex {
   }
 }
 
+/**
+ * 上次注入过的状态行,按 agent 记。内容没变就不再注入——DSH 的 runtimeContext.project()
+ * 对同名快照就是这个口径(`if (this.retained?.text === snapshot) return`),我们没理由更啰嗦。
+ * 注入是**追加到消息末尾**、不改前缀,所以这里省的是冗余 token,不是缓存命中率。
+ */
+const lastInjected = new WeakMap<Agent, string>()
+
 export function injectDocState(agent: Agent | undefined, text: string): void {
   if (!agent || typeof agent.inject !== 'function') return
+  if (lastInjected.get(agent) === text) return
+  lastInjected.set(agent, text)
   agent.inject(createUserMessage({
     content: [{ type: 'text', text }],
     source: { kind: 'plugin', plugin: 'dsh-qingagent' },
