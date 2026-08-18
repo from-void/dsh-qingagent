@@ -71,6 +71,7 @@ async function loadPendingReviewSnapshot(
 
 afterEach(() => {
   document.head.replaceChildren()
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -99,6 +100,174 @@ describe('QingWriteToolCard theme styles', () => {
     const variables = [...stylesheet.matchAll(/var\(\s*(--[\w-]+)/g)].map((match) => match[1])
     expect(variables.length).toBeGreaterThan(0)
     expect(variables.every((variable) => variable?.startsWith('--dsw-'))).toBe(true)
+  })
+})
+
+describe('Qing write/edit tool card view navigation', () => {
+  const props = (sessionId: string, meta: Record<string, unknown>, openDetails = vi.fn()) => ({
+    block: { kind: 'tool-result', isError: false, content: [], meta },
+    useSession: (selector: (session: { sessionId: string }) => unknown) => selector({ sessionId }),
+    qingLayout: { openDetails },
+  })
+
+  function stubBackgroundLoads(): void {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
+  }
+
+  it('meta 带 engineSessionId 时打开面板并聚焦对应文稿', () => {
+    stubBackgroundLoads()
+    const focus = vi.spyOn(qingClientStore, 'focus').mockResolvedValue()
+    const reopenPanel = vi.spyOn(qingClientStore, 'reopenPanel')
+    const openDetails = vi.fn()
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+
+    try {
+      act(() => root.render(
+        <QingWriteToolCard {...props('view-write-card', {
+          engineSessionId: 'qing-write-x', title: 'X', words: 128,
+        }, openDetails) as unknown as ComponentProps<typeof QingWriteToolCard>} />,
+      ))
+      act(() => host.querySelector('button')?.click())
+
+      expect(reopenPanel).toHaveBeenCalledWith('view-write-card')
+      expect(openDetails).toHaveBeenCalledOnce()
+      expect(focus).toHaveBeenCalledWith('view-write-card', 'qing-write-x')
+    } finally {
+      act(() => root.unmount())
+      host.remove()
+    }
+  })
+
+  it('旧卡 meta 无 engineSessionId 时只打开面板且不抛错', () => {
+    stubBackgroundLoads()
+    const focus = vi.spyOn(qingClientStore, 'focus').mockResolvedValue()
+    const reopenPanel = vi.spyOn(qingClientStore, 'reopenPanel')
+    const openDetails = vi.fn()
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+
+    try {
+      act(() => root.render(
+        <QingEditToolCard {...props('view-legacy-card', {
+          title: '旧稿', status: 'committed', reviewCount: 0,
+        }, openDetails) as unknown as ComponentProps<typeof QingEditToolCard>} />,
+      ))
+      expect(() => act(() => host.querySelector('button')?.click())).not.toThrow()
+
+      expect(reopenPanel).toHaveBeenCalledWith('view-legacy-card')
+      expect(openDetails).toHaveBeenCalledOnce()
+      expect(focus).not.toHaveBeenCalled()
+    } finally {
+      act(() => root.unmount())
+      host.remove()
+    }
+  })
+
+  it('两张卡分别聚焦各自 meta 对应的文稿', () => {
+    stubBackgroundLoads()
+    const focus = vi.spyOn(qingClientStore, 'focus').mockResolvedValue()
+    const openDetails = vi.fn()
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+
+    try {
+      act(() => root.render(<>
+        <QingWriteToolCard {...props('view-two-cards', {
+          engineSessionId: 'qing-card-x', title: 'X', words: 128,
+        }, openDetails) as unknown as ComponentProps<typeof QingWriteToolCard>} />
+        <QingEditToolCard {...props('view-two-cards', {
+          engineSessionId: 'qing-card-y', title: 'Y', status: 'committed', reviewCount: 0,
+        }, openDetails) as unknown as ComponentProps<typeof QingEditToolCard>} />
+      </>))
+      const buttons = host.querySelectorAll('button')
+      act(() => buttons[0]?.click())
+      act(() => buttons[1]?.click())
+
+      expect(focus.mock.calls).toEqual([
+        ['view-two-cards', 'qing-card-x'],
+        ['view-two-cards', 'qing-card-y'],
+      ])
+      expect(openDetails).toHaveBeenCalledTimes(2)
+    } finally {
+      act(() => root.unmount())
+      host.remove()
+    }
+  })
+
+  it('已确认删除的文稿只重开 missing 面板且不再次聚焦', async () => {
+    const sessionId = 'view-missing-card'
+    const engineSessionId = 'qing-missing-card'
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(Response.json(
+      { code: 'SESSION_NOT_FOUND', error: 'session not found' },
+      { status: 404 },
+    ))))
+    await expect(qingClientStore.refreshPanel(sessionId, engineSessionId)).rejects.toThrow()
+    stubBackgroundLoads()
+    const focus = vi.spyOn(qingClientStore, 'focus').mockResolvedValue()
+    const openDetails = vi.fn()
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+
+    try {
+      act(() => root.render(
+        <QingEditToolCard {...props(sessionId, {
+          engineSessionId, title: '已删稿', status: 'committed', reviewCount: 0,
+        }, openDetails) as unknown as ComponentProps<typeof QingEditToolCard>} />,
+      ))
+      act(() => host.querySelector('button')?.click())
+
+      expect(openDetails).toHaveBeenCalledOnce()
+      expect(focus).not.toHaveBeenCalled()
+      expect(qingClientStore.getSnapshot(sessionId).docMissing)
+        .toEqual({ engineSessionId })
+    } finally {
+      act(() => root.unmount())
+      host.remove()
+    }
+  })
+
+  it('聚焦失败沿用面板提示且按钮可以重试', async () => {
+    stubBackgroundLoads()
+    const error = new Error('focus failed')
+    const focus = vi.spyOn(qingClientStore, 'focus').mockRejectedValue(error)
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const onToast = vi.fn()
+    window.addEventListener('qingagent:panel-toast', onToast)
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+
+    try {
+      act(() => root.render(
+        <QingEditToolCard {...props('view-failed-focus', {
+          engineSessionId: 'qing-focus-failure', title: '失败稿', status: 'committed', reviewCount: 0,
+        }) as unknown as ComponentProps<typeof QingEditToolCard>} />,
+      ))
+      await act(async () => {
+        host.querySelector('button')?.click()
+        await Promise.resolve()
+      })
+      await act(async () => {
+        host.querySelector('button')?.click()
+        await Promise.resolve()
+      })
+
+      expect(focus).toHaveBeenCalledTimes(2)
+      expect(consoleError).toHaveBeenCalledWith('[qingagent-tool-card] focus failed', error)
+      expect(onToast).toHaveBeenCalledTimes(2)
+      expect((onToast.mock.calls[0]?.[0] as CustomEvent<string>).detail)
+        .toBe('保存失败 · 未切换文稿')
+    } finally {
+      window.removeEventListener('qingagent:panel-toast', onToast)
+      act(() => root.unmount())
+      host.remove()
+    }
   })
 })
 

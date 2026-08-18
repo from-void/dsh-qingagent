@@ -4,7 +4,10 @@ import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
 import { currentReviewStateFor, qingClientStore } from './store.js'
+import { failureSummary, openToolCardDocument } from './QingToolCard.js'
 import styles from './QingWriteToolCard.module.css'
+
+export { failureSummary } from './QingToolCard.js'
 
 interface InjectedProps {
   qingLayout: ILayout
@@ -51,6 +54,12 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
       ? '新版已写好,在右侧等你确认采用或退回。'
       : reviewState === 'settled' ? '当时写好了新版,已处理完。' : '当时写好了新版。'
     : ''
+  const handleView = () => openToolCardDocument(
+    sessionId,
+    meta?.engineSessionId,
+    snapshot,
+    () => props.qingLayout.openDetails(),
+  )
 
   return (
     <div className={styles.toolCard} data-state={state}>
@@ -64,7 +73,7 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
           <button
             type="button"
             className={styles.viewButton}
-            onClick={() => { qingClientStore.reopenPanel(sessionId); props.qingLayout.openDetails() }}
+            onClick={handleView}
           >查看</button>
         ) : null}
       </div>
@@ -86,15 +95,4 @@ interface ToolMeta {
 
 function isMeta(value: unknown): value is ToolMeta {
   return typeof value === 'object' && value !== null
-}
-
-export function failureSummary(content: readonly unknown[]): string {
-  const text = content.flatMap((block) => {
-    if (!block || typeof block !== 'object') return []
-    const value = block as { type?: unknown; text?: unknown }
-    return value.type === 'text' && typeof value.text === 'string' ? [value.text] : []
-  }).join('\n').split(/\r?\n/, 1)[0]?.replace(/^Error:\s*/i, '').trim() ?? ''
-  if (/审阅|REVIEW_PENDING/i.test(text)) return '文稿审阅中'
-  if (/AGENT_BUSY|正在处理其他任务|引擎忙/i.test(text)) return '引擎忙'
-  return text.length > 48 ? `${text.slice(0, 47)}…` : text
 }
