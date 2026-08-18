@@ -20,24 +20,41 @@ export function installDetailsColumnWidth(root: HTMLElement): () => void {
   const stored = readStoredWidth(view.localStorage)
   let preferredWidth = stored ?? defaultDetailsWidth(view.innerWidth)
   let sidebarWidth = 0
+  let lastMirrored: string | null | undefined
   let startX = 0
   let startWidth = 0
   let dragging = false
 
-  const syncSidebar = () => {
-    sidebarWidth = sidebar.getBoundingClientRect().width
-    frame.style.setProperty('--qing-sidebar-width', `${Math.round(sidebarWidth)}px`)
+  const syncSidebar = (track = parseInlineSidebarTrack(frame.style.gridTemplateColumns)) => {
+    lastMirrored = track?.cssValue ?? null
+    if (track) {
+      sidebarWidth = track.pixels
+    } else {
+      const measured = sidebar.getBoundingClientRect().width
+      sidebarWidth = Number.isFinite(measured) && measured > 0 ? Math.round(measured) : 280
+    }
+    setStyleProperty(frame.style, '--qing-sidebar-width', track?.cssValue ?? `${sidebarWidth}px`)
   }
   const availableWidth = () => Math.max(0, view.innerWidth - sidebarWidth)
   const applyPreferredWidth = () => {
     const width = clampDetailsWidth(preferredWidth, availableWidth())
-    frame.style.setProperty('--qing-details-width', `${Math.round(width)}px`)
-    root.style.setProperty('--qing-details-width', `${Math.round(width)}px`)
+    const cssWidth = `${Math.round(width)}px`
+    setStyleProperty(frame.style, '--qing-details-width', cssWidth)
+    setStyleProperty(root.style, '--qing-details-width', cssWidth)
     handle.setAttribute('aria-valuenow', String(Math.round(width)))
     handle.setAttribute('aria-valuemax', String(Math.round(Math.max(420, availableWidth() * 0.7))))
   }
   const handleResize = () => {
     syncSidebar()
+    if (readStoredWidth(view.localStorage) === null) {
+      preferredWidth = defaultDetailsWidth(availableWidth())
+    }
+    applyPreferredWidth()
+  }
+  const handleFrameStyleMutation = () => {
+    const track = parseInlineSidebarTrack(frame.style.gridTemplateColumns)
+    if ((track?.cssValue ?? null) === lastMirrored) return
+    syncSidebar(track)
     if (readStoredWidth(view.localStorage) === null) {
       preferredWidth = defaultDetailsWidth(availableWidth())
     }
@@ -75,10 +92,10 @@ export function installDetailsColumnWidth(root: HTMLElement): () => void {
   }
 
   handleResize()
-  const observer = typeof ResizeObserver !== 'undefined'
-    ? new ResizeObserver(handleResize)
+  const observer = typeof view.MutationObserver !== 'undefined'
+    ? new view.MutationObserver(handleFrameStyleMutation)
     : null
-  observer?.observe(sidebar)
+  observer?.observe(frame, { attributes: true, attributeFilter: ['style'] })
   handle.addEventListener('pointerdown', pointerDown)
   handle.addEventListener('keydown', keyDown)
   view.addEventListener('pointermove', pointerMove)
@@ -98,6 +115,18 @@ export function installDetailsColumnWidth(root: HTMLElement): () => void {
     frame.style.removeProperty('--qing-sidebar-width')
     root.style.removeProperty('--qing-details-width')
   }
+}
+
+function parseInlineSidebarTrack(gridTemplateColumns: string): { cssValue: string, pixels: number } | null {
+  // DSH 写入的是 px 长度；只解析第一轨，后面无论三轨还是生态插件扩展出的更多轨都不参与判断。
+  const match = /^\s*((?:\d+(?:\.\d+)?|\.\d+)px)(?=\s|$)/i.exec(gridTemplateColumns)
+  if (!match) return null
+  const pixels = Number(match[1].slice(0, -2))
+  return Number.isFinite(pixels) ? { cssValue: match[1], pixels } : null
+}
+
+function setStyleProperty(style: CSSStyleDeclaration, property: string, value: string): void {
+  if (style.getPropertyValue(property) !== value) style.setProperty(property, value)
 }
 
 function readStoredWidth(storage: Storage): number | null {

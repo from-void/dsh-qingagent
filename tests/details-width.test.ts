@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+// jsdom 25.0.1 自带 MutationObserver，但没有布局；getBoundingClientRect 恒为 0，
+// 因此本文件禁止用它做像素正面断言，只在降级用例确认量法被调用及 280px 兜底。
 
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -24,62 +26,67 @@ describe('青简 details 列宽', () => {
     expect(clampDetailsWidth(900, 1_000)).toBe(700)
   })
 
-  it('读取持久化宽度并写到 AppFrame 变量，卸载后清除接管', () => {
+  it('初始即折叠时首次同步宿主行内第一轨，卸载后清除接管', () => {
     window.localStorage.setItem(QING_DETAILS_WIDTH_STORAGE_KEY, '640')
-    const fixture = detailsFixture()
+    const fixture = detailsFixture('56px minmax(0px, 1fr) 360px')
 
     const dispose = installDetailsColumnWidth(fixture.root)
-    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('96px')
+    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('56px')
     expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('640px')
     dispose()
+    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('')
     expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('')
     fixture.frame.remove()
   })
 
-  it('无存储偏好时由 ResizeObserver 驱动侧栏与默认面板宽度联动，且不写 localStorage', () => {
+  it('MutationObserver 镜像五轨首轨 56px，再随三轨宿主值展开回 280px', async () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1_600 })
-    const resizeObserver = installResizeObserverStub()
-    const fixture = detailsFixture(640, 400)
+    const fixture = detailsFixture('280px minmax(0px, 1fr) 552px')
     const dispose = installDetailsColumnWidth(fixture.root)
     const storageWrite = vi.spyOn(Storage.prototype, 'setItem')
+    let observerCallbacks = 0
+    const observerProbe = new MutationObserver(() => { observerCallbacks += 1 })
+    observerProbe.observe(fixture.frame, { attributes: true, attributeFilter: ['style'] })
 
-    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('400px')
-    expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('560px')
-    expect(fixture.handle.getAttribute('aria-valuemax')).toBe('840')
+    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('280px')
+    expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('607px')
 
-    fixture.setSidebarWidth(100)
-    resizeObserver.trigger()
-    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('100px')
-    expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('690px')
-    expect(fixture.handle.getAttribute('aria-valuenow')).toBe('690')
-    expect(fixture.handle.getAttribute('aria-valuemax')).toBe('1050')
+    fixture.frame.style.gridTemplateColumns = '56px minmax(0px, 1fr) 0px 0px 0px'
+    await settleMutationObservers()
+    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('56px')
+    expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('710px')
+    expect(observerCallbacks).toBeGreaterThan(0)
+    expect(observerCallbacks).toBeLessThanOrEqual(2)
 
-    fixture.setSidebarWidth(400)
-    resizeObserver.trigger()
-    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('400px')
-    expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('560px')
+    observerCallbacks = 0
+    fixture.frame.style.gridTemplateColumns = '280px minmax(0px, 1fr) 552px'
+    await settleMutationObservers()
+    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('280px')
+    expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('607px')
+    expect(observerCallbacks).toBeGreaterThan(0)
+    expect(observerCallbacks).toBeLessThanOrEqual(2)
     expect(window.localStorage.getItem(QING_DETAILS_WIDTH_STORAGE_KEY)).toBeNull()
     expect(storageWrite).not.toHaveBeenCalled()
+    observerProbe.disconnect()
     dispose()
     fixture.frame.remove()
   })
 
-  it('有存储偏好时 ResizeObserver 只按可用宽度 clamp，折叠展开不改写 localStorage', () => {
+  it('有存储偏好时 observer 只按宿主首轨后的可用宽度 clamp，不改写 localStorage', async () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1_600 })
     window.localStorage.setItem(QING_DETAILS_WIDTH_STORAGE_KEY, '800')
-    const resizeObserver = installResizeObserverStub()
-    const fixture = detailsFixture(800, 400)
+    const fixture = detailsFixture('400px minmax(0px, 1fr) 552px')
     const dispose = installDetailsColumnWidth(fixture.root)
     const storageWrite = vi.spyOn(Storage.prototype, 'setItem')
 
     expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('800px')
-    fixture.setSidebarWidth(600)
-    resizeObserver.trigger()
+    fixture.frame.style.gridTemplateColumns = '600px minmax(0px, 1fr) 552px'
+    await settleMutationObservers()
     expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('600px')
     expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('700px')
 
-    fixture.setSidebarWidth(400)
-    resizeObserver.trigger()
+    fixture.frame.style.gridTemplateColumns = '400px minmax(0px, 1fr) 552px'
+    await settleMutationObservers()
     expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('400px')
     expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('800px')
     expect(window.localStorage.getItem(QING_DETAILS_WIDTH_STORAGE_KEY)).toBe('800')
@@ -88,10 +95,60 @@ describe('青简 details 列宽', () => {
     fixture.frame.remove()
   })
 
+  it('行内首轨缺失或不可解析时不抛错，退回量法与 280px 兜底', () => {
+    for (const gridTemplateColumns of [null, 'auto minmax(0px, 1fr) 360px']) {
+      const fixture = detailsFixture(gridTemplateColumns)
+      const measureSidebar = vi.spyOn(fixture.sidebar, 'getBoundingClientRect')
+      let dispose: () => void = () => undefined
+
+      expect(() => { dispose = installDetailsColumnWidth(fixture.root) }).not.toThrow()
+      expect(measureSidebar).toHaveBeenCalled()
+      expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('280px')
+      dispose()
+      fixture.frame.remove()
+    }
+  })
+
+  it('observer 自写最多追加一次回调，仅 details 变化零写入，dispose 后不再同步', async () => {
+    const fixture = detailsFixture('280px minmax(0px, 1fr) 360px')
+    const dispose = installDetailsColumnWidth(fixture.root)
+    const storageWrite = vi.spyOn(Storage.prototype, 'setItem')
+    const frameWrite = vi.spyOn(fixture.frame.style, 'setProperty')
+    let observerCallbacks = 0
+    const observerProbe = new MutationObserver(() => { observerCallbacks += 1 })
+    observerProbe.observe(fixture.frame, { attributes: true, attributeFilter: ['style'] })
+
+    fixture.frame.style.gridTemplateColumns = '56px minmax(0px, 1fr) 360px'
+    await settleMutationObservers()
+    expect(observerCallbacks).toBeGreaterThan(0)
+    expect(observerCallbacks).toBeLessThanOrEqual(2)
+    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('56px')
+
+    observerCallbacks = 0
+    fixture.frame.style.setProperty('--qing-details-width', '610px')
+    frameWrite.mockClear()
+    await settleMutationObservers()
+    expect(observerCallbacks).toBe(1)
+    expect(frameWrite).not.toHaveBeenCalled()
+    expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('610px')
+    expect(storageWrite).not.toHaveBeenCalled()
+
+    observerProbe.disconnect()
+    dispose()
+    await settleMutationObservers()
+    frameWrite.mockClear()
+    fixture.frame.style.gridTemplateColumns = '280px minmax(0px, 1fr) 360px'
+    await settleMutationObservers()
+    expect(frameWrite).not.toHaveBeenCalled()
+    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('')
+    expect(storageWrite).not.toHaveBeenCalled()
+    fixture.frame.remove()
+  })
+
   it('pointer 拖拽按序列调宽并持久化 localStorage', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1_200 })
     window.localStorage.setItem(QING_DETAILS_WIDTH_STORAGE_KEY, '640')
-    const fixture = detailsFixture(640)
+    const fixture = detailsFixture()
     const dispose = installDetailsColumnWidth(fixture.root)
 
     fixture.handle.dispatchEvent(pointerEvent('pointerdown', { button: 0, clientX: 500, pointerId: 7 }))
@@ -108,7 +165,7 @@ describe('青简 details 列宽', () => {
   it('分隔把手暴露当前值，并支持键盘左右调宽', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1_200 })
     window.localStorage.setItem(QING_DETAILS_WIDTH_STORAGE_KEY, '640')
-    const fixture = detailsFixture(640)
+    const fixture = detailsFixture()
     const dispose = installDetailsColumnWidth(fixture.root)
 
     expect(fixture.handle.getAttribute('aria-valuenow')).toBe('640')
@@ -139,18 +196,16 @@ describe('青简 details 列宽', () => {
   })
 })
 
-function detailsFixture(detailsWidth = 640, initialSidebarWidth = 96) {
+function detailsFixture(gridTemplateColumns: string | null = '96px minmax(0px, 1fr) 360px') {
     const frame = document.createElement('div')
     frame.className = 'fixture_frame'
+    if (gridTemplateColumns !== null) frame.style.gridTemplateColumns = gridTemplateColumns
     const sidebar = document.createElement('div')
     sidebar.className = 'fixture_sidebarCol'
-    let sidebarWidth = initialSidebarWidth
-    sidebar.getBoundingClientRect = () => ({ width: sidebarWidth } as DOMRect)
     const center = document.createElement('div')
     center.className = 'fixture_centerCol'
     const details = document.createElement('div')
     details.className = 'fixture_detailsCol'
-    details.getBoundingClientRect = () => ({ width: detailsWidth } as DOMRect)
     const root = document.createElement('section')
     root.dataset.qingagentDocPanel = ''
     const handle = document.createElement('div')
@@ -161,28 +216,14 @@ function detailsFixture(detailsWidth = 640, initialSidebarWidth = 96) {
     document.body.append(frame)
     return {
       frame,
+      sidebar,
       root,
       handle,
-      setSidebarWidth: (width: number) => { sidebarWidth = width },
     }
 }
 
-function installResizeObserverStub() {
-  const callbacks: ResizeObserverCallback[] = []
-  class ResizeObserverStub {
-    constructor(callback: ResizeObserverCallback) {
-      callbacks.push(callback)
-    }
-    observe(): void {}
-    unobserve(): void {}
-    disconnect(): void {}
-  }
-  vi.stubGlobal('ResizeObserver', ResizeObserverStub)
-  return {
-    trigger: () => {
-      for (const callback of callbacks) callback([], {} as ResizeObserver)
-    },
-  }
+function settleMutationObservers(): Promise<void> {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, 0))
 }
 
 function pointerEvent(

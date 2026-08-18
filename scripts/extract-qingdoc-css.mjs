@@ -266,8 +266,8 @@ function replaceLast(source, search, replacement) {
 // deterministic and allows --check to audit every copied range.
 const detailsGlue = `
 /* dsh AppFrame 的内建 preference 把 details 钳在 300–520；青简纸面打开时由同一个
-   CSS 变量接管第三轨，center 保持 minmax(0,1fr) 弹性收缩。!important 只覆盖
-   AppFrame 的普通 inline grid-template-columns，不改其 React store，卸载即自动复原。 */
+   CSS 变量接管第三轨，center 保持 minmax(0,1fr) 弹性收缩。整条 !important 简写也会
+   一并接管第一轨，所以第一轨变量必须镜像 AppFrame 行内值；不改 React store，卸载即复原。 */
 [class*="detailsCol"]:has(${panelRoot}) {
   width: var(--qing-details-width, clamp(560px, 46vw, 920px)) !important;
   min-width: 0 !important;
