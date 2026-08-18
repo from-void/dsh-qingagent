@@ -36,6 +36,8 @@ export interface QingClientSnapshot {
   panelDoc?: ExternalPmDocReadResponse
   reviewModel?: ExternalReviewRenderModelResponse
   panelLoading?: boolean
+  /** external 明确确认文稿不存在；按文稿 ID 归属，避免切稿时把 missing 状态串给别稿。 */
+  docMissing?: { engineSessionId: string }
   /** 「重载」等显式放弃本地内容的操作递增它,面板据此强制重挂编辑器。 */
   panelReloadNonce?: number
   saveState?: DocumentSaveState
@@ -112,6 +114,7 @@ const EMPTY: QingClientSnapshot = {
 }
 
 const PANEL_CLOSED_KEY_PREFIX = 'qingagent.panelClosed.'
+const BRIDGE_RECONNECTING_ERROR = '与青简桥的实时连接暂时中断，浏览器会自动重连。'
 
 function readStoredPanelClosed(sessionId: string): boolean {
   try {
@@ -348,6 +351,7 @@ export class QingClientStore {
         this.update(entry, {
           ...entry.snapshot,
           panelLoading: false,
+          docMissing: undefined,
           error: undefined,
         })
         return
@@ -361,6 +365,7 @@ export class QingClientStore {
         this.update(entry, {
           ...entry.snapshot,
           panelLoading: false,
+          docMissing: undefined,
           error: undefined,
         })
         return
@@ -381,16 +386,40 @@ export class QingClientStore {
           ? reviewModel.suggestions.filter((suggestion) => suggestion.status === 'reviewing').length
           : undefined,
         saveState: refreshSaveState(entry.snapshot.saveState),
+        docMissing: undefined,
         error: undefined,
       })
       entry.panelRefreshGuard?.afterApply?.(engineSessionId, panelDoc)
     } catch (error) {
       if (entry.panelLoadToken !== token) return
-      this.update(entry, {
-        ...entry.snapshot,
-        panelLoading: false,
-        error: readableError(error),
-      })
+      if (isMissingPanelDocError(error)) {
+        const state = entry.snapshot.state
+          ? {
+              ...entry.snapshot.state,
+              docs: entry.snapshot.state.docs.filter((doc) => doc.engineSessionId !== engineSessionId),
+            }
+          : undefined
+        this.update(entry, {
+          ...entry.snapshot,
+          state,
+          activeDoc: entry.snapshot.activeDoc?.sessionId === engineSessionId
+            ? undefined
+            : entry.snapshot.activeDoc,
+          panelEngineSessionId: engineSessionId,
+          panelDoc: undefined,
+          reviewModel: undefined,
+          reviewCount: undefined,
+          panelLoading: false,
+          docMissing: { engineSessionId },
+          error: undefined,
+        })
+      } else {
+        this.update(entry, {
+          ...entry.snapshot,
+          panelLoading: false,
+          error: BRIDGE_RECONNECTING_ERROR,
+        })
+      }
       throw error
     }
   }
@@ -617,7 +646,7 @@ export class QingClientStore {
       })
     }
     source.onerror = () => {
-      this.update(entry, { ...entry.snapshot, error: '与青简桥的实时连接暂时中断，浏览器会自动重连。' })
+      this.update(entry, { ...entry.snapshot, error: BRIDGE_RECONNECTING_ERROR })
     }
   }
 
@@ -885,6 +914,12 @@ function errorMessage(status: number, body: ExternalErrorResponse | Record<strin
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function isMissingPanelDocError(error: unknown): error is BridgeHttpError {
+  return error instanceof BridgeHttpError
+    && error.status === 404
+    && error.body.code === 'SESSION_NOT_FOUND'
 }
 
 function readableError(error: unknown): string {

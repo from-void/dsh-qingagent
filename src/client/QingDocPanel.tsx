@@ -61,6 +61,7 @@ import {
   type QingReviewType,
 } from './reviewExport.js'
 import '../qingdoc/qingdoc.css'
+import './QingDocPanel.css'
 
 interface InjectedProps {
   qingLayout: ILayout
@@ -116,9 +117,14 @@ export function QingDocPanel(props: QingDocPanelProps) {
     return root ? installDetailsColumnWidth(root) : undefined
   }, [])
 
-  const docs = snapshot.state?.docs ?? []
   const activeEngineSessionId = snapshot.activeEngineSessionId
     ?? snapshot.state?.binding.activeEngineSessionId
+  const missingEngineSessionId = snapshot.docMissing?.engineSessionId
+  const docMissing = Boolean(
+    activeEngineSessionId && missingEngineSessionId === activeEngineSessionId,
+  )
+  const docs = (snapshot.state?.docs ?? [])
+    .filter((doc) => doc.engineSessionId !== missingEngineSessionId)
   const activeBound = docs.find((doc) => doc.engineSessionId === activeEngineSessionId)
   const observedVersion = snapshot.activeDoc?.docVersion ?? activeBound?.docVersion
   const observedState = snapshot.activeDoc?.state ?? activeBound?.state
@@ -811,7 +817,10 @@ export function QingDocPanel(props: QingDocPanelProps) {
     remainingReviewCount,
     visibleReviewTargets.length,
   ].join(':')
-  const title = panelDoc?.title || snapshot.activeDoc?.title || activeBound?.title || '未命名文稿'
+  // missing 必须截断整条旧标题 fallback；否则 activeDoc/activeBound 会把已删稿名带回顶栏。
+  const title = docMissing
+    ? undefined
+    : panelDoc?.title || snapshot.activeDoc?.title || activeBound?.title || '未命名文稿'
   const statusLabel = panelStatus({
     busy,
     blocks: snapshot.blocks,
@@ -821,23 +830,34 @@ export function QingDocPanel(props: QingDocPanelProps) {
     saveState,
     showSaving: showSavingStatus,
   })
-  const openUrl = activeEngineSessionId
-    ? `qingjian://open?engineSessionId=${encodeURIComponent(activeEngineSessionId)}`
-    : undefined
-  const contentKind = pendingReview ? 'pendingReview' : panelDoc?.state === 'empty' ? 'empty' : 'editable'
+  const contentKind = docMissing
+    ? 'docMissing'
+    : pendingReview
+      ? 'pendingReview'
+      : panelDoc?.state === 'empty'
+        ? 'empty'
+        : 'editable'
 
   const docDimensions = useMemo<DocDimensions>(() => ({
-    content: { kind: contentKind === 'editable' ? 'editing' : contentKind },
+    content: {
+      kind: contentKind === 'editable'
+        ? 'editing'
+        : contentKind === 'docMissing'
+          ? 'empty'
+          : contentKind,
+    },
     agentBusy: busy,
     overlay: null,
-    editor: busy || saveLocked
+    editor: docMissing
+      ? 'empty'
+      : busy || saveLocked
       ? 'locked'
       : pendingReview
         ? 'pendingReview'
         : panelDoc?.state === 'editing'
           ? 'editable'
           : 'empty',
-  }), [busy, contentKind, panelDoc?.state, pendingReview, saveLocked])
+  }), [busy, contentKind, docMissing, panelDoc?.state, pendingReview, saveLocked])
   const documentEditingActive = canUseDocumentEditing(docDimensions, null, null)
   const {
     findInitialQuery,
@@ -933,7 +953,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
         data-tool={busy ? 'agentBusy' : 'none'}
         data-ws-state={busy ? 'streaming' : 'idle'}
         data-qingdoc-mode={interactiveEditable ? 'editable' : 'readonly'}
-        data-save-state={saveState.kind}
+        data-save-state={docMissing ? undefined : saveState.kind}
         style={rootStyle}
         aria-label="青简文档"
       >
@@ -954,13 +974,16 @@ export function QingDocPanel(props: QingDocPanelProps) {
             docs={docs}
             activeEngineSessionId={activeEngineSessionId}
             title={title}
-            activeBusy={busy}
-            activePendingReview={pendingReview}
+            excludedEngineSessionId={missingEngineSessionId}
+            activeBusy={docMissing ? false : busy}
+            activePendingReview={docMissing ? false : pendingReview}
             onSelect={handleFocusDocument}
             onOpenLibrary={handleOpenLibraryDoc}
           />
-          <span className="qingdoc-status" data-kind={saveState.kind} role="status">{toast ?? statusLabel}</span>
-          {saveState.kind === 'conflict' && activeEngineSessionId ? (
+          {!docMissing ? (
+            <span className="qingdoc-status" data-kind={saveState.kind} role="status">{toast ?? statusLabel}</span>
+          ) : null}
+          {!docMissing && saveState.kind === 'conflict' && activeEngineSessionId ? (
             <button
               type="button"
               className="qingdoc-conflict-reload"
@@ -970,7 +993,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
           ) : null}
         </div>
         <div className="qingdoc-host-actions">
-          {activeEngineSessionId ? (
+          {!docMissing && activeEngineSessionId ? (
             <a
               className="qingdoc-open"
               href={`qingjian://open?engineSessionId=${encodeURIComponent(activeEngineSessionId)}`}
@@ -990,11 +1013,15 @@ export function QingDocPanel(props: QingDocPanelProps) {
       </header>
       <div className="ws-body">
         <main className="ws-right">
+          {docMissing ? (
+            <div className="qingdoc-doc-missing" role="status">当前文档已被删除</div>
+          ) : (
+            <>
           {activeEngineSessionId && panelDoc ? (
             <QingDocFunctions
               sessionId={sessionId}
               engineSessionId={activeEngineSessionId}
-              title={title}
+              title={title ?? '未命名文稿'}
               reviewDisabledReason={reviewDisabledReason}
               exportDisabledReason={exportDisabledReason}
               onFlushSave={flushPendingDocSave}
@@ -1109,9 +1136,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
               }}
             />
           </div>
+            </>
+          )}
         </main>
       </div>
-        {wholeDocReview && snapshot.reviewModel?.suggestions.length ? (
+        {!docMissing && wholeDocReview && snapshot.reviewModel?.suggestions.length ? (
           <WholeDocReviewNav
             reviewScopeKey={wholeDocReviewScopeKey}
             version={wholeDocVersion}
@@ -1121,7 +1150,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
             onRevert={() => handleReviewCommit('reject_all')}
             onToast={setToast}
           />
-        ) : pendingReview && snapshot.reviewModel?.suggestions.length ? (
+        ) : !docMissing && pendingReview && snapshot.reviewModel?.suggestions.length ? (
           <PatchNav
             remainingCount={remainingReviewCount}
             totalCount={visibleReviewTargets.length}
@@ -1146,7 +1175,8 @@ interface QingDocSwitcherProps {
   sessionId: string
   docs: BridgeDocument[]
   activeEngineSessionId?: string
-  title: string
+  title?: string
+  excludedEngineSessionId?: string
   activeBusy: boolean
   activePendingReview: boolean
   onSelect: (engineSessionId: string) => Promise<void>
@@ -1185,7 +1215,10 @@ function QingDocSwitcher(props: QingDocSwitcherProps) {
   const boundIds = new Set(props.docs.map((doc) => doc.engineSessionId))
   const recentDocs = (library ?? [])
     // 空文稿(只建了会话没写过内容)没有打开价值,不进「最近文稿」。
-    .filter((doc) => !boundIds.has(doc.engineSessionId) && doc.state !== 'empty')
+    .filter((doc) =>
+      doc.engineSessionId !== props.excludedEngineSessionId
+      && !boundIds.has(doc.engineSessionId)
+      && doc.state !== 'empty')
     .slice(0, RECENT_LIBRARY_LIMIT)
   const entries: SwitcherEntry[] = [
     ...boundSorted.map((doc) => ({ kind: 'bound' as const, engineSessionId: doc.engineSessionId, title: doc.title, doc })),
@@ -1258,7 +1291,9 @@ function QingDocSwitcher(props: QingDocSwitcherProps) {
         aria-controls={open ? listboxId : undefined}
         onClick={() => setOpen((value) => !value)}
       >
-        <strong className="qingdoc-stage-title" title={props.title}>{props.title}</strong>
+        {props.title ? (
+          <strong className="qingdoc-stage-title" title={props.title}>{props.title}</strong>
+        ) : null}
         <span className="qingdoc-doc-chevron" aria-hidden="true">▾</span>
       </button>
       {open ? (
@@ -1305,6 +1340,8 @@ function QingDocSwitcher(props: QingDocSwitcherProps) {
           })}
           {library === null ? (
             <div className="qingdoc-doc-group-label" role="presentation">最近文稿加载中…</div>
+          ) : entries.length === 0 ? (
+            <div className="qingdoc-doc-group-label" role="presentation">暂无可切换的文稿</div>
           ) : null}
         </div>
       ) : null}

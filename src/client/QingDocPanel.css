@@ -1,0 +1,31 @@
+[data-qingagent-doc-panel][data-content="docMissing"] .ws-right {
+  display: block;
+  padding: 32px 40px;
+  background: #efe7d6;
+}
+
+[data-qingagent-doc-panel][data-content="docMissing"] .qingdoc-doc-missing {
+  box-sizing: border-box;
+  width: min(800px, 100%);
+  min-height: calc(100% - 64px);
+  margin: 0 auto;
+  padding: 52px 64px;
+  border: 1px solid #ded1b9;
+  border-radius: 0;
+  background: #faf6ec;
+  color: #40362a;
+  font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
+  font-size: 16px;
+  line-height: 1.8;
+}
+
+@media (max-width: 700px) {
+  [data-qingagent-doc-panel][data-content="docMissing"] .ws-right {
+    padding: 20px;
+  }
+
+  [data-qingagent-doc-panel][data-content="docMissing"] .qingdoc-doc-missing {
+    min-height: calc(100% - 40px);
+    padding: 40px 32px;
+  }
+}

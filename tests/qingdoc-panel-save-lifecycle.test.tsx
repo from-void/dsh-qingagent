@@ -608,6 +608,111 @@ describe('QingDocPanel 整篇审阅', () => {
   })
 })
 
+describe('QingDocPanel 文稿缺失状态', () => {
+  it('只显示删除提示与可用切换入口，抑制旧标题、内部词和全部活文稿 UI', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.startsWith('/qingagent-bridge/state?')) {
+        return Response.json({
+          dshSessionId: 'dsh-doc-missing',
+          binding: {
+            docs: [
+              { engineSessionId: 'qing-missing', title: '昨日旧稿', createdAt: '2026-08-15T00:00:00.000Z' },
+              { engineSessionId: 'qing-live', title: '可用文稿', createdAt: '2026-08-15T00:01:00.000Z' },
+            ],
+            activeEngineSessionId: 'qing-missing',
+          },
+          // 模拟删除探测前留在客户端的旧快照，锁住整条标题 fallback 都必须失效。
+          docs: [
+            {
+              engineSessionId: 'qing-missing', title: '昨日旧稿', createdAt: '2026-08-15T00:00:00.000Z',
+              state: 'editing', docVersion: 3,
+            },
+            {
+              engineSessionId: 'qing-live', title: '可用文稿', createdAt: '2026-08-15T00:01:00.000Z',
+              state: 'editing', docVersion: 2,
+            },
+          ],
+          activeDoc: {
+            sessionId: 'qing-missing', docVersion: 3, state: 'editing', agentBusy: false,
+            markdown: '旧正文', qingml: '<p>旧正文</p>', title: '昨日旧稿',
+          },
+          engine: { state: 'online', engineUrl: 'http://127.0.0.1:8080' },
+        })
+      }
+      if (url.startsWith('/qingagent-bridge/doc-pm?')) {
+        const engineSessionId = new URL(url, 'http://local').searchParams.get('engineSessionId')
+        if (engineSessionId === 'qing-missing') {
+          return Response.json(
+            { error: '青简会话不存在', code: 'SESSION_NOT_FOUND', nextStep: '不要重试原引用' },
+            { status: 404 },
+          )
+        }
+        return Response.json({
+          sessionId: 'qing-live', docVersion: 2, contentHash: 'hash-2', state: 'editing',
+          agentBusy: false, title: '可用文稿', ts: 't2', pmDoc: EDITED_PM,
+        })
+      }
+      if (url.startsWith('/qingagent-bridge/review-render-model?')) {
+        return Response.json({
+          sessionId: 'qing-live', docVersion: 2, state: 'editing', agentBusy: false,
+          baseVersion: 2, suggestions: [],
+        })
+      }
+      if (url.startsWith('/qingagent-bridge/library?')) {
+        return Response.json({
+          library: [
+            { engineSessionId: 'qing-missing', title: '昨日旧稿', state: 'editing', updatedAt: '2026-08-15T02:00:00.000Z' },
+            { engineSessionId: 'qing-live', title: '可用文稿', state: 'editing', updatedAt: '2026-08-15T03:00:00.000Z' },
+          ],
+        })
+      }
+      if (url === '/qingagent-bridge/focus' && init?.method === 'POST') {
+        return Response.json({ ok: true })
+      }
+      throw new Error(`unexpected ${url}`)
+    }))
+    renderPanel('dsh-doc-missing')
+
+    const missing = await vi.waitFor(() => {
+      const candidate = document.querySelector<HTMLElement>('.qingdoc-doc-missing')
+      expect(candidate?.textContent).toBe('当前文档已被删除')
+      return candidate!
+    })
+    const panel = missing.closest<HTMLElement>('[data-qingagent-doc-panel]')!
+    expect(panel.getAttribute('data-content')).toBe('docMissing')
+    expect(panel.hasAttribute('data-save-state')).toBe(false)
+    expect(panel.querySelector('.qingdoc-stage-title')).toBeNull()
+    expect(panel.querySelector('.qingdoc-status')).toBeNull()
+    expect(panel.querySelector('.qingdoc-open')).toBeNull()
+    expect(panel.querySelector('[data-wf="WorkspaceDocFunctions"]')).toBeNull()
+    expect(panel.querySelector('[data-testid="mock-document-view"]')).toBeNull()
+    expect(panel.querySelector('[data-testid="mock-doc-toolbar"]')).toBeNull()
+    for (const internalWord of ['昨日旧稿', 'HTTP 404', 'SESSION_NOT_FOUND', 'docRef', 'qing-missing']) {
+      expect(panel.outerHTML).not.toContain(internalWord)
+    }
+    expect(panel.textContent).not.toMatch(/保存|约\d+字/)
+
+    await act(async () => {
+      panel.querySelector<HTMLButtonElement>('.qingdoc-doc-trigger')?.click()
+    })
+    const available = await vi.waitFor(() => {
+      const option = [...panel.querySelectorAll<HTMLElement>('[role="option"]')]
+        .find((candidate) => candidate.textContent?.includes('可用文稿'))
+      expect(option).toBeDefined()
+      return option!
+    })
+    expect(panel.querySelector('.qingdoc-doc-menu')?.textContent).not.toContain('昨日旧稿')
+
+    await act(async () => { available.click() })
+    await vi.waitFor(() => {
+      expect(panel.getAttribute('data-content')).toBe('editable')
+      expect(panel.querySelector('[data-testid="mock-document-view"]')).not.toBeNull()
+    })
+  })
+})
+
 describe('QingDocPanel 顶栏状态', () => {
   const base = {
     busy: false,

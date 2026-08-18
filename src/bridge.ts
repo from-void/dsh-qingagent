@@ -345,12 +345,15 @@ export class BridgeHub {
     if (engine.state === 'online') {
       const loaded = await Promise.all(binding.docs.map(async (bound) => {
         try {
-          return { bound, doc: await this.readDoc(bound.engineSessionId) }
-        } catch {
-          return { bound, doc: undefined }
+          return { bound, doc: await this.readDoc(bound.engineSessionId), missing: false }
+        } catch (error) {
+          return { bound, doc: undefined, missing: isMissingSessionError(error) }
         }
       }))
       for (const item of loaded) {
+        // 只有 external 明确返回 404 + SESSION_NOT_FOUND 才从切换数据源剔除。
+        // 连接/服务错误仍作为 offline 保留，避免把暂时读不到误报成删除。
+        if (item.missing) continue
         docs.push({
           ...item.bound,
           title: item.doc?.title ?? item.bound.title,
@@ -405,6 +408,13 @@ export class BridgeHub {
 class HttpInputError extends Error {}
 class HttpNotFoundError extends Error {}
 class HttpPayloadTooLargeError extends Error {}
+
+function isMissingSessionError(error: unknown): boolean {
+  if (!(error instanceof EngineHttpError) || error.status !== 404) return false
+  const body = error.body
+  return typeof body === 'object' && body !== null
+    && (body as Record<string, unknown>).code === 'SESSION_NOT_FOUND'
+}
 
 function requiredQuery(url: URL, name: string): string {
   const value = url.searchParams.get(name)?.trim()
