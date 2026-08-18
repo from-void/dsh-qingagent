@@ -673,6 +673,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
     source: 'manual' | 'auto' = 'manual',
   ) => {
     if (!activeEngineSessionId || !panelDoc) return
+    if (action === 'commit' && source === 'auto' && reviewSettlementRetryPendingRef.current) return
     if (action === 'commit' && autoCommitKeyRef.current === reviewCommitKey) {
       if (source === 'auto' || !reviewSettlementRetryPendingRef.current) return
     }
@@ -680,6 +681,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
       setToast('操作处理中 · 请稍候')
       return
     }
+    const commitSnapshot = snapshotRef.current
+    if (
+      commitSnapshot.panelEngineSessionId !== activeEngineSessionId ||
+      !commitSnapshot.panelDoc
+    ) return
     if (action === 'commit') {
       autoCommitKeyRef.current = reviewCommitKey
       reviewSettlementRetryPendingRef.current = false
@@ -688,8 +694,9 @@ export function QingDocPanel(props: QingDocPanelProps) {
     reviewSubmittingRef.current = true
     setReviewSubmitting(true)
     // 结算前抓取当前批次明细:成功后按青简原交互向对话流回流结果,驱动模型知晓采纳/拒绝。
-    const settledSuggestions = (snapshotRef.current.reviewModel?.suggestions ?? [])
+    const settledSuggestions = (commitSnapshot.reviewModel?.suggestions ?? [])
       .filter((suggestion) => suggestion.status === 'reviewing' || suggestion.status === 'accepted' || suggestion.status === 'rejected')
+    const settledSuggestionIds = new Set(settledSuggestions.map((suggestion) => suggestion.id))
     const pushOutcomeToConversation = () => {
       if (!props.qingSendMessage || settledSuggestions.length === 0) return
       const hunks = settledSuggestions.map((suggestion) => ({
@@ -752,23 +759,52 @@ export function QingDocPanel(props: QingDocPanelProps) {
     }
     try {
       const response = await qingClientStore.reviewCommit(sessionId, activeEngineSessionId, {
-        expectedDocVersion: panelDoc.docVersion,
+        expectedDocVersion: commitSnapshot.panelDoc.docVersion,
         action,
       })
       await settleAsSuccess(response.docVersion, true)
     } catch (error) {
+      let failure = error
       if (error instanceof BridgeHttpError && error.status === 409) {
         try {
-          const authoritativeDoc = await qingClientStore.refreshDoc(sessionId, activeEngineSessionId)
-          if (authoritativeDoc.state !== 'pendingReview') {
-            await settleAsSuccess(authoritativeDoc.docVersion, false)
+          await qingClientStore.refreshPanel(sessionId, activeEngineSessionId, { bypassGuard: true })
+          const authoritative = qingClientStore.getSnapshot(sessionId)
+          if (
+            authoritative.panelEngineSessionId !== activeEngineSessionId ||
+            !authoritative.panelDoc
+          ) throw new Error('权威审阅快照不可用')
+          if (authoritative.panelDoc.state !== 'pendingReview') {
+            await settleAsSuccess(authoritative.panelDoc.docVersion, false)
             return
+          }
+          const authoritativeSuggestionIds = new Set(
+            (authoritative.reviewModel?.suggestions ?? [])
+              .filter((suggestion) => suggestion.status === 'reviewing' || suggestion.status === 'accepted' || suggestion.status === 'rejected')
+              .map((suggestion) => suggestion.id),
+          )
+          const sameSuggestionBatch = authoritativeSuggestionIds.size === settledSuggestionIds.size &&
+            [...settledSuggestionIds].every((id) => authoritativeSuggestionIds.has(id))
+          if (sameSuggestionBatch) {
+            console.info('[qingagent-panel] review commit conflict retrying with authoritative version', {
+              action,
+              docVersion: authoritative.panelDoc.docVersion,
+            })
+            try {
+              const response = await qingClientStore.reviewCommit(sessionId, activeEngineSessionId, {
+                expectedDocVersion: authoritative.panelDoc.docVersion,
+                action,
+              })
+              await settleAsSuccess(response.docVersion, true)
+              return
+            } catch (retryError) {
+              failure = retryError
+            }
           }
         } catch (probeError) {
           console.warn('[qingagent-panel] review commit conflict probe failed', probeError)
         }
       }
-      console.error('[qingagent-panel] review commit failed', error)
+      console.error('[qingagent-panel] review commit failed', failure)
       if (action === 'commit') {
         reviewSettlementRetryPendingRef.current = true
         setReviewSettlementRetryPending(true)
