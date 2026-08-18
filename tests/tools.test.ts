@@ -12,7 +12,9 @@ import { registerTools } from '../src/tools.js'
 const DRAFT_ONE = '<title>测试稿</title><h1>开篇</h1><p>第一版正文。</p>'
 const DRAFT_TWO = '<title>测试稿</title><h1>开篇</h1><p>修正后的正文。</p>'
 const EMPTY_DRAFT = '<title>测试稿</title><h1>测试稿</h1>'
-const FOOTNOTE_SOURCE_LEAK_DRAFT = '<title>测试稿</title><h1>开篇</h1><p>第一版正文[^1]。</p><p>[^1]: 《资料甲》</p>'
+const SOURCE_SYNTAX_DRAFT = '<title>测试稿</title><h1>开篇</h1><p>第一版正文[^1]，参数为 $\\alpha$。</p><p>[^1]: 《资料甲》</p><p>$$E=mc^2$$</p>'
+const CONVERTED_SOURCE_SYNTAX_DRAFT = '<title>测试稿</title><h1>开篇</h1><p>第一版正文<footnote id="1">《资料甲》</footnote>，参数为 <math>\\alpha</math>。</p><math-block>E=mc^2</math-block>'
+const UNRESOLVED_FOOTNOTE_DRAFT = '<title>测试稿</title><h1>开篇</h1><p>第一版正文[^missing]。</p>'
 const ONLINE_ENGINE: EngineStatusSnapshot = { state: 'online', engineUrl: 'http://127.0.0.1:8080' }
 
 function doc(overrides: Partial<ExternalDoc> = {}): ExternalDoc {
@@ -304,16 +306,16 @@ describe('qing_write_draft', () => {
     expect(JSON.stringify(fixture.requests[1])).toContain('bad_structure')
   })
 
-  it('正文泄漏 GFM 脚注源语法时落库前拒绝并重写一次', async () => {
+  it('源写法在落库前确定性转换，结构事实如实返回且不触发整篇重生', async () => {
     let proposed = false
-    const fixture = harness([FOOTNOTE_SOURCE_LEAK_DRAFT, DRAFT_TWO], async (path, init) => {
+    const fixture = harness([SOURCE_SYNTAX_DRAFT], async (path, init) => {
       if (path.endsWith('/doc?format=qingml')) {
-        return proposed ? doc({ docVersion: 1, state: 'editing', qingml: DRAFT_TWO, title: '测试稿' }) : doc()
+        return proposed ? doc({ docVersion: 1, state: 'editing', qingml: CONVERTED_SOURCE_SYNTAX_DRAFT, title: '测试稿' }) : doc()
       }
       if (path.endsWith('/proposals')) {
         proposed = true
         expect(JSON.parse(String(init?.body))).toMatchObject({
-          ops: [{ kind: 'qingmlDraft', qingml: DRAFT_TWO }],
+          ops: [{ kind: 'qingmlDraft', qingml: CONVERTED_SOURCE_SYNTAX_DRAFT }],
         })
         return { status: 'committed', docVersion: 1 }
       }
@@ -321,25 +323,33 @@ describe('qing_write_draft', () => {
     })
 
     await expect(fixture.tools.get('qing_write_draft')!.execute({ brief: '写一篇带脚注的测试稿' }, exec()))
-      .resolves.toMatchObject({ status: 'committed' })
-    expect(fixture.stream).toHaveBeenCalledTimes(2)
-    const retryRequest = fixture.requests[1] as { messages: Array<{ content: Array<{ text: string }> }> }
-    expect(retryRequest.messages[0]?.content[0]?.text).toContain('markdown_footnote_source_syntax_leak')
-    expect(retryRequest.messages[0]?.content[0]?.text).toContain(String.raw`<footnote id=\"...\">注文</footnote>`)
+      .resolves.toMatchObject({
+        status: 'committed',
+        footnotes: 1,
+        formulas: 2,
+        automaticConversions: 3,
+      })
+    expect(fixture.stream).toHaveBeenCalledOnce()
+    expect(fixture.requests).toHaveLength(1)
     expect(fixture.engine.fetchJson).toHaveBeenCalledWith(expect.stringContaining('/proposals'), expect.anything())
+    const result = await fixture.tools.get('qing_write_draft')!.output?.render({}, {
+      title: '测试稿', blocks: 3, words: 10, status: 'committed', engineSessionId: 'qing-1', docVersion: 1,
+      wholeDocReview: false, outline: ['开篇'], footnotes: 1, formulas: 2, automaticConversions: 3,
+    } as never)
+    expect(JSON.stringify(result)).toContain('本稿含 1 处脚注、2 个公式，其中 3 处已自动整理为正确格式')
   })
 
-  it('重写后仍泄漏 GFM 脚注源语法时拒绝落库', async () => {
+  it('脚注引用没有对应定义时直接拒绝且不触发整篇重生', async () => {
     let proposals = 0
-    const fixture = harness([FOOTNOTE_SOURCE_LEAK_DRAFT, FOOTNOTE_SOURCE_LEAK_DRAFT], async (path) => {
+    const fixture = harness([UNRESOLVED_FOOTNOTE_DRAFT], async (path) => {
       if (path.endsWith('/doc?format=qingml')) return doc()
       if (path.endsWith('/proposals')) proposals += 1
       throw new Error(`unexpected path: ${path}`)
     })
 
     await expect(fixture.tools.get('qing_write_draft')!.execute({ brief: '写一篇带脚注的测试稿' }, exec()))
-      .rejects.toThrow('侧模型修正后仍在正文中使用 Markdown/GFM 脚注源语法,未提交文稿')
-    expect(fixture.stream).toHaveBeenCalledTimes(2)
+      .rejects.toThrow('文稿中仍有无法识别的脚注或公式写法，未提交文稿')
+    expect(fixture.stream).toHaveBeenCalledOnce()
     expect(proposals).toBe(0)
   })
 
@@ -430,7 +440,7 @@ describe('qing_write_draft', () => {
     expect(new Set(generationEvents.map(({ event }) => 'generation' in event ? event.generation : undefined)).size).toBe(1)
     expect(fixture.tools.get('qing_write_draft')!.output?.render({}, result as never)).toEqual([{
       type: 'text',
-      text: '【文稿状态】审阅中·1 处待用户裁决。\n改动已提交审阅，右侧面板等待用户裁决。本次工具调用结束——不要重写、不要读稿复核、不要自动裁决；收尾说明由工具卡向用户展示，本回合不再产生任何输出。',
+      text: '【文稿状态】审阅中·1 处待用户裁决。\n本稿含 0 处脚注、0 个公式，其中 0 处已自动整理为正确格式。\n改动已提交审阅，右侧面板等待用户裁决。本次工具调用结束——不要重写、不要读稿复核、不要自动裁决；收尾说明由工具卡向用户展示，本回合不再产生任何输出。',
     }])
     const rendered = fixture.tools.get('qing_write_draft')!.output?.render({}, result as never)
     expectReviewEndMessage((rendered?.[0] as { text: string }).text)

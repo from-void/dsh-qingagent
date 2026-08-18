@@ -27,12 +27,13 @@ import { EngineHttpError, EngineUnavailableError, type EngineService } from './e
 import {
   QINGML_SYSTEM,
   completeTopLevelBlocks,
+  convertQingmlSourceSyntax,
   correctionPrompt,
   countWords,
   extractTitle,
-  findQingmlSourceSyntaxLeaks,
   makeDraftPrompt,
   outlineOf,
+  structureFactsOf,
 } from './qingml.js'
 import { isWholeDocReview } from './reviewMode.js'
 
@@ -54,7 +55,7 @@ const STR_REPLACE_LINES_NOTICE = '注意:strReplace 的 old 用纯文本,不要�
 const PM_INLINE_ATOM_PLACEHOLDER = '\uFFFC'
 const EMPTY_DRAFT_CORRECTION = '上一次只产出了标题、缺少正文。请重写整份文档,只输出包含完整正文块的 QingML;除 <title> 和 h1-h6 标题外,至少包含一个承载正文内容的顶层块。'
 const EMPTY_DRAFT_ERROR = '侧模型修正后仍只返回标题,缺少正文块,未提交文稿。'
-const SOURCE_SYNTAX_LEAK_ERROR = '侧模型修正后仍在正文中使用 Markdown/GFM 脚注源语法,未提交文稿。'
+const SOURCE_SYNTAX_LEAK_ERROR = '文稿中仍有无法识别的脚注或公式写法，未提交文稿。'
 // 局部 op 只接受纯文本/Markdown;QingML/HTML 原始标签会被当普通文字刻进正文(用户实测颜色事故)。
 const RAW_TAG_PATTERN = /<\/?\s*(article|title|h[1-6]|p|ul|ol|li|tasks?|blockquote|hr|pre|table|tr|td|th|callout|columns?|mermaid|drawio|math(?:-block)?|img|file|pennote|b|strong|i|em|u|s|del|code|a|mark|color|footnote|br|span|div)\b[^>]*>/i
 const RAW_TAG_ERROR = '检测到 QingML/HTML 标签:局部操作(strReplace/insertAfterLine/appendSection)只接受纯文本或 Markdown；直接写入 <mark>/<color> 等标签会把它们当普通文字刻进正文。样式类修改请改用 qing_edit_draft 的 markText 操作。'
@@ -167,11 +168,14 @@ function writeDraftTool(services: ToolServices) {
           },
           wholeDocReview: { type: 'boolean', required: true },
           outline: { ...outlineSchema, required: true },
+          footnotes: { type: 'integer', required: true, description: '文稿实际包含的脚注数。' },
+          formulas: { type: 'integer', required: true, description: '文稿实际包含的公式数。' },
+          automaticConversions: { type: 'integer', required: true, description: '已自动整理为正确格式的脚注与公式数。' },
           warning: { type: 'string', description: '落库块数与提交块数不符时的缺损警告。' },
         },
       },
       render: (_args, value) => value.status === 'review'
-        ? textBlock(`${docStateLine('pendingReview', value.patchCount)}\n${REVIEW_END_MESSAGE}`)
+        ? textBlock(`${docStateLine('pendingReview', value.patchCount)}\n本稿含 ${value.footnotes} 处脚注、${value.formulas} 个公式，其中 ${value.automaticConversions} 处已自动整理为正确格式。\n${REVIEW_END_MESSAGE}`)
         : textBlock([
           docStateLine('editing'),
           `青简文稿《${value.title}》已提交。`,
@@ -179,6 +183,7 @@ function writeDraftTool(services: ToolServices) {
           `文稿已直接落库生效,当前不在审阅态,没有任何待审稿,可以立即继续修改。`,
           `文稿引用：${value.engineSessionId}`,
           `全文约 ${value.words} 字。`,
+          `本稿含 ${value.footnotes} 处脚注、${value.formulas} 个公式，其中 ${value.automaticConversions} 处已自动整理为正确格式。`,
           ...(typeof value.warning === 'string' ? [`⚠ ${value.warning}`] : []),
           value.outline.length ? `提纲：\n${value.outline.map((line) => `- ${line}`).join('\n')}` : '提纲：暂无标题层级。',
         ].join('\n')),
@@ -225,6 +230,7 @@ function writeDraftTool(services: ToolServices) {
         }
         const initialPrompt = makeDraftPrompt({ brief: args.brief, title: args.title, style: args.style })
         let qingml: string
+        let automaticConversions = 0
         let proposal: ExternalProposalResponse
         try {
           qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, initialPrompt)
@@ -239,23 +245,10 @@ function writeDraftTool(services: ToolServices) {
             qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, retryPrompt)
             if (isBodylessDraft(qingml)) throw new Error(EMPTY_DRAFT_ERROR)
           }
-          const sourceSyntaxLeaks = findQingmlSourceSyntaxLeaks(qingml)
-          if (sourceSyntaxLeaks.length > 0) {
-            const retryPrompt = makeDraftPrompt({
-              brief: args.brief,
-              title: args.title,
-              style: args.style,
-              correction: correctionPrompt(qingml, {
-                failureKind: 'markdown_footnote_source_syntax_leak',
-                kinds: sourceSyntaxLeaks,
-                required: '把脚注引用和注文合并写成引用位置上的 <footnote id="...">注文</footnote>，不要保留 [^x] 或 [^x]: 定义。',
-              }),
-            })
-            generation = randomUUID()
-            qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, retryPrompt)
-            if (isBodylessDraft(qingml)) throw new Error(EMPTY_DRAFT_ERROR)
-            if (findQingmlSourceSyntaxLeaks(qingml).length > 0) throw new Error(SOURCE_SYNTAX_LEAK_ERROR)
-          }
+          let sourceConversion = convertQingmlSourceSyntax(qingml)
+          qingml = sourceConversion.qingml
+          automaticConversions = sourceConversion.converted
+          if (sourceConversion.leaks.length > 0) throw new Error(SOURCE_SYNTAX_LEAK_ERROR)
           try {
             proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
           } catch (error) {
@@ -269,7 +262,10 @@ function writeDraftTool(services: ToolServices) {
             generation = randomUUID()
             qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, retryPrompt)
             if (isBodylessDraft(qingml)) throw new Error(EMPTY_DRAFT_ERROR)
-            if (findQingmlSourceSyntaxLeaks(qingml).length > 0) throw new Error(SOURCE_SYNTAX_LEAK_ERROR)
+            sourceConversion = convertQingmlSourceSyntax(qingml)
+            qingml = sourceConversion.qingml
+            automaticConversions = sourceConversion.converted
+            if (sourceConversion.leaks.length > 0) throw new Error(SOURCE_SYNTAX_LEAK_ERROR)
             proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
           }
         } catch (error) {
@@ -305,6 +301,7 @@ function writeDraftTool(services: ToolServices) {
           // committed 用权威落库稿，review 用 render-model 候选稿；两者都避开本地生成文本与
           // 引擎实际接受结构不一致时的误报。
           const outline = outlineOf(renderedQingml, title)
+          const structureFacts = structureFactsOf(renderedQingml)
           const submittedBlocks = completeTopLevelBlocks(qingml).blocks
             .filter((block) => !/^<title(?:\s|>)/i.test(block)).length
           const lostBlocks = Math.max(0, submittedBlocks - outline.blocks)
@@ -340,6 +337,9 @@ function writeDraftTool(services: ToolServices) {
             engineSessionId: bound.engineSessionId,
             docVersion: official.docVersion,
             wholeDocReview,
+            footnotes: structureFacts.footnotes,
+            formulas: structureFacts.formulas,
+            automaticConversions,
             ...(proposal.status === 'review'
               ? { patchCount: proposal.count, patchIds: proposal.patchIds }
               : {}),
