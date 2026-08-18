@@ -1,3 +1,3 @@
 [submodule "vendor/qingagent"]
 	path = vendor/qingagent
-	url = https://github.com/from-void/qingagent.git
+	url = https://github.com/void2anything/qingagent.git

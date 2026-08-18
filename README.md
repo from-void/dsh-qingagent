@@ -11,7 +11,7 @@
 [![npm](https://img.shields.io/npm/v/dsh-qingagent)](https://www.npmjs.com/package/dsh-qingagent)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
-[青简主仓](https://github.com/from-void/qingagent) · [官网 qingagent.com](https://qingagent.com) · [English](./README.en.md)
+[青简主仓](https://github.com/void2anything/qingagent) · [官网 qingagent.com](https://qingagent.com) · [English](./README.en.md)
 
 <img src="docs/assets/dsh-demo.gif" alt="在 DSH 里一句话起草，右侧宣纸面板同步成文" width="880">
 
@@ -50,7 +50,7 @@ DeepSeek Harness（DSH）是 DeepSeek 开源的「一切皆插件」Agent 框架
 
 ## 与青简主仓的关系
 
-本插件是 [**青简 qingagent**](https://github.com/from-void/qingagent) 的 DSH 前端，不是独立产品。
+本插件是 [**青简 qingagent**](https://github.com/void2anything/qingagent) 的 DSH 前端，不是独立产品。
 
 **因为插件本身的复杂度——纸面渲染与文稿引擎深度耦合、文档与版本存在本机数据库——目前必须先安装青简桌面客户端，插件才能工作。** 客户端承载文稿引擎与本机库；插件负责把它接进 DSH 的对话与界面。
 
@@ -76,7 +76,7 @@ npx @deepseek-ai/dsh plugin --profile web add dsh-qingagent@latest
 
 **③ 下载并启动一次青简客户端**
 
-到 [qingagent.com](https://qingagent.com/#download) 或 [青简 Releases](https://github.com/from-void/qingagent/releases) 下载安装，启动一次——引擎随之常驻，凭证写入 `~/.qingagent/instance.json`，插件即自动连接。
+到 [qingagent.com](https://qingagent.com/#download) 或 [青简 Releases](https://github.com/void2anything/qingagent/releases) 下载安装，启动一次——引擎随之常驻，凭证写入 `~/.qingagent/instance.json`，插件即自动连接。
 
 > 青简未安装或未启动时，面板会显示引导卡：**未安装**给下载指引；**已安装未启动**给一键「启动青简」；**握手失败**直接说明原因（比如 instance.json 损坏）。青简起来后插件自动恢复，不用重启 DSH。
 
@@ -178,7 +178,7 @@ npx @deepseek-ai/dsh plugin --profile web add dsh-qingagent@latest
 ## 从源码开发
 
 ```bash
-git clone --recursive https://github.com/from-void/dsh-qingagent.git
+git clone --recursive https://github.com/void2anything/dsh-qingagent.git
 cd dsh-qingagent
 npm install
 npm run check   # CSS 钉扎校验 + 类型 + 测试 + 构建
@@ -225,8 +225,8 @@ npm test        # 仅单测
 
 ## 联系作者
 
-- 使用问题、bug、需求：[GitHub Issues](https://github.com/from-void/dsh-qingagent/issues)
-- 青简本体问题：[青简主仓 Issues](https://github.com/from-void/qingagent/issues)
+- 使用问题、bug、需求：[GitHub Issues](https://github.com/void2anything/dsh-qingagent/issues)
+- 青简本体问题：[青简主仓 Issues](https://github.com/void2anything/qingagent/issues)
 
 <!-- TODO: 作者联系方式待补 -->
 
@@ -234,4 +234,4 @@ npm test        # 仅单测
 
 ## License
 
-[Apache-2.0](./LICENSE)（本仓）。`vendor/qingagent` submodule 为 [青简](https://github.com/from-void/qingagent)，MIT。
+[Apache-2.0](./LICENSE)（本仓）。`vendor/qingagent` submodule 为 [青简](https://github.com/void2anything/qingagent)，MIT。

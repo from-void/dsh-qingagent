@@ -136,11 +136,11 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/from-void/dsh-qingagent.git"
+    "url": "git+https://github.com/void2anything/dsh-qingagent.git"
   },
-  "homepage": "https://github.com/from-void/dsh-qingagent#readme",
+  "homepage": "https://github.com/void2anything/dsh-qingagent#readme",
   "bugs": {
-    "url": "https://github.com/from-void/dsh-qingagent/issues"
+    "url": "https://github.com/void2anything/dsh-qingagent/issues"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",

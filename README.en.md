@@ -11,7 +11,7 @@ A plugin built to the DSH spec: one command to install or remove, and you can wr
 [![npm](https://img.shields.io/npm/v/dsh-qingagent)](https://www.npmjs.com/package/dsh-qingagent)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
-[qingagent repo](https://github.com/from-void/qingagent) · [qingagent.com](https://qingagent.com) · [中文](./README.md)
+[qingagent repo](https://github.com/void2anything/qingagent) · [qingagent.com](https://qingagent.com) · [中文](./README.md)
 
 <img src="docs/assets/dsh-demo.gif" alt="Drafting in DSH with the paper panel filling in on the right" width="880">
 
@@ -50,7 +50,7 @@ Describe what you want in the conversation, and the agent drafts, edits and subm
 
 ## Relationship with the qingagent repo
 
-This plugin is the DSH frontend of [**qingagent**](https://github.com/from-void/qingagent), not a standalone product.
+This plugin is the DSH frontend of [**qingagent**](https://github.com/void2anything/qingagent), not a standalone product.
 
 **Because of the plugin's own complexity — the paper rendering is deeply coupled with the manuscript engine, and documents and versions live in a local database — the qingagent desktop client must be installed first for the plugin to work.** The client hosts the engine and the local library; the plugin wires it into DSH's conversation and UI.
 
@@ -76,7 +76,7 @@ Restart `dsh web` afterwards.
 
 **③ Download and launch qingagent once**
 
-Get it from [qingagent.com](https://qingagent.com/#download) or [qingagent Releases](https://github.com/from-void/qingagent/releases). Launching it once starts the engine and writes credentials to `~/.qingagent/instance.json`; the plugin connects automatically.
+Get it from [qingagent.com](https://qingagent.com/#download) or [qingagent Releases](https://github.com/void2anything/qingagent/releases). Launching it once starts the engine and writes credentials to `~/.qingagent/instance.json`; the plugin connects automatically.
 
 > If qingagent is missing or not running, the panel shows an onboarding card: **not installed** → download instructions; **installed but not running** → a one-click "Launch qingagent"; **handshake failed** → the specific reason (a corrupted `instance.json`, for example). Once qingagent is up the plugin recovers on its own — no need to restart DSH.
 
@@ -178,7 +178,7 @@ Binding data lives in the `dsh_qingagent` v1 domain of `@deepseek-ai/dsh-storage
 ## Developing from source
 
 ```bash
-git clone --recursive https://github.com/from-void/dsh-qingagent.git
+git clone --recursive https://github.com/void2anything/dsh-qingagent.git
 cd dsh-qingagent
 npm install
 npm run check   # CSS pinning check + typecheck + tests + build
@@ -225,8 +225,8 @@ Scan to join the WeChat user group — report problems, request features, follow
 
 ## Contact
 
-- Usage questions, bugs, feature requests: [GitHub Issues](https://github.com/from-void/dsh-qingagent/issues)
-- Issues with qingagent itself: [qingagent Issues](https://github.com/from-void/qingagent/issues)
+- Usage questions, bugs, feature requests: [GitHub Issues](https://github.com/void2anything/dsh-qingagent/issues)
+- Issues with qingagent itself: [qingagent Issues](https://github.com/void2anything/qingagent/issues)
 
 <!-- TODO: author contact pending -->
 
@@ -234,4 +234,4 @@ Scan to join the WeChat user group — report problems, request features, follow
 
 ## License
 
-[Apache-2.0](./LICENSE) for this repository. The `vendor/qingagent` submodule is [qingagent](https://github.com/from-void/qingagent), MIT.
+[Apache-2.0](./LICENSE) for this repository. The `vendor/qingagent` submodule is [qingagent](https://github.com/void2anything/qingagent), MIT.
