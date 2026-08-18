@@ -19,6 +19,10 @@ describe('青简纸面移植契约', () => {
       readFile(resolve('src/client/QingDocPanel.tsx'), 'utf8'),
     ])
     const declarations = css.replace(/\/\*[\s\S]*?\*\//g, '')
+    const declarationsWithoutAuthorizedPortals = declarations.replace(
+      /body:has\(\[data-qingagent-doc-panel\]\)/g,
+      '[data-qingagent-doc-panel]',
+    )
 
     expect(panelSource).toContain("'--ws-paper-column-width': '800px'")
     expect(panelSource).toContain('id="view-workspace"')
@@ -40,7 +44,8 @@ describe('青简纸面移植契约', () => {
     expect(css).toContain('.qing-tag-inner .qt-author')
     expect(css).toContain('--r: 0;')
     expect(css).toContain('padding: 52px 64px !important;')
-    expect(declarations).not.toMatch(/(^|})\s*(?:body|html|:root|#view-workspace)\b/)
+    expect(declarationsWithoutAuthorizedPortals).not.toMatch(/(^|})\s*(?:body|html|:root|#view-workspace)\b/)
+    expect(declarations).toContain('body:has([data-qingagent-doc-panel]) > .media-zoom-fullscreen')
     expect(declarations).not.toMatch(/\.(?:ws-left|ws-chat|ws-back-home|ws-doc-topbar)\b/)
   })
 
@@ -81,21 +86,31 @@ describe('青简纸面移植契约', () => {
     expect(css).toMatch(/:is\(\[data-qingagent-doc-panel\], #qingagent-doc-panel-specificity\) \.ws-right \{[\s\S]*?overflow-y: auto;/)
   })
 
-  it('弹性纸列只逐件居中纸面，并保持 docfns 的纸右缘 inset 前提', async () => {
-    const css = await readFile(resolve('src/qingdoc/qingdoc.css'), 'utf8')
+  it('滚动容器承担 800px 限宽与居中，纸面铺满容器并保持 docfns 的纸右缘 inset', async () => {
+    const [css, panelCss, panelSource] = await Promise.all([
+      readFile(resolve('src/qingdoc/qingdoc.css'), 'utf8'),
+      readFile(resolve('src/client/QingDocPanel.css'), 'utf8'),
+      readFile(resolve('src/client/QingDocPanel.tsx'), 'utf8'),
+    ])
     const declarations = css.replace(/\/\*[\s\S]*?\*\//g, '')
-    const paperRule = declarations.match(
+    const containerRule = panelCss.match(
+      /:is\(\[data-qingagent-doc-panel\], #qingagent-doc-panel-specificity\) \.ws-right \{([\s\S]*?)\n\}/,
+    )?.[1]
+    const paperRule = panelCss.match(
       /:is\(\[data-qingagent-doc-panel\], #qingagent-doc-panel-specificity\) \.wf-doc,\s*:is\(\[data-qingagent-doc-panel\], #qingagent-doc-panel-specificity\) \.ws-paper-shell,\s*:is\(\[data-qingagent-doc-panel\], #qingagent-doc-panel-specificity\) \.ws-paper-surface \{([^}]*)\}/,
     )?.[1]
 
+    expect(containerRule).toBeDefined()
+    expect(containerRule).toContain('max-width: 800px !important;')
+    expect(containerRule).toContain('margin-inline: auto;')
     expect(paperRule).toBeDefined()
-    expect(paperRule).toContain('max-width: min(800px, 100%);')
-    expect(paperRule).toContain('right: 0;')
-    expect(paperRule).toContain('margin-inline: auto;')
-    expect(declarations.lastIndexOf('margin-inline: auto;')).toBeGreaterThan(
-      declarations.indexOf('margin: 0;'),
-    )
+    expect(paperRule).toContain('max-width: 100% !important;')
+    expect(paperRule).toContain('right: auto;')
+    expect(paperRule).toContain('margin-inline: 0;')
     expect(declarations).not.toMatch(/\.ws-right\s*\{[^}]*align-items\s*:\s*center/)
+    expect(panelSource.indexOf("import '../qingdoc/qingdoc.css'")).toBeLessThan(
+      panelSource.indexOf("import './QingDocPanel.css'"),
+    )
   })
 
   it('文稿切换器使用自定义 listbox 与 dsh 语义色', async () => {

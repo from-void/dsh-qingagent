@@ -9,6 +9,17 @@ const panelRoot = '[data-qingagent-doc-panel]'
 // keeps #view-workspace's original ID specificity while the attribute arm keeps
 // the plugin isolated from the host page.
 const workspaceRoot = `:is(${panelRoot}, #qingagent-doc-panel-specificity)`
+const portalBodyRoot = `body:has(${panelRoot})`
+const bodyPortalRoots = [
+  '.media-zoom-fullscreen',
+  '.graph-diagram-editor',
+  '.graph-diagram-viewer',
+  '.graph-diagram-pan-tip',
+  '.diagram-editor-chrome',
+]
+const bodyPortalContainers = ':is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer)'
+const componentPortalTokenRoots = `[data-drawio-editor-host="true"],
+${portalBodyRoot} > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer, .graph-diagram-pan-tip)`
 const bannedSelectors = [
   '.web-page-frame--workspace',
   '.ws-left',
@@ -27,6 +38,15 @@ const sources = [
   ['apps/web/src/pages/workspace/workspace.css', [[169, 169], [197, 214], [294, 376], [1120, 1157], [1289, 3652]]],
   ['apps/web/src/pages/workspace/workspace-ink-skin.css', [[20, 60], [119, 204], [592, 682], [1111, 1220], [1527, 1667], [1669, 1802], [1863, 2071], [2093, 2151], [2558, 2682], [3193, 3508]]],
   ['apps/web/src/pages/workspace/workspace-responsive.css', [[1, 30]]],
+  // DocumentSnapshotView 的可达组件 CSS。与上方产品样式一样逐文件/逐行钉扎；
+  // 这些文件含图片/图表工具栏、全屏预览与 drawio/图表 portal，漏掉会继承 dsh 字号和层级。
+  ['apps/web/src/pages/workspace/components/MediaBlockToolbar.css', [[1, 64]], 'component'],
+  ['apps/web/src/pages/workspace/components/ImageView.css', [[1, 128]], 'component'],
+  ['apps/web/src/pages/workspace/components/MediaZoomFullscreen.css', [[1, 130]], 'component'],
+  ['apps/web/src/pages/workspace/components/DiagramView.css', [[1, 379]], 'component'],
+  ['apps/web/src/pages/workspace/components/DrawioEditorOverlay.css', [[1, 106]], 'component'],
+  ['apps/web/src/pages/workspace/components/diagramEditorChrome.css', [[1, 96]], 'component'],
+  ['apps/web/src/pages/workspace/components/diagram/graphDiagram.css', [[1, 1441]], 'component'],
 ]
 
 // 尾部几何覆写:必须排在机械提取的产品规则之后,同特异度靠后取胜。
@@ -213,7 +233,30 @@ function scopeSelector(rawSelector) {
   return `${panelRoot} ${selector}`
 }
 
-function scopeStylesheet(source) {
+function startsWithPortalRoot(selector) {
+  return bodyPortalRoots.some((root) => {
+    if (!selector.startsWith(root)) return false
+    const next = selector[root.length]
+    return next === undefined || '.:#[ >+~'.includes(next)
+  })
+}
+
+function scopeComponentSelector(rawSelector) {
+  const panelSelector = scopeSelector(rawSelector)
+  if (!panelSelector) return null
+  const selectors = [panelSelector]
+  // drawio launcher 为组件创建唯一 body 直属 host；用该属性收口，既覆盖 portal，
+  // 又不会把同名组件类泄漏到 dsh 宿主。
+  selectors.push(`[data-drawio-editor-host="true"] ${rawSelector}`)
+  // 图片全屏与 graph 编辑器直接 portal 到 body，没有独立 host。仅在青简面板挂载时
+  // 放行其根/后代选择器，避免组件样式因 panel 前缀而永远无法命中。
+  selectors.push(startsWithPortalRoot(rawSelector)
+    ? `${portalBodyRoot} > ${rawSelector}`
+    : `${portalBodyRoot} > ${bodyPortalContainers} ${rawSelector}`)
+  return selectors.join(',\n')
+}
+
+function scopeStylesheet(source, { component = false } = {}) {
   let result = ''
   let cursor = 0
   while (cursor < source.length) {
@@ -225,11 +268,12 @@ function scopeStylesheet(source) {
     const prelude = rawPrelude.slice(leading.length).trim()
     const body = source.slice(open + 1, close)
     if (prelude.startsWith('@media') || prelude.startsWith('@supports') || prelude.startsWith('@container') || prelude.startsWith('@layer')) {
-      result += `${leading}${prelude} {${scopeStylesheet(body)}}`
+      result += `${leading}${prelude} {${scopeStylesheet(body, { component })}}`
     } else if (prelude.startsWith('@')) {
       result += `${leading}${prelude} {${body}}`
     } else {
-      const selectors = splitSelectors(prelude).map(scopeSelector).filter(Boolean)
+      const scope = component ? scopeComponentSelector : scopeSelector
+      const selectors = splitSelectors(prelude).map(scope).filter(Boolean)
       if (selectors.length > 0) result += `${leading}${selectors.join(',\n')} {${body}}`
       else result += leading
     }
@@ -239,18 +283,27 @@ function scopeStylesheet(source) {
 }
 
 const extracted = []
-for (const [relativePath, ranges] of sources) {
+const extractedComponents = []
+for (const [relativePath, ranges, kind] of sources) {
   const absolutePath = resolve(qingRoot, relativePath)
   const source = await readFile(absolutePath, 'utf8')
   for (const [start, end] of ranges) {
-    extracted.push(`/* source: ${relativePath}:${start}-${end} */\n${lineRange(source, start, end)}`)
+    const target = kind === 'component' ? extractedComponents : extracted
+    target.push(`/* source: ${relativePath}:${start}-${end} */\n${lineRange(source, start, end)}`)
   }
 }
+
+// Portal 不继承面板根上的设计令牌。复用同一份钉扎 token 行段，只改作用域根，
+// 声明值保持与客户端完全一致。
+const tokenSource = await readFile(resolve(qingRoot, 'packages/ui-kit/src/tokens.css'), 'utf8')
+const componentPortalTokens = `/* source: packages/ui-kit/src/tokens.css:4-48 (component portals) */\n${lineRange(tokenSource, 4, 48).replace(/^:root\b/, componentPortalTokenRoots)}`
 
 let output = [
   '/* 由 scripts/extract-qingdoc-css.mjs 从青简 wt/dsh-bridge@dc1a0baf 机械提取；声明值不改。 */',
   hostGlue,
   scopeStylesheet(extracted.join('\n\n')),
+  componentPortalTokens,
+  scopeStylesheet(extractedComponents.join('\n\n'), { component: true }),
   geometryOverrides,
   '',
 ].join('\n').replace(/[ \t]+$/gm, '')
