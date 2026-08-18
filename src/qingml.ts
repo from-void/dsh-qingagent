@@ -101,8 +101,90 @@ export function extractTitle(qingml: string, fallback = '未命名文稿'): stri
 export interface DraftOutline {
   title: string
   headings: Array<{ level: number; text: string; firstSentence?: string }>
-  words: number
   blocks: number
+  structure: string
+}
+
+interface StructureCounts {
+  titles: number
+  subtitles: number
+  paragraphs: number
+  lists: number
+  tables: number
+  quotes: number
+  callouts: number
+  columns: number
+  codeBlocks: number
+  diagrams: number
+  formulas: number
+  images: number
+  files: number
+  notes: number
+  separators: number
+  other: number
+}
+
+function structureSummary(blocks: string[]): string {
+  const counts: StructureCounts = {
+    titles: 0,
+    subtitles: 0,
+    paragraphs: 0,
+    lists: 0,
+    tables: 0,
+    quotes: 0,
+    callouts: 0,
+    columns: 0,
+    codeBlocks: 0,
+    diagrams: 0,
+    formulas: 0,
+    images: 0,
+    files: 0,
+    notes: 0,
+    separators: 0,
+    other: 0,
+  }
+  for (const block of blocks) {
+    const tag = block.match(/^<([\w-]+)(?:\s|>|\/)/i)?.[1]?.toLowerCase()
+    if (!tag || tag === 'title') continue
+    if (tag === 'h1') counts.titles += 1
+    else if (/^h[2-6]$/.test(tag)) counts.subtitles += 1
+    else if (tag === 'p') counts.paragraphs += 1
+    else if (tag === 'ul' || tag === 'ol' || tag === 'tasks') counts.lists += 1
+    else if (tag === 'table') counts.tables += 1
+    else if (tag === 'blockquote') counts.quotes += 1
+    else if (tag === 'callout') counts.callouts += 1
+    else if (tag === 'columns') counts.columns += 1
+    else if (tag === 'pre') counts.codeBlocks += 1
+    else if (tag === 'mermaid' || tag === 'drawio') counts.diagrams += 1
+    else if (tag === 'math-block') counts.formulas += 1
+    else if (tag === 'img') counts.images += 1
+    else if (tag === 'file') counts.files += 1
+    else if (tag === 'pennote') counts.notes += 1
+    else if (tag === 'hr') counts.separators += 1
+    else counts.other += 1
+  }
+  const parts = [
+    counts.titles ? (counts.titles === 1 ? '一个标题' : `${counts.titles} 个标题`) : '',
+    counts.subtitles ? `${counts.subtitles} 个小标题` : '',
+    counts.paragraphs ? `${counts.paragraphs} 段正文` : '',
+    counts.lists ? `${counts.lists} 个清单` : '',
+    counts.tables ? `${counts.tables} 张表格` : '',
+    counts.quotes ? `${counts.quotes} 处引用` : '',
+    counts.callouts ? `${counts.callouts} 处提示` : '',
+    counts.columns ? `${counts.columns} 组分栏` : '',
+    counts.codeBlocks ? `${counts.codeBlocks} 段代码` : '',
+    counts.diagrams ? `${counts.diagrams} 张图表` : '',
+    counts.formulas ? `${counts.formulas} 个公式` : '',
+    counts.images ? `${counts.images} 张图片` : '',
+    counts.files ? `${counts.files} 个附件` : '',
+    counts.notes ? `${counts.notes} 则旁注` : '',
+    counts.separators ? `${counts.separators} 条分隔线` : '',
+    counts.other ? `${counts.other} 项其他内容` : '',
+  ].filter(Boolean)
+  if (parts.length === 0) return '暂无正文内容'
+  if (parts.length === 1) return parts[0]!
+  if (parts.length === 2) return `${parts[0]}加 ${parts[1]}`
+  return `${parts.slice(0, -1).join('、')}和 ${parts.at(-1)}`
 }
 
 export function outlineOf(qingml: string, title?: string | null): DraftOutline {
@@ -126,8 +208,8 @@ export function outlineOf(qingml: string, title?: string | null): DraftOutline {
   return {
     title: title?.trim() || extractTitle(qingml),
     headings,
-    words: countWords(qingml),
     blocks: complete.filter((block) => !/^<title(?:\s|>)/i.test(block)).length,
+    structure: structureSummary(complete),
   }
 }
 
