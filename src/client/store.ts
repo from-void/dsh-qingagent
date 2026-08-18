@@ -51,29 +51,47 @@ export interface QingClientSnapshot {
 
 export type CurrentReviewState = 'pending' | 'settled' | 'unknown'
 
+const ACTIVE_REVIEW_STATUSES = new Set(['reviewing', 'accepted', 'rejected'])
+
+function matchesLoadedPanel(
+  snapshot: QingClientSnapshot,
+  engineSessionId: string | undefined,
+): boolean {
+  return Boolean(
+    engineSessionId &&
+    snapshot.panelEngineSessionId === engineSessionId &&
+    snapshot.panelDoc,
+  )
+}
+
+function isActivePatchSuggestion(suggestion: ExternalReviewRenderModelResponse['suggestions'][number]): boolean {
+  return suggestion.kind !== 'annotation' && ACTIVE_REVIEW_STATUSES.has(suggestion.status)
+}
+
 /**
- * 与 QingDocPanel 的审阅展示使用同一口径：正文面板仍是 pendingReview，或当前
- * render-model 里仍保留正文补丁（包括已经逐条表态、尚未最终提交的补丁）。只有
- * 指定文稿正是已加载面板稿时，才区分待审与已结算；其余情况不猜。
+ * 工具卡只把 meta 冻结的 patchIds 与当前 render-model 精确对表；文稿相同但批次
+ * 不同不能推断旧卡结局。逐条表态但尚未 commit 的 accepted/rejected 仍属待审。
  */
 export function currentReviewStateFor(
   snapshot: QingClientSnapshot,
   engineSessionId: string | undefined,
+  patchIds: readonly string[] | undefined,
 ): CurrentReviewState {
-  if (
-    !engineSessionId ||
-    snapshot.panelEngineSessionId !== engineSessionId ||
-    !snapshot.panelDoc
-  ) return 'unknown'
-  const hasPatchReview = Boolean(snapshot.reviewModel?.suggestions.some((suggestion) =>
-    suggestion.kind !== 'annotation' && (
-      suggestion.status === 'reviewing' ||
-      suggestion.status === 'accepted' ||
-      suggestion.status === 'rejected'
-    )))
-  return (
-    snapshot.panelDoc.state === 'pendingReview' || hasPatchReview
-  ) ? 'pending' : 'settled'
+  if (!matchesLoadedPanel(snapshot, engineSessionId) || !patchIds?.length) return 'unknown'
+  const hasBatchPatch = Boolean(snapshot.reviewModel?.suggestions.some((suggestion) =>
+    isActivePatchSuggestion(suggestion) && patchIds.includes(suggestion.id)))
+  if (hasBatchPatch) return 'pending'
+  return snapshot.panelDoc?.state === 'pendingReview' ? 'unknown' : 'settled'
+}
+
+/** 面板描述当前文稿而非历史工具事件，因此继续按当前 PM/render-model 判定。 */
+export function currentPanelReviewStateFor(
+  snapshot: QingClientSnapshot,
+  engineSessionId: string | undefined,
+): CurrentReviewState {
+  if (!matchesLoadedPanel(snapshot, engineSessionId)) return 'unknown'
+  const hasPatchReview = Boolean(snapshot.reviewModel?.suggestions.some(isActivePatchSuggestion))
+  return snapshot.panelDoc?.state === 'pendingReview' || hasPatchReview ? 'pending' : 'settled'
 }
 
 interface SessionEntry {

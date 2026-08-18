@@ -36,6 +36,7 @@ export interface ToolCardMeta {
   scope?: string
   mode?: string
   wholeDocReview?: boolean
+  patchIds?: string[]
 }
 
 interface InjectedProps {
@@ -97,7 +98,7 @@ export const QingEditToolCard = createQingToolCard({
   doneTitle: (meta) => (meta.status === 'review' ? '修改待审阅' : '修改已生效'),
   failedTitle: '修改未完成',
   summary: (meta, snapshot) => {
-    const pendingReview = currentReviewStateFor(snapshot, meta.engineSessionId) === 'pending'
+    const pendingReview = currentReviewStateFor(snapshot, meta.engineSessionId, meta.patchIds) === 'pending'
     return [
       titled(meta),
       meta.status === 'review' && meta.reviewCount
@@ -110,7 +111,7 @@ export const QingEditToolCard = createQingToolCard({
   },
   narrative: (meta, snapshot) => {
     if (meta.status !== 'review') return ''
-    const reviewState = currentReviewStateFor(snapshot, meta.engineSessionId)
+    const reviewState = currentReviewStateFor(snapshot, meta.engineSessionId, meta.patchIds)
     if (meta.wholeDocReview) {
       return reviewState === 'pending'
         ? '新版已写好,在右侧等你确认采用或退回。'
