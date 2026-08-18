@@ -36,8 +36,8 @@ export interface QingClientSnapshot {
   panelDoc?: ExternalPmDocReadResponse
   reviewModel?: ExternalReviewRenderModelResponse
   panelLoading?: boolean
-  /** external 明确确认文稿不存在；按文稿 ID 归属，避免切稿时把 missing 状态串给别稿。 */
-  docMissing?: { engineSessionId: string }
+  /** external 明确确认不存在的文稿集合；按文稿 ID 持久排除，读回成功时逐篇恢复。 */
+  docMissing?: { engineSessionIds: string[] }
   /** 「重载」等显式放弃本地内容的操作递增它,面板据此强制重挂编辑器。 */
   panelReloadNonce?: number
   saveState?: DocumentSaveState
@@ -369,7 +369,7 @@ export class QingClientStore {
         this.update(entry, {
           ...entry.snapshot,
           panelLoading: false,
-          docMissing: undefined,
+          docMissing: removeMissingPanelDoc(entry.snapshot.docMissing, engineSessionId),
           error: undefined,
         })
         return
@@ -383,7 +383,7 @@ export class QingClientStore {
         this.update(entry, {
           ...entry.snapshot,
           panelLoading: false,
-          docMissing: undefined,
+          docMissing: removeMissingPanelDoc(entry.snapshot.docMissing, engineSessionId),
           error: undefined,
         })
         return
@@ -404,22 +404,15 @@ export class QingClientStore {
           ? reviewModel.suggestions.filter((suggestion) => suggestion.status === 'reviewing').length
           : undefined,
         saveState: refreshSaveState(entry.snapshot.saveState),
-        docMissing: undefined,
+        docMissing: removeMissingPanelDoc(entry.snapshot.docMissing, engineSessionId),
         error: undefined,
       })
       entry.panelRefreshGuard?.afterApply?.(engineSessionId, panelDoc)
     } catch (error) {
       if (entry.panelLoadToken !== token) return
       if (isMissingPanelDocError(error)) {
-        const state = entry.snapshot.state
-          ? {
-              ...entry.snapshot.state,
-              docs: entry.snapshot.state.docs.filter((doc) => doc.engineSessionId !== engineSessionId),
-            }
-          : undefined
         this.update(entry, {
           ...entry.snapshot,
-          state,
           activeDoc: entry.snapshot.activeDoc?.sessionId === engineSessionId
             ? undefined
             : entry.snapshot.activeDoc,
@@ -428,7 +421,7 @@ export class QingClientStore {
           reviewModel: undefined,
           reviewCount: undefined,
           panelLoading: false,
-          docMissing: { engineSessionId },
+          docMissing: addMissingPanelDoc(entry.snapshot.docMissing, engineSessionId),
           error: undefined,
         })
       } else {
@@ -938,6 +931,24 @@ function isMissingPanelDocError(error: unknown): error is BridgeHttpError {
   return error instanceof BridgeHttpError
     && error.status === 404
     && error.body.code === 'SESSION_NOT_FOUND'
+}
+
+function addMissingPanelDoc(
+  missing: QingClientSnapshot['docMissing'],
+  engineSessionId: string,
+): NonNullable<QingClientSnapshot['docMissing']> {
+  const engineSessionIds = missing?.engineSessionIds ?? []
+  return engineSessionIds.includes(engineSessionId)
+    ? { engineSessionIds }
+    : { engineSessionIds: [...engineSessionIds, engineSessionId] }
+}
+
+function removeMissingPanelDoc(
+  missing: QingClientSnapshot['docMissing'],
+  engineSessionId: string,
+): QingClientSnapshot['docMissing'] {
+  const engineSessionIds = missing?.engineSessionIds.filter((id) => id !== engineSessionId) ?? []
+  return engineSessionIds.length ? { engineSessionIds } : undefined
 }
 
 function readableError(error: unknown): string {

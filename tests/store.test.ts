@@ -209,9 +209,9 @@ describe('QingClientStore 生成终态', () => {
     ])
   })
 
-  it('refreshPanel 对确定删除维持 docMissing，重复刷新仍保持，成功读回后清除', async () => {
+  it('refreshPanel 累积多篇 docMissing，刷新别稿不清空，成功读回时只恢复当前篇', async () => {
     vi.stubGlobal('EventSource', FakeEventSource)
-    let restored = false
+    const readable = new Set(['qing-live'])
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.startsWith('/qingagent-bridge/state?')) {
@@ -219,14 +219,19 @@ describe('QingClientStore 生成终态', () => {
           dshSessionId: 'dsh-missing',
           binding: {
             docs: [
-              { engineSessionId: 'qing-missing', title: '昨日旧稿', createdAt: '2026-08-15T00:00:00.000Z' },
+              { engineSessionId: 'qing-a', title: '昨日旧稿 A', createdAt: '2026-08-15T00:00:00.000Z' },
+              { engineSessionId: 'qing-b', title: '昨日旧稿 B', createdAt: '2026-08-15T00:00:30.000Z' },
               { engineSessionId: 'qing-live', title: '可用文稿', createdAt: '2026-08-15T00:01:00.000Z' },
             ],
-            activeEngineSessionId: 'qing-missing',
+            activeEngineSessionId: 'qing-a',
           },
           docs: [
             {
-              engineSessionId: 'qing-missing', title: '昨日旧稿', createdAt: '2026-08-15T00:00:00.000Z',
+              engineSessionId: 'qing-a', title: '昨日旧稿 A', createdAt: '2026-08-15T00:00:00.000Z',
+              state: 'editing', docVersion: 3,
+            },
+            {
+              engineSessionId: 'qing-b', title: '昨日旧稿 B', createdAt: '2026-08-15T00:00:30.000Z',
               state: 'editing', docVersion: 3,
             },
             {
@@ -235,28 +240,30 @@ describe('QingClientStore 生成终态', () => {
             },
           ],
           activeDoc: {
-            sessionId: 'qing-missing', docVersion: 3, state: 'editing', agentBusy: false,
-            markdown: '', qingml: '<p>旧正文</p>', title: '昨日旧稿',
+            sessionId: 'qing-a', docVersion: 3, state: 'editing', agentBusy: false,
+            markdown: '', qingml: '<p>旧正文</p>', title: '昨日旧稿 A',
           },
           engine: { state: 'online', engineUrl: 'http://127.0.0.1:8080' },
         } satisfies BridgeState)
       }
       if (url.startsWith('/qingagent-bridge/doc-pm?')) {
-        if (!restored) {
+        const engineSessionId = new URL(url, 'http://local').searchParams.get('engineSessionId')!
+        if (!readable.has(engineSessionId)) {
           return Response.json(
             { error: '青简会话不存在', code: 'SESSION_NOT_FOUND', nextStep: '不要重试原引用' },
             { status: 404 },
           )
         }
         return Response.json({
-          sessionId: 'qing-missing', docVersion: 4, contentHash: 'hash-4', state: 'editing',
-          agentBusy: false, title: '恢复文稿', ts: 't4',
+          sessionId: engineSessionId, docVersion: 4, contentHash: 'hash-4', state: 'editing',
+          agentBusy: false, title: `恢复文稿 ${engineSessionId}`, ts: 't4',
           pmDoc: { type: 'doc', attrs: { schemaVersion: 1 }, content: [] },
         })
       }
       if (url.startsWith('/qingagent-bridge/review-render-model?')) {
+        const engineSessionId = new URL(url, 'http://local').searchParams.get('engineSessionId')!
         return Response.json({
-          sessionId: 'qing-missing', docVersion: 4, state: 'editing', agentBusy: false,
+          sessionId: engineSessionId, docVersion: 4, state: 'editing', agentBusy: false,
           baseVersion: 4, suggestions: [],
         })
       }
@@ -267,23 +274,33 @@ describe('QingClientStore 生成终态', () => {
     const release = store.retain('dsh-missing')
     await vi.waitFor(() => expect(store.getSnapshot('dsh-missing').state).toBeDefined())
 
-    await expect(store.refreshPanel('dsh-missing', 'qing-missing')).rejects.toMatchObject({ status: 404 })
+    await expect(store.refreshPanel('dsh-missing', 'qing-a')).rejects.toMatchObject({ status: 404 })
     expect(store.getSnapshot('dsh-missing')).toMatchObject({
-      docMissing: { engineSessionId: 'qing-missing' },
-      panelEngineSessionId: 'qing-missing',
+      docMissing: { engineSessionIds: ['qing-a'] },
+      panelEngineSessionId: 'qing-a',
       panelLoading: false,
     })
     expect(store.getSnapshot('dsh-missing').panelDoc).toBeUndefined()
+
+    await store.refreshPanel('dsh-missing', 'qing-live')
+    expect(store.getSnapshot('dsh-missing').docMissing).toEqual({ engineSessionIds: ['qing-a'] })
+
+    await expect(store.refreshPanel('dsh-missing', 'qing-b')).rejects.toMatchObject({ status: 404 })
+    expect(store.getSnapshot('dsh-missing').docMissing).toEqual({ engineSessionIds: ['qing-a', 'qing-b'] })
+
+    await expect(store.refreshPanel('dsh-missing', 'qing-a')).rejects.toMatchObject({ status: 404 })
+    expect(store.getSnapshot('dsh-missing').docMissing).toEqual({ engineSessionIds: ['qing-a', 'qing-b'] })
     expect(store.getSnapshot('dsh-missing').state?.docs.map((doc) => doc.engineSessionId))
-      .toEqual(['qing-live'])
+      .toEqual(['qing-a', 'qing-b', 'qing-live'])
 
-    await expect(store.refreshPanel('dsh-missing', 'qing-missing')).rejects.toMatchObject({ status: 404 })
-    expect(store.getSnapshot('dsh-missing').docMissing).toEqual({ engineSessionId: 'qing-missing' })
+    readable.add('qing-a')
+    await store.refreshPanel('dsh-missing', 'qing-a')
+    expect(store.getSnapshot('dsh-missing').docMissing).toEqual({ engineSessionIds: ['qing-b'] })
+    expect(store.getSnapshot('dsh-missing').panelDoc).toMatchObject({ title: '恢复文稿 qing-a', docVersion: 4 })
 
-    restored = true
-    await store.refreshPanel('dsh-missing', 'qing-missing')
+    readable.add('qing-b')
+    await store.refreshPanel('dsh-missing', 'qing-b')
     expect(store.getSnapshot('dsh-missing').docMissing).toBeUndefined()
-    expect(store.getSnapshot('dsh-missing').panelDoc).toMatchObject({ title: '恢复文稿', docVersion: 4 })
     release()
   })
 

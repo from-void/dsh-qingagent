@@ -72,6 +72,7 @@ export type QingDocPanelProps = PropsRuntime<'details'> & InjectedProps
 
 const EMPTY_PATCH_IDS = new Set<string>()
 const EMPTY_ANNOTATIONS: never[] = []
+const MISSING_DOCUMENT_TITLE = '该文档已删除'
 export function QingDocPanel(props: QingDocPanelProps) {
   ensureQingdocRuntimeCss()
   const sessionId = String(props.useSession((session) => session.sessionId))
@@ -119,12 +120,13 @@ export function QingDocPanel(props: QingDocPanelProps) {
 
   const activeEngineSessionId = snapshot.activeEngineSessionId
     ?? snapshot.state?.binding.activeEngineSessionId
-  const missingEngineSessionId = snapshot.docMissing?.engineSessionId
+  const missingEngineSessionIds = snapshot.docMissing?.engineSessionIds ?? []
+  const missingEngineSessionIdSet = new Set(missingEngineSessionIds)
   const docMissing = Boolean(
-    activeEngineSessionId && missingEngineSessionId === activeEngineSessionId,
+    activeEngineSessionId && missingEngineSessionIdSet.has(activeEngineSessionId),
   )
   const docs = (snapshot.state?.docs ?? [])
-    .filter((doc) => doc.engineSessionId !== missingEngineSessionId)
+    .filter((doc) => !missingEngineSessionIdSet.has(doc.engineSessionId))
   const activeBound = docs.find((doc) => doc.engineSessionId === activeEngineSessionId)
   const observedVersion = snapshot.activeDoc?.docVersion ?? activeBound?.docVersion
   const observedState = snapshot.activeDoc?.state ?? activeBound?.state
@@ -878,7 +880,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
   ].join(':')
   // missing 必须截断整条旧标题 fallback；否则 activeDoc/activeBound 会把已删稿名带回顶栏。
   const title = docMissing
-    ? undefined
+    ? MISSING_DOCUMENT_TITLE
     : panelDoc?.title || snapshot.activeDoc?.title || activeBound?.title || '未命名文稿'
   const statusLabel = panelStatus({
     busy,
@@ -1033,7 +1035,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
             docs={docs}
             activeEngineSessionId={activeEngineSessionId}
             title={title}
-            excludedEngineSessionId={missingEngineSessionId}
+            excludedEngineSessionIds={missingEngineSessionIds}
             activeBusy={docMissing ? false : busy}
             activePendingReview={docMissing ? false : pendingReview}
             onSelect={handleFocusDocument}
@@ -1073,7 +1075,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
       <div className="ws-body">
         <main className="ws-right">
           {docMissing ? (
-            <div className="qingdoc-doc-missing" role="status">当前文档已被删除</div>
+            <div className="qingdoc-doc-missing" role="status">{MISSING_DOCUMENT_TITLE}</div>
           ) : (
             <>
           {activeEngineSessionId && panelDoc ? (
@@ -1235,7 +1237,7 @@ interface QingDocSwitcherProps {
   docs: BridgeDocument[]
   activeEngineSessionId?: string
   title?: string
-  excludedEngineSessionId?: string
+  excludedEngineSessionIds: readonly string[]
   activeBusy: boolean
   activePendingReview: boolean
   onSelect: (engineSessionId: string) => Promise<void>
@@ -1268,14 +1270,15 @@ function QingDocSwitcher(props: QingDocSwitcherProps) {
 
   // 排序:本对话按最近更新倒序(文库里查得到就用引擎的 updatedAt,查不到退回绑定时间);
   // 最近文稿=文库减去已绑定的,同样倒序,封顶 12 条。
+  const excludedIds = new Set(props.excludedEngineSessionIds)
   const updatedAt = new Map((library ?? []).map((doc) => [doc.engineSessionId, doc.updatedAt]))
-  const boundSorted = [...props.docs].sort((a, b) =>
+  const boundSorted = props.docs.filter((doc) => !excludedIds.has(doc.engineSessionId)).sort((a, b) =>
     (updatedAt.get(b.engineSessionId) ?? b.createdAt).localeCompare(updatedAt.get(a.engineSessionId) ?? a.createdAt))
-  const boundIds = new Set(props.docs.map((doc) => doc.engineSessionId))
+  const boundIds = new Set(boundSorted.map((doc) => doc.engineSessionId))
   const recentDocs = (library ?? [])
     // 空文稿(只建了会话没写过内容)没有打开价值,不进「最近文稿」。
     .filter((doc) =>
-      doc.engineSessionId !== props.excludedEngineSessionId
+      !excludedIds.has(doc.engineSessionId)
       && !boundIds.has(doc.engineSessionId)
       && doc.state !== 'empty')
     .slice(0, RECENT_LIBRARY_LIMIT)
