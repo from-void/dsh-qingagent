@@ -4,6 +4,7 @@
   background: #efe7d6;
 }
 
+/* 已删除态:不按正文排版(那会像一篇只有一行的稿子),做成「图标 + 提示」并整体居中。 */
 [data-qingagent-doc-panel][data-content="docMissing"] .qingdoc-doc-missing {
   box-sizing: border-box;
   width: min(800px, 100%);
@@ -13,10 +14,29 @@
   border: 1px solid #ded1b9;
   border-radius: 0;
   background: #faf6ec;
-  color: #40362a;
+  /* 居中:图标在上、文案在下 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+[data-qingagent-doc-panel][data-content="docMissing"] .qingdoc-doc-missing-icon {
+  width: 34px;
+  height: 34px;
+  /* 比纸色深一档的棕黄,不用墨黑——这一屏是「状态」不是「正文」。 */
+  stroke: #b9a375;
+  fill: none;
+}
+
+[data-qingagent-doc-panel][data-content="docMissing"] .qingdoc-doc-missing-text {
+  margin: 0;
+  color: #9c8757;
   font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.8;
+  letter-spacing: 0.08em;
 }
 
 /* ——「青简」品牌区与反馈/更新卡:走纸面书卷语言(直角、暖纸、墨色、朱红点缀),
@@ -61,6 +81,66 @@
   line-height: 13px;
   letter-spacing: 0.06em;
   text-transform: lowercase;
+}
+
+/* 更新弹层做成**面板内的模态**:portal 到面板根,inset:0 居中,不再盖在 hover 卡上。
+   遮罩与投影口径照客户端既有 .ws-folder-modal-overlay。 */
+[data-qingagent-doc-panel] .qingbrand-modal-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 26px;
+  background: #080a0c8c;
+}
+
+[data-qingagent-doc-panel] .qingbrand-modal-overlay .qingbrand-update-popover {
+  position: static;
+  width: min(420px, 100%);
+  box-shadow: 0 30px 70px #00000080;
+}
+
+/* 关闭:纯字符,无方框——方框描边不是青简的语言。 */
+[data-qingagent-doc-panel] .qingbrand-modal-close {
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: #a3937a;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+[data-qingagent-doc-panel] .qingbrand-modal-close:hover,
+[data-qingagent-doc-panel] .qingbrand-modal-close:focus-visible {
+  outline: none;
+  color: #40362a;
+}
+
+/* 复制:同样按链接处理,不做描边按钮。 */
+[data-qingagent-doc-panel] .qingbrand-copy-link {
+  flex: 0 0 auto;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: #93856f;
+  font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
+  font-size: 12px;
+  text-decoration: underline;
+  text-decoration-color: #d5c8ae;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 120ms ease, text-decoration-color 120ms ease;
+}
+
+[data-qingagent-doc-panel] .qingbrand-copy-link:hover,
+[data-qingagent-doc-panel] .qingbrand-copy-link:focus-visible {
+  outline: none;
+  color: #6b5c45;
+  text-decoration-color: #b08d4f;
 }
 
 [data-qingagent-doc-panel] .qingbrand-hover-card,
@@ -173,8 +253,9 @@
   border: 0;
   border-top: 1px solid #ece2cd;
   border-radius: 0;
-  background: #f2e9d6;
-  color: #5c4a2f;
+  /* 不给常驻底色:它与另两个入口是同级选项,不该长期高亮。只在 hover 时浮起。 */
+  background: none;
+  color: #40362a;
   font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
   font-size: 13px;
   letter-spacing: 0.04em;
@@ -185,8 +266,44 @@
 [data-qingagent-doc-panel] .qingbrand-update-trigger:hover,
 [data-qingagent-doc-panel] .qingbrand-update-trigger:focus-visible {
   outline: none;
-  background: #ebe0c9;
+  background: #f4ecda;
   color: #40362a;
+}
+
+/* 底部 Star:是**链接不是按钮**——居中、无背景块、带下划线,hover 只让文字变色。 */
+[data-qingagent-doc-panel] .qingbrand-star {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 16px 10px;
+  border-top: 1px solid #ece2cd;
+  background: none;
+  text-align: center;
+  color: #93856f;
+  font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  text-decoration: underline;
+  text-decoration-color: #d5c8ae;
+  text-underline-offset: 3px;
+  transition: color 120ms ease, text-decoration-color 120ms ease;
+}
+
+[data-qingagent-doc-panel] .qingbrand-star svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  fill: currentColor;
+}
+
+[data-qingagent-doc-panel] .qingbrand-star:hover,
+[data-qingagent-doc-panel] .qingbrand-star:focus-visible {
+  outline: none;
+  background: none;
+  color: #6b5c45;
+  text-decoration-color: #b08d4f;
 }
 
 [data-qingagent-doc-panel] .qingbrand-update-dot {

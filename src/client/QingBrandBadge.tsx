@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 const QINGAGENT_FEEDBACK_URL = 'https://qingagent.com/feedback'
 const QINGAGENT_BUG_URL = 'https://github.com/void2anything/dsh-qingagent/issues'
+const QINGAGENT_REPO_URL = 'https://github.com/void2anything/dsh-qingagent'
 const QINGAGENT_UPDATE_COMMAND = 'npx @deepseek-ai/dsh plugin --profile web add dsh-qingagent@latest'
 const UPDATE_SEEN_PREFIX = 'dsh-qingagent.update-seen.v1.'
 
@@ -36,6 +38,10 @@ export function QingBrandBadge() {
   const updateTriggerRef = useRef<HTMLButtonElement>(null)
   const updatePopoverRef = useRef<HTMLDivElement>(null)
   const commandRef = useRef<HTMLInputElement>(null)
+  const [panelRoot, setPanelRoot] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    setPanelRoot(rootRef.current?.closest<HTMLElement>('[data-qingagent-doc-panel]') ?? null)
+  }, [])
   const cardId = useId()
   const updatePopoverId = useId()
   const updateTitleId = useId()
@@ -138,11 +144,11 @@ export function QingBrandBadge() {
           <div className="qingbrand-feedback-links">
             <a href={QINGAGENT_BUG_URL} target="_blank" rel="noreferrer">
               <span className="qingbrand-item-label">报 Bug</span>
-              <span className="qingbrand-item-hint">用起来不对劲，去 GitHub 提一条</span>
+              <span className="qingbrand-item-hint">前往插件 git 仓库提报 issue</span>
             </a>
             <a href={QINGAGENT_FEEDBACK_URL} target="_blank" rel="noreferrer">
               <span className="qingbrand-item-label">提需求</span>
-              <span className="qingbrand-item-hint">想要什么功能，去需求广场说</span>
+              <span className="qingbrand-item-hint">有好的想法随时欢迎碰撞</span>
             </a>
           </div>
           {update?.hasUpdate ? (
@@ -160,23 +166,41 @@ export function QingBrandBadge() {
                 {hasUnseenUpdate ? <span className="qingbrand-update-dot" aria-hidden="true" /> : null}
               </span>
               <span className="qingbrand-item-hint">
-                {`有新版本 ${update.latest}，点开看怎么更新`}
+                {`有新版本 ${update.latest} 可更新`}
               </span>
             </button>
           ) : null}
+          <a
+            className="qingbrand-star"
+            href={QINGAGENT_REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+            </svg>
+            <span>觉得不错？给个 Star</span>
+          </a>
         </div>
       ) : null}
-      {updateOpen && update ? (
+      {updateOpen && update && panelRoot ? createPortal(
+        <div className="qingbrand-modal-overlay">
         <div
           ref={updatePopoverRef}
           id={updatePopoverId}
           className="qingbrand-update-popover"
           role="dialog"
+          aria-modal="true"
           aria-labelledby={updateTitleId}
         >
           <div className="qingbrand-update-heading">
             <strong id={updateTitleId}>更新青简插件</strong>
-            <button type="button" onClick={() => closeUpdate(true)} aria-label="关闭更新插件浮层">×</button>
+            <button
+              type="button"
+              className="qingbrand-modal-close"
+              onClick={() => closeUpdate(true)}
+              aria-label="关闭更新插件浮层"
+            >×</button>
           </div>
           <p className="qingbrand-update-version">当前 {update.current} · 最新 {update.latest}</p>
           <label htmlFor={`${updatePopoverId}-command`}>在终端运行</label>
@@ -188,13 +212,19 @@ export function QingBrandBadge() {
               value={QINGAGENT_UPDATE_COMMAND}
               aria-label="青简插件更新指令"
             />
-            <button type="button" onClick={() => { void copyUpdateCommand() }}>复制</button>
+            <button
+              type="button"
+              className="qingbrand-copy-link"
+              onClick={() => { void copyUpdateCommand() }}
+            >复制</button>
           </div>
           <p className="qingbrand-copy-status" aria-live="polite">
             {copyStatus === 'copied' ? '已复制' : copyStatus === 'selected' ? '复制不可用，已选中指令' : ''}
           </p>
           <p className="qingbrand-update-note">运行后需重启 DSH 生效。</p>
         </div>
+        </div>,
+        panelRoot,
       ) : null}
     </div>
   )

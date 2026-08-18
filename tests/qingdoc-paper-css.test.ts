@@ -143,7 +143,11 @@ describe('青简纸面移植契约', () => {
     expect(missingRule).toBeDefined()
     expect(missingRule).toContain('border-radius: 0;')
     expect(missingRule).toContain('background: #faf6ec;')
-    expect(missingRule).toContain('color: #40362a;')
+    // 已删除是「状态屏」不是正文:图标 + 居中提示,色调用比纸深一档的棕黄,不用正文墨色。
+    expect(missingRule).toContain('justify-content: center;')
+    expect(panelCss).toContain('.qingdoc-doc-missing-icon')
+    expect(panelCss).toContain('stroke: #b9a375;')
+    expect(panelCss).toContain('color: #9c8757;')
     expect(panelCss).not.toMatch(/var\(\s*--dsw-/)
   })
 

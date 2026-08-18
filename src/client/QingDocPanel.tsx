@@ -1104,7 +1104,14 @@ export function QingDocPanel(props: QingDocPanelProps) {
       <div className="ws-body">
         <main className="ws-right">
           {docMissing ? (
-            <div className="qingdoc-doc-missing" role="status">{MISSING_DOCUMENT_TITLE}</div>
+            <div className="qingdoc-doc-missing" role="status">
+              <svg className="qingdoc-doc-missing-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="10.2" fill="none" strokeWidth="1.1" />
+                <path d="M12 6.6v0.05" strokeWidth="2" strokeLinecap="round" />
+                <path d="M12 10.4v7" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+              <p className="qingdoc-doc-missing-text">{MISSING_DOCUMENT_TITLE}</p>
+            </div>
           ) : (
             <>
           {activeEngineSessionId && panelDoc ? (

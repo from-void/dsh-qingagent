@@ -44,7 +44,15 @@ describe('青简顶栏品牌卡', () => {
     expect([...links].map((link) => link.querySelector('.qingbrand-item-label')?.textContent))
       .toEqual(['报 Bug', '提需求'])
     expect([...links].map((link) => link.querySelector('.qingbrand-item-hint')?.textContent))
-      .toEqual(['用起来不对劲，去 GitHub 提一条', '想要什么功能，去需求广场说'])
+      .toEqual(['前往插件 git 仓库提报 issue', '有好的想法随时欢迎碰撞'])
+    // 底部 Star 入口:指向插件仓库主页(不是 issues),外链新窗口。
+    const star = host!.querySelector<HTMLAnchorElement>('.qingbrand-star')
+    expect(star?.textContent).toContain('觉得不错？给个 Star')
+    expect(star?.href).toBe('https://github.com/void2anything/dsh-qingagent')
+    expect(star?.target).toBe('_blank')
+    expect(star?.rel).toBe('noreferrer')
+    expect(star?.querySelector('svg')).not.toBeNull()
+
     expect([...links].map((link) => link.target)).toEqual(['_blank', '_blank'])
     expect([...links].map((link) => link.rel)).toEqual(['noreferrer', 'noreferrer'])
 
