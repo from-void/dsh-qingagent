@@ -47,7 +47,7 @@ import { decideIncomingPanelDocument } from './incomingPanelDocument.js'
 import { QINGJIAN_ICON_DATA_URI } from './qingjianIcon.js'
 import { QingConnectionGuide } from './QingConnectionGuide.js'
 import { ensureQingdocRuntimeCss } from './runtimeCss.js'
-import { BridgeHttpError, qingClientStore } from './store.js'
+import { BridgeHttpError, currentReviewStateFor, qingClientStore } from './store.js'
 import type { QingLibraryDoc } from './store.js'
 import { WholeDocReviewNav } from './WholeDocReviewNav.js'
 import { isWholeDocReview } from '../reviewMode.js'
@@ -357,15 +357,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
     : undefined
   if (panelDoc && activeEngineSessionId) editorEngineSessionIdRef.current = activeEngineSessionId
   // 审阅展示只认 PM 面板域；activeDoc/activeBound 是旧状态通道，可能晚于 commit 回执。
-  const hasPatchReview = Boolean(snapshot.reviewModel?.suggestions.some((suggestion) =>
-    suggestion.kind !== 'annotation' && (
-      suggestion.status === 'reviewing' ||
-      suggestion.status === 'accepted' ||
-      suggestion.status === 'rejected'
-    )))
-  const pendingReview = Boolean(panelDoc && (
-    panelDoc.state === 'pendingReview' || hasPatchReview
-  ))
+  const pendingReview = currentReviewStateFor(snapshot, activeEngineSessionId) === 'pending'
   // 产品在 pendingReview 时主动卸下批注装饰；纯批注审查仍处于 editing，继续展示。
   const annotations = pendingReview
     ? EMPTY_ANNOTATIONS
