@@ -19,22 +19,28 @@ export function installDetailsColumnWidth(root: HTMLElement): () => void {
 
   const stored = readStoredWidth(view.localStorage)
   let preferredWidth = stored ?? defaultDetailsWidth(view.innerWidth)
+  let sidebarWidth = 0
   let startX = 0
   let startWidth = 0
   let dragging = false
 
   const syncSidebar = () => {
-    frame.style.setProperty('--qing-sidebar-width', `${Math.round(sidebar.getBoundingClientRect().width)}px`)
+    sidebarWidth = sidebar.getBoundingClientRect().width
+    frame.style.setProperty('--qing-sidebar-width', `${Math.round(sidebarWidth)}px`)
   }
+  const availableWidth = () => Math.max(0, view.innerWidth - sidebarWidth)
   const applyPreferredWidth = () => {
-    const width = clampDetailsWidth(preferredWidth, view.innerWidth)
+    const width = clampDetailsWidth(preferredWidth, availableWidth())
     frame.style.setProperty('--qing-details-width', `${Math.round(width)}px`)
     root.style.setProperty('--qing-details-width', `${Math.round(width)}px`)
     handle.setAttribute('aria-valuenow', String(Math.round(width)))
-    handle.setAttribute('aria-valuemax', String(Math.round(Math.max(420, view.innerWidth * 0.7))))
+    handle.setAttribute('aria-valuemax', String(Math.round(Math.max(420, availableWidth() * 0.7))))
   }
   const handleResize = () => {
     syncSidebar()
+    if (readStoredWidth(view.localStorage) === null) {
+      preferredWidth = defaultDetailsWidth(availableWidth())
+    }
     applyPreferredWidth()
   }
   const pointerMove = (event: PointerEvent) => {
@@ -68,8 +74,7 @@ export function installDetailsColumnWidth(root: HTMLElement): () => void {
     writeStoredWidth(view.localStorage, clampDetailsWidth(preferredWidth, view.innerWidth))
   }
 
-  syncSidebar()
-  applyPreferredWidth()
+  handleResize()
   const observer = typeof ResizeObserver !== 'undefined'
     ? new ResizeObserver(handleResize)
     : null

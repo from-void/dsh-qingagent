@@ -55,7 +55,7 @@ describe('QingWriteToolCard theme styles', () => {
 })
 
 describe('Qing write/edit review tool card summaries', () => {
-  it('通过 keyed 卡片渲染链路给出逐处确认指引，生效态不显示该指引', () => {
+  it('两张卡都按整篇/逐处审模式给出真实 DOM 指引，生效态不显示指引', () => {
     vi.stubGlobal('EventSource', FakeEventSource)
     const host = document.createElement('div')
     document.body.append(host)
@@ -70,11 +70,19 @@ describe('Qing write/edit review tool card summaries', () => {
     try {
       act(() => root.render(
         <QingEditToolCard {...props('edit-review-card', {
-          title: '局部修改稿', status: 'review', reviewCount: 3,
+          title: '局部修改稿', status: 'review', reviewCount: 3, wholeDocReview: false,
         }) as unknown as ComponentProps<typeof QingEditToolCard>} />,
       ))
       expect(host.textContent).toContain('《局部修改稿》 · 3 处待裁决 · 请在右侧逐处确认')
       expect(host.textContent).not.toMatch(/\bv\d+\b|ai-block-|qing_edit_draft|字数|块/)
+
+      act(() => root.render(
+        <QingEditToolCard {...props('edit-whole-review-card', {
+          title: '整篇修改稿', status: 'review', reviewCount: 8, wholeDocReview: true,
+        }) as unknown as ComponentProps<typeof QingEditToolCard>} />,
+      ))
+      expect(host.textContent).toContain('《整篇修改稿》 · 8 处待裁决 · 请在右侧确认是否应用新版')
+      expect(host.textContent).not.toContain('逐处')
 
       act(() => root.render(
         <QingEditToolCard {...props('edit-committed-card', {
@@ -85,11 +93,19 @@ describe('Qing write/edit review tool card summaries', () => {
 
       act(() => root.render(
         <QingWriteToolCard {...props('write-review-card', {
-          title: '新稿', status: 'review', words: 688, patchCount: 2,
+          title: '新稿', status: 'review', words: 688, patchCount: 2, wholeDocReview: false,
         }) as unknown as ComponentProps<typeof QingWriteToolCard>} />,
       ))
       expect(host.textContent).toContain('《新稿》 · 2 处待裁决 · 请在右侧逐处确认')
       expect(host.textContent).not.toMatch(/约\s*688\s*字|\bv\d+\b|ai-block-|qing_write_draft|字数|块/)
+
+      act(() => root.render(
+        <QingWriteToolCard {...props('write-whole-review-card', {
+          title: '整篇新稿', status: 'review', words: 688, patchCount: 9, wholeDocReview: true,
+        }) as unknown as ComponentProps<typeof QingWriteToolCard>} />,
+      ))
+      expect(host.textContent).toContain('《整篇新稿》 · 9 处待裁决 · 请在右侧确认是否应用新版')
+      expect(host.textContent).not.toContain('逐处')
 
       act(() => root.render(
         <QingWriteToolCard {...props('write-committed-card', {

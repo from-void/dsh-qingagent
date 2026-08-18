@@ -15,7 +15,7 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【编辑作用域纪律】')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【叙述一致性红线】')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【结构摘要自检纪律】')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('字数待裁决落库后核对')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('字数等你确认后再核对')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('这是自动落款,随字数与保存时间自动更新,属固定装饰不可编辑')
   })
 
@@ -40,6 +40,8 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【用户语言纪律】')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('禁止出现工具名(qing_write_draft/qing_edit_draft/qing_list_docs 等)')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('块 ID(ai-block-…)、vN 版本号、pendingReview 等内部枚举、HTTP 状态码与原始报错')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('以及「落库」「入库」「持久化」「候选」「基线」这类存储实现术语')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('说人话:「已经改好了」「已经生效了」「还没生效,等你确认」')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('qing 工具返回里的 vN 版本号、块 ID、【文稿状态】行、REVIEW_PENDING 等,是给你判断用的内部状态,不是给用户看的措辞')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('✗「已直接落库生效(v1)」→✓「已经写好了,右侧就能看到」')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('工具失败时只说用户能做什么,不转述原始错误')
@@ -65,15 +67,25 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('任何新回合开始时一律先刷新')
   })
 
-  it('每轮以中文用户话收尾并保留提交审阅的结果卡例外', () => {
+  it('每轮以中文用户话收尾，并要求审阅轮工具前导语也是完整句', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('每一轮的最后都必须有一句面向用户的中文话,说清这轮做了什么、下一步要他做什么')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('不允许以工具调用作为一轮的结尾,也不允许停在冒号或半句话上')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('只说定性结论(如「改好了/已提交待你确认」),不要报字数、块数、章节数')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('收尾语只复述**已经确定发生的事**,措辞不得比原文更具体:用户或正文说「好多年」就说「好多年」,**不要替换成「十几年」这类你自己推断的数字或程度词**。')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('例外:提交审阅的那一轮由结果卡直接向用户说明,不受本条约束')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不要为此把话硬塞在工具调用之前')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('机制上你在工具调用之后不再有发言机会,由结果卡向用户说明')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('工具调用之前的那句话仍必须是完整的一句')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不得停在冒号或半句上')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('返回 review 后，本次工具调用已经结束：不要重写、不要读稿复核、不要自动裁决')
     expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('返回 review 后，本回合已经结束')
+  })
+
+  it('区分容忍大改与整篇重写授权，同时避免对明确整篇和局部修改重复确认', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('注意区分**容忍改动幅度**与**授权推倒重写**')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('「大改也行」「随便改」「怎么顺怎么来」这类话只表示用户不介意改得多,**不等于允许替换全文结构**')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('只有用户的话里出现「整篇 / 全文 / 整个」这类范围词,或说了「推倒重来」,才算指向整篇、可免征询直接执行')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('用户已经明确说了整篇重写的,**不要再重复确认**')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('局部修改(改一段/改语气但不动结构)本来就不属于整篇重构,不需要为它征询')
+    expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('换个写法重写')
   })
 
   it('要求正式回复与深度思考都使用中文和用户语言', () => {
