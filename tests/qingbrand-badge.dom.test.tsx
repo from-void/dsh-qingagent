@@ -40,7 +40,11 @@ describe('青简顶栏品牌卡', () => {
     ))
 
     const links = host!.querySelectorAll<HTMLAnchorElement>('.qingbrand-feedback-links a')
-    expect([...links].map((link) => link.textContent)).toEqual(['需求广场', '报 Bug'])
+    // 每个入口 = 名称 + 一句说明它做什么(去掉了通栏标题:标题只占位不给信息)。
+    expect([...links].map((link) => link.querySelector('.qingbrand-item-label')?.textContent))
+      .toEqual(['报 Bug', '提需求'])
+    expect([...links].map((link) => link.querySelector('.qingbrand-item-hint')?.textContent))
+      .toEqual(['用起来不对劲，去 GitHub 提一条', '想要什么功能，去需求广场说'])
     expect([...links].map((link) => link.target)).toEqual(['_blank', '_blank'])
     expect([...links].map((link) => link.rel)).toEqual(['noreferrer', 'noreferrer'])
 

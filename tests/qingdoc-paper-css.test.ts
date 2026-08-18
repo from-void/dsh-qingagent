@@ -164,7 +164,12 @@ describe('青简纸面移植契约', () => {
     expect(generatedCss).not.toContain('.qingbrand-')
     expect(badgeStyles).toContain('.qingbrand-hover-card')
     expect(badgeStyles).toContain('.qingbrand-update-popover')
-    expect(badgeStyles).toContain('grid-template-columns: 1fr 1fr;')
+    // 入口改为纵向堆叠(每格带说明文案,并排会挤);同时锁住 hover 宽限用的透明桥,
+    // 没有它鼠标穿过间隙时卡片会当场消失、点不到里面的按钮。
+    expect(badgeStyles).toContain('.qingbrand-badge::after')
+    expect(badgeStyles).toContain('.qingbrand-item-hint')
+    // 焦点框不得用朱红——会被误读成「出错了」。
+    expect(badgeStyles).not.toMatch(/qingbrand-trigger:focus-visible \{[^}]*#c0392b/)
     expect(badgeStyles).toContain('width: 100%;')
     expect(badgeStyles).not.toMatch(/var\(\s*--dsw-/)
     expect(badgeStyles).not.toMatch(/\btransparent\b|\brgba?\(|\bhsla?\(/)

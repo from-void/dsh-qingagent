@@ -19,6 +19,9 @@
   line-height: 1.8;
 }
 
+/* ——「青简」品牌区与反馈/更新卡:走纸面书卷语言(直角、暖纸、墨色、朱红点缀),
+   刻意避开「描边填充按钮」那种表单味:分格靠留白与发丝线,强调靠一条朱红细线。—— */
+
 [data-qingagent-doc-panel] .qingbrand-badge {
   position: relative;
   display: inline-flex;
@@ -30,130 +33,170 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  min-width: 0;
-  margin: 0;
   padding: 0;
   border: 0;
-  border-radius: 0;
-  background: #00000000;
-  color: #ece3d0;
+  background: none;
+  color: inherit;
   font: inherit;
   cursor: pointer;
 }
 
+/* 焦点提示用暖金细线,不用朱红——朱红在这里会被误读成「出错了」。 */
 [data-qingagent-doc-panel] .qingbrand-trigger:focus-visible {
-  outline: 1px solid #cfb477;
-  outline-offset: 4px;
+  outline: 1px solid #b08d4f;
+  outline-offset: 2px;
 }
 
+/* 「new」角标:极小的朱红小字,贴在「青简」右上角,像一枚小印。 */
 [data-qingagent-doc-panel] .qingbrand-new {
   position: absolute;
-  top: -11px;
-  right: -22px;
-  padding: 1px 4px;
-  border: 1px solid #f0c5b9;
-  border-radius: 0;
-  background: #a73d2d;
-  color: #fff8ed;
-  font-family: Arial, sans-serif;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  top: -6px;
+  right: -16px;
+  padding: 0 3px;
+  background: #c0392b;
+  color: #fdf8ee;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 13px;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
 }
 
 [data-qingagent-doc-panel] .qingbrand-hover-card,
 [data-qingagent-doc-panel] .qingbrand-update-popover {
   position: absolute;
-  top: calc(100% + 10px);
-  left: 0;
+  top: calc(100% + 12px);
+  left: -6px;
   z-index: 80;
   box-sizing: border-box;
-  border: 1px solid #cfb477;
+  border: 1px solid #ded1b9;
   border-radius: 0;
   background: #faf6ec;
   color: #40362a;
-  box-shadow: 0 8px 22px #33291f33;
+  /* 暖调阴影 + 内侧高光,模拟纸叠在纸上;避免冷灰投影的塑料感。 */
+  box-shadow: 0 12px 30px #3a2d1e26, 0 1px 0 #fffaf0 inset;
 }
 
 [data-qingagent-doc-panel] .qingbrand-hover-card {
-  width: 260px;
-  padding: 14px;
+  width: 268px;
+  padding: 0;
+  overflow: hidden;
 }
 
-[data-qingagent-doc-panel] .qingbrand-card-title {
-  margin: 0 0 10px;
-  color: #40362a;
-  font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.5;
+/* 透明桥:把触发区到卡片之间的 12px 空隙纳入命中区,
+   否则鼠标下移途中会离开根元素、卡片当场消失,用户根本点不到里面的按钮。 */
+[data-qingagent-doc-panel] .qingbrand-badge::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: -6px;
+  width: 268px;
+  height: 14px;
 }
 
+[data-qingagent-doc-panel] .qingbrand-badge:not(:hover)::after {
+  display: none;
+}
+
+/* 入口纵向排列:每格 = 一个入口名 + 一句说明它是干什么的。
+   不再要通栏标题——标题只占位不给信息。 */
 [data-qingagent-doc-panel] .qingbrand-feedback-links {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-[data-qingagent-doc-panel] .qingbrand-feedback-links a,
-[data-qingagent-doc-panel] .qingbrand-update-trigger,
-[data-qingagent-doc-panel] .qingbrand-command-row button,
-[data-qingagent-doc-panel] .qingbrand-update-heading button {
-  box-sizing: border-box;
-  border: 1px solid #cfb477;
-  border-radius: 0;
-  background: #f4eddf;
-  color: #6d5331;
-  font: inherit;
+  display: block;
 }
 
 [data-qingagent-doc-panel] .qingbrand-feedback-links a {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 31px;
-  padding: 5px 8px;
-  font-size: 12px;
-  line-height: 1.4;
+  position: relative;
+  display: block;
+  padding: 11px 16px 12px;
+  border: 0;
+  background: none;
   text-decoration: none;
+  transition: background-color 120ms ease;
+}
+
+[data-qingagent-doc-panel] .qingbrand-feedback-links a + a {
+  border-top: 1px solid #ece2cd;
+}
+
+[data-qingagent-doc-panel] .qingbrand-item-label {
+  display: block;
+  color: #40362a;
+  font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+}
+
+[data-qingagent-doc-panel] .qingbrand-item-hint {
+  display: block;
+  margin-top: 2px;
+  color: #93856f;
+  font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+}
+
+/* hover:底色极淡地浮起 + 底部一条朱红短线,不改变尺寸,不跳动。 */
+/* hover:左缘浮出一条极细的墨线,示意「这一格可点」,不用朱红免得像报错。 */
+[data-qingagent-doc-panel] .qingbrand-feedback-links a::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 0;
+  background: #b08d4f;
+  transition: width 140ms ease;
 }
 
 [data-qingagent-doc-panel] .qingbrand-feedback-links a:hover,
-[data-qingagent-doc-panel] .qingbrand-feedback-links a:focus-visible,
-[data-qingagent-doc-panel] .qingbrand-update-trigger:hover,
-[data-qingagent-doc-panel] .qingbrand-update-trigger:focus-visible,
-[data-qingagent-doc-panel] .qingbrand-command-row button:hover,
-[data-qingagent-doc-panel] .qingbrand-command-row button:focus-visible,
-[data-qingagent-doc-panel] .qingbrand-update-heading button:hover,
-[data-qingagent-doc-panel] .qingbrand-update-heading button:focus-visible {
-  border-color: #a8823f;
-  outline: 1px solid #a8823f;
-  outline-offset: 1px;
-  background: #ece3d0;
+[data-qingagent-doc-panel] .qingbrand-feedback-links a:focus-visible {
+  outline: none;
+  background: #f4ecda;
   color: #40362a;
 }
 
+[data-qingagent-doc-panel] .qingbrand-feedback-links a:hover::after,
+[data-qingagent-doc-panel] .qingbrand-feedback-links a:focus-visible::after {
+  width: 2px;
+}
+
+/* 更新按钮:满宽独立行,用略深的纸色与上方分隔,朱红只用在红点上。 */
 [data-qingagent-doc-panel] .qingbrand-update-trigger {
-  display: flex;
+  display: block;
   width: 100%;
-  min-height: 32px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  margin: 9px 0 0;
-  padding: 5px 10px;
-  font-size: 12px;
-  line-height: 1.4;
+  box-sizing: border-box;
+  padding: 11px 16px 12px;
+  text-align: left;
+  border: 0;
+  border-top: 1px solid #ece2cd;
+  border-radius: 0;
+  background: #f2e9d6;
+  color: #5c4a2f;
+  font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
+  font-size: 13px;
+  letter-spacing: 0.04em;
   cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+[data-qingagent-doc-panel] .qingbrand-update-trigger:hover,
+[data-qingagent-doc-panel] .qingbrand-update-trigger:focus-visible {
+  outline: none;
+  background: #ebe0c9;
+  color: #40362a;
 }
 
 [data-qingagent-doc-panel] .qingbrand-update-dot {
-  width: 6px;
-  height: 6px;
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 6px;
+  vertical-align: middle;
+  background: #c0392b;
   border-radius: 0;
-  background: #a73d2d;
 }
 
 [data-qingagent-doc-panel] .qingbrand-update-popover {

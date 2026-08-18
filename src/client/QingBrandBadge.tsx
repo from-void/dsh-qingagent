@@ -18,6 +18,21 @@ export function QingBrandBadge() {
   const [updateOpen, setUpdateOpen] = useState(false)
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'selected'>('idle')
   const rootRef = useRef<HTMLDivElement>(null)
+  // hover 宽限:触发区与卡片之间有视觉间隙,鼠标穿过时会短暂离开根元素;
+  // 立即关闭会导致用户根本点不到卡里的按钮。延迟关闭 + 重新进入即取消。
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const openCardNow = () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    if (!updateOpen) setCardOpen(true)
+  }
+  const closeCardSoon = () => {
+    if (updateOpen) return
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    closeTimerRef.current = setTimeout(() => setCardOpen(false), 260)
+  }
+  useEffect(() => () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+  }, [])
   const updateTriggerRef = useRef<HTMLButtonElement>(null)
   const updatePopoverRef = useRef<HTMLDivElement>(null)
   const commandRef = useRef<HTMLInputElement>(null)
@@ -99,8 +114,8 @@ export function QingBrandBadge() {
     <div
       ref={rootRef}
       className="qingbrand-badge"
-      onMouseEnter={() => { if (!updateOpen) setCardOpen(true) }}
-      onMouseLeave={() => { if (!updateOpen) setCardOpen(false) }}
+      onMouseEnter={openCardNow}
+      onMouseLeave={closeCardSoon}
       onBlur={(event) => {
         if (!updateOpen && !rootRef.current?.contains(event.relatedTarget as Node | null)) setCardOpen(false)
       }}
@@ -120,10 +135,15 @@ export function QingBrandBadge() {
       </button>
       {cardOpen ? (
         <div id={cardId} className="qingbrand-hover-card" role="group" aria-label="青简反馈与更新">
-          <p className="qingbrand-card-title">帮助青简变得更好</p>
           <div className="qingbrand-feedback-links">
-            <a href={QINGAGENT_FEEDBACK_URL} target="_blank" rel="noreferrer">需求广场</a>
-            <a href={QINGAGENT_BUG_URL} target="_blank" rel="noreferrer">报 Bug</a>
+            <a href={QINGAGENT_BUG_URL} target="_blank" rel="noreferrer">
+              <span className="qingbrand-item-label">报 Bug</span>
+              <span className="qingbrand-item-hint">用起来不对劲，去 GitHub 提一条</span>
+            </a>
+            <a href={QINGAGENT_FEEDBACK_URL} target="_blank" rel="noreferrer">
+              <span className="qingbrand-item-label">提需求</span>
+              <span className="qingbrand-item-hint">想要什么功能，去需求广场说</span>
+            </a>
           </div>
           {update?.hasUpdate ? (
             <button
@@ -135,8 +155,13 @@ export function QingBrandBadge() {
               aria-controls={updateOpen ? updatePopoverId : undefined}
               onClick={openUpdate}
             >
-              <span>更新插件</span>
-              {hasUnseenUpdate ? <span className="qingbrand-update-dot" aria-hidden="true" /> : null}
+              <span className="qingbrand-item-label">
+                更新插件
+                {hasUnseenUpdate ? <span className="qingbrand-update-dot" aria-hidden="true" /> : null}
+              </span>
+              <span className="qingbrand-item-hint">
+                {`有新版本 ${update.latest}，点开看怎么更新`}
+              </span>
             </button>
           ) : null}
         </div>
