@@ -47,6 +47,33 @@ export interface QingClientSnapshot {
   error?: string
 }
 
+export type CurrentReviewState = 'pending' | 'settled' | 'unknown'
+
+/**
+ * 与 QingDocPanel 的审阅展示使用同一口径：正文面板仍是 pendingReview，或当前
+ * render-model 里仍保留正文补丁（包括已经逐条表态、尚未最终提交的补丁）。只有
+ * 指定文稿正是已加载面板稿时，才区分待审与已结算；其余情况不猜。
+ */
+export function currentReviewStateFor(
+  snapshot: QingClientSnapshot,
+  engineSessionId: string | undefined,
+): CurrentReviewState {
+  if (
+    !engineSessionId ||
+    snapshot.panelEngineSessionId !== engineSessionId ||
+    !snapshot.panelDoc
+  ) return 'unknown'
+  const hasPatchReview = Boolean(snapshot.reviewModel?.suggestions.some((suggestion) =>
+    suggestion.kind !== 'annotation' && (
+      suggestion.status === 'reviewing' ||
+      suggestion.status === 'accepted' ||
+      suggestion.status === 'rejected'
+    )))
+  return (
+    snapshot.panelDoc.state === 'pendingReview' || hasPatchReview
+  ) ? 'pending' : 'settled'
+}
+
 interface SessionEntry {
   sessionId: string
   snapshot: QingClientSnapshot

@@ -3,7 +3,7 @@ import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
-import { qingClientStore, type QingClientSnapshot } from './store.js'
+import { currentReviewStateFor, qingClientStore, type QingClientSnapshot } from './store.js'
 import { failureSummary } from './QingWriteToolCard.js'
 import styles from './QingWriteToolCard.module.css'
 
@@ -23,6 +23,7 @@ export interface QingToolCardConfig {
 }
 
 export interface ToolCardMeta {
+  engineSessionId?: string
   title?: string
   blocks?: number
   words?: number
@@ -95,13 +96,33 @@ export const QingEditToolCard = createQingToolCard({
   runningTitle: '正在修改文稿',
   doneTitle: (meta) => (meta.status === 'review' ? '修改待审阅' : '修改已生效'),
   failedTitle: '修改未完成',
-  summary: (meta) => [
-    titled(meta),
-    meta.status === 'review' && meta.reviewCount ? `${meta.reviewCount} 处待裁决` : '',
-  ].filter(Boolean).join(' · '),
-  narrative: (meta) => {
+  summary: (meta, snapshot) => {
+    const pendingReview = currentReviewStateFor(snapshot, meta.engineSessionId) === 'pending'
+    return [
+      titled(meta),
+      meta.status === 'review' && meta.reviewCount
+        ? pendingReview ? `${meta.reviewCount} 处待裁决` : `${meta.reviewCount} 处修改`
+        : '',
+      meta.status === 'review' && pendingReview
+        ? meta.wholeDocReview ? '请在右侧确认是否应用新版' : '请在右侧逐处确认'
+        : '',
+    ].filter(Boolean).join(' · ')
+  },
+  narrative: (meta, snapshot) => {
     if (meta.status !== 'review') return ''
-    if (meta.wholeDocReview) return '新版已写好,在右侧等你确认采用或退回。'
+    const reviewState = currentReviewStateFor(snapshot, meta.engineSessionId)
+    if (meta.wholeDocReview) {
+      return reviewState === 'pending'
+        ? '新版已写好,在右侧等你确认采用或退回。'
+        : reviewState === 'settled' ? '当时写好了新版,已处理完。' : '当时写好了新版。'
+    }
+    if (reviewState !== 'pending') {
+      return typeof meta.reviewCount === 'number' && Number.isFinite(meta.reviewCount)
+        ? reviewState === 'settled'
+          ? `当时改了 ${meta.reviewCount} 处,已处理完。`
+          : `当时改了 ${meta.reviewCount} 处。`
+        : reviewState === 'settled' ? '当时完成了修改,已处理完。' : '当时完成了修改。'
+    }
     return typeof meta.reviewCount === 'number' && Number.isFinite(meta.reviewCount)
       ? `改好了 ${meta.reviewCount} 处,都在右侧面板,逐条确认或驳回即可。`
       : '改动已完成,都在右侧面板,逐条确认或驳回即可。'

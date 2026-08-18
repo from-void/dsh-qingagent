@@ -3,7 +3,7 @@ import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
-import { qingClientStore } from './store.js'
+import { currentReviewStateFor, qingClientStore } from './store.js'
 import styles from './QingWriteToolCard.module.css'
 
 interface InjectedProps {
@@ -28,6 +28,10 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
   const title = meta?.title
   const failure = failed ? failureSummary(settledBlock?.content ?? []) : ''
   const state = failed ? 'failed' : settled ? 'complete' : 'running'
+  const reviewState = meta?.status === 'review'
+    ? currentReviewStateFor(snapshot, meta.engineSessionId)
+    : 'unknown'
+  const pendingReview = reviewState === 'pending'
   // 「块」是内部概念不暴露;运行态无字数时摘要留空(标题「正在写作」已足够,避免「正在写作·写作中」废话)。
   // 标题已表达「未完成」,摘要只留失败原因,避免单卡内重复(评测 P5,K3 定案)。
   const summaryText = failed
@@ -35,10 +39,17 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
     : [
         title ? `《${title}》` : '',
         meta?.status !== 'review' && words > 0 ? `约 ${words} 字` : '',
-        meta?.status === 'review' && meta.patchCount ? `${meta.patchCount} 处待裁决` : '',
+        meta?.status === 'review' && meta.patchCount
+          ? pendingReview ? `${meta.patchCount} 处待裁决` : `${meta.patchCount} 处修改`
+          : '',
+        pendingReview
+          ? meta?.wholeDocReview ? '请在右侧确认是否应用新版' : '请在右侧逐处确认'
+          : '',
       ].filter(Boolean).join(' · ')
   const narrativeText = settled && !failed && meta?.status === 'review'
-    ? '新版已写好,在右侧等你确认采用或退回。'
+    ? pendingReview
+      ? '新版已写好,在右侧等你确认采用或退回。'
+      : reviewState === 'settled' ? '当时写好了新版,已处理完。' : '当时写好了新版。'
     : ''
 
   return (
@@ -63,6 +74,7 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
 }
 
 interface ToolMeta {
+  engineSessionId?: string
   title?: string
   blocks?: number
   words?: number
