@@ -122,9 +122,10 @@ function reviewSuggestion(
   status: 'reviewing' | 'accepted' | 'rejected' = 'reviewing',
   beforeText = '',
   afterText = '落稿',
+  id = 'patch-reviewed',
 ): DocSuggestion {
   return {
-    id: 'patch-reviewed', reviewBatchId: 'batch-1', groupMode: 'independent',
+    id, reviewBatchId: 'batch-1', groupMode: 'independent',
     docId: 'qing-review', baseVersion: 3, baseSchemaVersion: 1, status,
     anchor: { blockId: 'missing', pmFrom: 1, pmTo: 1, quote: '', textHash: 'hash' },
     patch: { kind: 'prosemirror_steps', steps: [] },
@@ -356,15 +357,36 @@ describe('QingDocPanel 保存生命周期', () => {
     const fetchMock = installBridgeFetch('dsh-review-retry', ['qing-review'], {
       pendingReview: true,
       failReviewCommit: true,
+      reviewCommitFailureStatus: 500,
     })
     renderPanel('dsh-review-retry')
 
     await vi.waitFor(() => expect(reviewCommitCalls(fetchMock)).toBe(1))
+    await vi.waitFor(() => expect(document.querySelector('.qingdoc-status')?.textContent)
+      .toBe('提交失败 · 候选已保留，请重试'))
     await vi.waitFor(() => expect(
       document.querySelector('[data-testid="mock-patch-nav"]')?.getAttribute('data-retry-only'),
     ).toBe('true'))
     await new Promise((resolve) => setTimeout(resolve, 60))
     expect(reviewCommitCalls(fetchMock)).toBe(1)
+    expect(authoritativeDocReadCalls(fetchMock)).toBe(0)
+  })
+
+  it('首次 409 且仍待审、批次同一时用权威版本重试一次并成功', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const fetchMock = installBridgeFetch('dsh-review-conflict-retry', ['qing-review'], {
+      pendingReview: true,
+      reviewCommitConflictPending: 'once',
+    })
+    renderPanel('dsh-review-conflict-retry')
+
+    await vi.waitFor(() => expect(reviewCommitCalls(fetchMock)).toBe(2))
+    await vi.waitFor(() => expect(document.querySelector('.qingdoc-status')?.textContent).toBe('修改已提交'))
+    expect(reviewCommitExpectedVersions(fetchMock)).toEqual([3, 4])
+    expect(info).toHaveBeenCalledWith(
+      '[qingagent-panel] review commit conflict retrying with authoritative version',
+      { action: 'commit', docVersion: 4 },
+    )
   })
 
   it('重复提交返回 409 但权威文稿已退出审阅时按成功收口', async () => {
@@ -378,7 +400,58 @@ describe('QingDocPanel 保存生命周期', () => {
     await vi.waitFor(() => expect(document.querySelector('.qingdoc-status')?.textContent).toBe('修改已提交'))
     expect(document.querySelector('.qingdoc-toast')).toBeNull()
     expect(document.querySelector('[data-testid="mock-patch-nav"]')).toBeNull()
-    expect(authoritativeDocReadCalls(fetchMock)).toBeGreaterThanOrEqual(1)
+    expect(reviewRenderModelCalls(fetchMock)).toBeGreaterThanOrEqual(2)
+    expect(authoritativeDocReadCalls(fetchMock)).toBe(0)
+  })
+
+  it('409 重试仍冲突时最多请求两次并保留候选', async () => {
+    const fetchMock = installBridgeFetch('dsh-review-conflict-twice', ['qing-review'], {
+      pendingReview: true,
+      reviewCommitConflictPending: 'always',
+    })
+    renderPanel('dsh-review-conflict-twice')
+
+    await vi.waitFor(() => expect(reviewCommitCalls(fetchMock)).toBe(2))
+    await vi.waitFor(() => expect(document.querySelector('.qingdoc-status')?.textContent)
+      .toBe('提交失败 · 候选已保留，请重试'))
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect(reviewCommitCalls(fetchMock)).toBe(2)
+  })
+
+  it('409 探测发现建议 ID 集合变化时不重试', async () => {
+    const fetchMock = installBridgeFetch('dsh-review-conflict-new-batch', ['qing-review'], {
+      pendingReview: true,
+      reviewCommitConflictPending: 'once',
+      conflictAddsSuggestion: true,
+    })
+    renderPanel('dsh-review-conflict-new-batch')
+
+    await vi.waitFor(() => expect(document.querySelector('.qingdoc-status')?.textContent)
+      .toBe('提交失败 · 候选已保留，请重试'))
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect(reviewCommitCalls(fetchMock)).toBe(1)
+    expect(reviewRenderModelCalls(fetchMock)).toBeGreaterThanOrEqual(2)
+  })
+
+  it('409 重试在途时提交重入仍被忙态闸门拦住', async () => {
+    let releaseRetry!: () => void
+    const reviewCommitRetryGate = new Promise<void>((resolve) => { releaseRetry = resolve })
+    const fetchMock = installBridgeFetch('dsh-review-conflict-busy', ['qing-review'], {
+      pendingReview: true,
+      reviewCommitConflictPending: 'once',
+      reviewCommitRetryGate,
+    })
+    renderPanel('dsh-review-conflict-busy')
+
+    await vi.waitFor(() => expect(reviewCommitCalls(fetchMock)).toBe(2))
+    await act(async () => {
+      await (patchNavHarness.props?.onCommit as (() => Promise<void>) | undefined)?.()
+    })
+    expect(reviewCommitCalls(fetchMock)).toBe(2)
+
+    releaseRetry()
+    await vi.waitFor(() => expect(document.querySelector('.qingdoc-status')?.textContent).toBe('修改已提交'))
+    expect(reviewCommitCalls(fetchMock)).toBe(2)
   })
 
   it('auto-commit 与手动提交并发共用同一把闸，只发送一次', async () => {
@@ -592,6 +665,38 @@ describe('QingDocPanel 整篇审阅', () => {
     await vi.waitFor(() => expect(reviewCommitActions(fetchMock)).toContain('reject_all'))
   })
 
+  it('退回旧版遇首次 409 时同样按权威版本重试一次', async () => {
+    const fetchMock = installBridgeFetch('dsh-whole-revert-conflict', ['qing-review'], {
+      pendingReview: true,
+      reviewSuggestionStatus: 'reviewing',
+      wholeDocument: true,
+      reviewBasePm: WHOLE_BASE_PM,
+      reviewEditedPm: WHOLE_EDITED_PM,
+      reviewCommitConflictPending: 'once',
+    })
+    renderPanel('dsh-whole-revert-conflict')
+    const revert = await vi.waitFor(() => {
+      const button = [...document.querySelectorAll<HTMLButtonElement>('[data-wf="WholeDocReviewNav"] button')]
+        .find((candidate) => candidate.textContent === '退回旧版')
+      expect(button).toBeDefined()
+      return button!
+    })
+
+    await act(async () => { revert.click() })
+    const confirm = await vi.waitFor(() => {
+      const button = document.querySelector<HTMLElement>('[data-wf="GlobalConfirm"]')
+        ?.querySelector<HTMLButtonElement>('.ws-folder-modal-danger')
+      expect(button).not.toBeNull()
+      return button!
+    })
+    await act(async () => { confirm.click() })
+
+    await vi.waitFor(() => expect(reviewCommitCalls(fetchMock)).toBe(2))
+    await vi.waitFor(() => expect(document.querySelector('.qingdoc-status')?.textContent).toBe('已放弃本轮修改'))
+    expect(reviewCommitActions(fetchMock)).toEqual(['reject_all', 'reject_all'])
+    expect(reviewCommitExpectedVersions(fetchMock)).toEqual([3, 4])
+  })
+
   it('changeRatio 低于 0.7 时仍走逐处 PatchNav', async () => {
     installBridgeFetch('dsh-inline-threshold', ['qing-review'], {
       pendingReview: true,
@@ -763,8 +868,12 @@ function installBridgeFetch(
     panelPm?: PmDoc
     pendingReview?: boolean
     failReviewCommit?: boolean
+    reviewCommitFailureStatus?: number
     reviewCommitConflictSettled?: boolean
+    reviewCommitConflictPending?: 'once' | 'always'
+    conflictAddsSuggestion?: boolean
     reviewCommitGate?: Promise<void>
+    reviewCommitRetryGate?: Promise<void>
     reviewSuggestionStatus?: 'reviewing' | 'accepted' | 'rejected'
     mismatchVerdict?: boolean
     postCommitPanelGate?: Promise<void>
@@ -780,6 +889,8 @@ function installBridgeFetch(
   vi.stubGlobal('EventSource', FakeEventSource)
   let serverPendingReview = options.pendingReview === true
   let reviewCommitted = false
+  let serverDocVersion = serverPendingReview ? 3 : 0
+  let reviewCommitAttempts = 0
   let stalePostCommitPanelReads = options.stalePostCommitPanelReads ?? 0
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
@@ -795,10 +906,10 @@ function installBridgeFetch(
         docs: engineSessionIds.map((engineSessionId) => ({
           engineSessionId, title: engineSessionId, createdAt: '2026-08-15T00:00:00.000Z',
           state: serverPendingReview ? 'pendingReview' : 'empty',
-          docVersion: serverPendingReview ? 3 : 0, agentBusy: options.agentBusy === true,
+          docVersion: serverDocVersion, agentBusy: options.agentBusy === true,
         })),
         activeDoc: {
-          sessionId: engineSessionIds[0], docVersion: serverPendingReview ? 3 : 0,
+          sessionId: engineSessionIds[0], docVersion: serverDocVersion,
           state: serverPendingReview ? 'pendingReview' : 'empty', agentBusy: options.agentBusy === true,
           markdown: '', qingml: '', title: engineSessionIds[0],
         },
@@ -817,8 +928,8 @@ function installBridgeFetch(
       if (stalePendingReview) stalePostCommitPanelReads -= 1
       const pendingReview = serverPendingReview || stalePendingReview
       return Response.json({
-        sessionId: engineSessionId, docVersion: pendingReview ? 3 : 4,
-        contentHash: pendingReview ? 'hash-3' : 'hash-4',
+        sessionId: engineSessionId, docVersion: serverDocVersion,
+        contentHash: `hash-${serverDocVersion}`,
         state: pendingReview ? 'pendingReview' : 'editing',
         agentBusy: options.agentBusy === true, title: engineSessionId, ts: 't0', charCount: 0,
         pmDoc: options.panelPm ?? options.reviewBasePm ?? EMPTY_PM,
@@ -827,37 +938,61 @@ function installBridgeFetch(
     if (url.startsWith('/qingagent-bridge/doc?')) {
       const engineSessionId = new URL(url, 'http://local').searchParams.get('engineSessionId')!
       return Response.json({
-        sessionId: engineSessionId, docVersion: serverPendingReview ? 3 : 4,
+        sessionId: engineSessionId, docVersion: serverDocVersion,
         state: serverPendingReview ? 'pendingReview' : 'editing', agentBusy: options.agentBusy === true,
         markdown: '', qingml: '', title: engineSessionId,
       })
     }
     if (url.startsWith('/qingagent-bridge/review-render-model?')) {
+      const suggestionIds = options.conflictAddsSuggestion && reviewCommitAttempts > 0
+        ? ['patch-reviewed', 'patch-late']
+        : ['patch-reviewed']
       return Response.json({
-        sessionId: engineSessionIds[0], docVersion: 3, state: 'pendingReview', agentBusy: false,
+        sessionId: engineSessionIds[0], docVersion: serverDocVersion,
+        state: serverPendingReview ? 'pendingReview' : 'editing', agentBusy: false,
         baseVersion: 3, previewDoc: options.reviewBasePm ?? EMPTY_PM,
         ...(options.reviewEditedPm ? { editedDoc: options.reviewEditedPm } : {}),
         ...(options.changeRatio === undefined ? {} : { changeRatio: options.changeRatio }),
         ...(options.wholeDocument ? { wholeDocument: true } : {}),
-        suggestions: reviewCommitted ? [] : [reviewSuggestion(
+        suggestions: reviewCommitted ? [] : suggestionIds.map((id) => reviewSuggestion(
           options.reviewSuggestionStatus ?? 'accepted',
           options.reviewBeforeText,
           options.reviewAfterText,
-        )],
+          id,
+        )),
       })
     }
     if (url.startsWith('/qingagent-bridge/review-commit?') && init?.method === 'POST') {
+      reviewCommitAttempts += 1
       await options.reviewCommitGate
+      if (reviewCommitAttempts === 2) await options.reviewCommitRetryGate
       if (options.failReviewCommit) {
-        return Response.json({ error: 'commit failed' }, { status: 502 })
+        return Response.json({ error: 'commit failed' }, { status: options.reviewCommitFailureStatus ?? 502 })
+      }
+      if (options.reviewCommitConflictSettled && reviewCommitAttempts === 1) {
+        serverDocVersion += 1
+        serverPendingReview = false
+        reviewCommitted = true
+        return Response.json({ error: 'review already settled' }, { status: 409 })
+      }
+      if (
+        options.reviewCommitConflictPending &&
+        (reviewCommitAttempts === 1 || options.reviewCommitConflictPending === 'always')
+      ) {
+        if (reviewCommitAttempts === 1) serverDocVersion += 1
+        return Response.json({ error: 'doc version conflict' }, { status: 409 })
+      }
+      if (options.reviewCommitConflictPending === 'once') {
+        const body = JSON.parse(String(init.body)) as { expectedDocVersion: number }
+        if (body.expectedDocVersion !== serverDocVersion) {
+          return Response.json({ error: 'doc version conflict' }, { status: 409 })
+        }
       }
       serverPendingReview = false
       reviewCommitted = true
-      if (options.reviewCommitConflictSettled) {
-        return Response.json({ error: 'review already settled' }, { status: 409 })
-      }
+      serverDocVersion += 1
       return Response.json({
-        status: 'reviewed', docVersion: 4, acceptedCount: 1, rejectedCount: 0,
+        status: 'reviewed', docVersion: serverDocVersion, acceptedCount: 1, rejectedCount: 0,
         remainingCount: 0, outcomeQueued: false,
         outcome: { acceptedCount: 1, rejectedCount: 0, hunks: [] }, seq: null,
       })
@@ -887,6 +1022,19 @@ function reviewCommitActions(fetchMock: ReturnType<typeof installBridgeFetch>): 
       String(url).startsWith('/qingagent-bridge/review-commit?') && init?.method === 'POST')
     .map(([, init]) => JSON.parse(String(init?.body)) as { action: string })
     .map((body) => body.action)
+}
+
+function reviewCommitExpectedVersions(fetchMock: ReturnType<typeof installBridgeFetch>): number[] {
+  return fetchMock.mock.calls
+    .filter(([url, init]) =>
+      String(url).startsWith('/qingagent-bridge/review-commit?') && init?.method === 'POST')
+    .map(([, init]) => JSON.parse(String(init?.body)) as { expectedDocVersion: number })
+    .map((body) => body.expectedDocVersion)
+}
+
+function reviewRenderModelCalls(fetchMock: ReturnType<typeof installBridgeFetch>): number {
+  return fetchMock.mock.calls.filter(([url]) =>
+    String(url).startsWith('/qingagent-bridge/review-render-model?')).length
 }
 
 function panelReadCalls(fetchMock: ReturnType<typeof installBridgeFetch>): number {
