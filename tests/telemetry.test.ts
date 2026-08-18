@@ -106,7 +106,11 @@ describe('telemetry 事件构造与分桶', () => {
     expect(init?.method).toBe('POST')
     const headers = new Headers(init?.headers)
     expect(headers.get('user-agent')).toMatch(/Mozilla\/5\.0 .*AppleWebKit\/537\.36.*Chrome\/130\.0\.0\.0.*Safari\/537\.36/)
-    expect(browserStyleUserAgent('1.2.3')).toContain('dsh-qingagent/1.2.3')
+    // 真机实测:umami 用 isbot 过滤 UA,只要出现自定义产品标记(如 dsh-qingagent/x.y.z)
+    // 就把事件**静默丢弃**且照样回 200 {"ok":true}。同一份 body,干净 UA 进库、带 token 不进库。
+    // 版本已在事件属性 pluginVersion 里,UA 必须保持纯净浏览器串。
+    expect(browserStyleUserAgent()).not.toMatch(/dsh-qingagent/)
+    expect(headers.get('user-agent')).not.toMatch(/dsh-qingagent/)
     expect(JSON.parse(String(init?.body))).toEqual({
       type: 'event',
       payload: {

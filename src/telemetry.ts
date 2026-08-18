@@ -178,7 +178,7 @@ export class Telemetry implements TelemetryCapture {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': browserStyleUserAgent(this.pluginVersion),
+          'User-Agent': browserStyleUserAgent(),
         },
         body: JSON.stringify(envelope),
         signal: AbortSignal.timeout(this.timeoutMs),
@@ -419,13 +419,19 @@ export function validateBridgeTelemetryEvent(value: unknown): BridgeTelemetryEve
   throw new Error('不支持的遥测事件。')
 }
 
-export function browserStyleUserAgent(pluginVersion: string): string {
+/**
+ * UA 必须是**纯净的浏览器串**:umami 用 isbot 过滤,UA 里只要出现自定义产品标记
+ * (如 `dsh-qingagent/0.1.20`)就会被判成机器人**静默丢弃**——而且照样回 200 `{"ok":true}`,
+ * 调用方完全无感。真机实测:同一份 body,干净 UA 进库、带自定义 token 不进库。
+ * 插件版本已在事件属性 `pluginVersion` 里,不要再塞进 UA。
+ */
+export function browserStyleUserAgent(): string {
   const osToken = process.platform === 'win32'
     ? 'Windows NT 10.0; Win64; x64'
     : process.platform === 'darwin'
       ? 'Macintosh; Intel Mac OS X 10_15_7'
       : 'X11; Linux x86_64'
-  return `Mozilla/5.0 (${osToken}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 dsh-qingagent/${pluginVersion} Safari/537.36`
+  return `Mozilla/5.0 (${osToken}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36`
 }
 
 export function safeTelemetryErrorMessage(reason: unknown): string {
