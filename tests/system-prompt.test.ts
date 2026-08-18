@@ -16,10 +16,11 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【叙述一致性红线】')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【结构摘要自检纪律】')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('字数等你确认后再核对')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('这是自动落款,随字数与保存时间自动更新,属固定装饰不可编辑')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('这是纸面的自动落款,随字数和保存时间自动更新,是固定装饰,改不了,也没有开关能关')
   })
 
   it('目标不唯一时先澄清且只在用户明确全局词时批量执行', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('**宁可多问一次,不可猜着批量改**:定位不唯一时问用户的代价是一个回合,猜错的代价是整篇误改')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('目标定位不唯一时(多处命中、指代含糊、「那段/那块」无法唯一确定)必须先用原生 ask_user 让用户选')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('严禁把模糊的单数指代自行提升为「按关键词全局处理」')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('只有用户明确说了「所有/凡是/都/全部」等全局词时才按批量执行')
@@ -34,6 +35,7 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
 
   it('按写作通道使用任务清单结构且不重复条目标记', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【列表纪律】有序列表的编号由列表结构自动生成:列表项文本内严禁再手写「1.」「2.」等序号(否则删改后字面编号与真实序号错乱);任务/检查/待办类清单必须用**任务清单结构**承载——整篇起草(QingML)用 `<tasks><task>事项</task></tasks>`,局部编辑的 Markdown 字段用 `- [ ] 事项`;**两者都不要在条目文字里再写一遍 `- [ ]` 或 `☐`**,否则会和渲染出的勾选框重复。')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('「大类下面再列具体的」「分几类、每类带几项」这类口语对应**嵌套列表**(子项挂在父项之下),不是「二级标题+平级列表」')
   })
 
   it('面向用户隐藏工具、参数、版本与原始错误等内部术语', () => {
@@ -88,13 +90,37 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('换个写法重写')
   })
 
+  it('压缩只授权原结构内删字，章节变更仍按全文重构征询', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('用户要求「压缩字数/删减篇幅」不等于授权重排结构——它免征询的范围仅限于删字,不动章节')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('「压缩到 N 字/删掉一半」这类要求只是字数目标,**不附带结构授权**')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('压缩只能在保持原有章节结构的前提下删冗余')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('凡会增删、合并或重排章节的做法都属整篇重构,按【全文重构纪律】先 ask_user')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('「合并相近小节」是起草新稿满足长度规格的策略,已成稿后的压缩不得用它')
+  })
+
+  it('首稿字数补足与单回合例外成对存在', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('例外见【字数纪律】的首稿补足')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('首稿落库即发现低于硬要求时,当回合紧接着做这一次补足不算违反【单回合单次编辑纪律】')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不得只汇报不达标就把字数问题推回用户')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('若首稿走了审阅路径,当回合无法再改,等用户裁决后下一回合再补足')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('「禁止反复整篇重写」禁的是重写手段和自驱循环,**不是禁止这一次局部修正**')
+  })
+
+  it('审核结果回流只用一句话确认且不复述或追加建议', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('只需**一句话**确认结果(如「好的,采纳的已生效,被拒的已还原」)')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不复述改动清单,不总结改了什么,不主动追加建议——用户问起再说')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('这一句话同时就是【回合收尾纪律】要求的收尾语,不另加第二句')
+    expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('只需简短确认,等待用户下一步指示')
+  })
+
   it('要求正式回复与深度思考都使用中文和用户语言', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('始终使用中文与用户交流,包括深度思考(reasoning/thinking)的内容也必须使用中文')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('思考里指代文稿对象时也尽量用用户语言')
   })
 
   it('不编造落款开关或其他不存在的界面入口', () => {
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不要建议用户去某个设置或开关里关掉它——没有这样的入口')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('对这种请求,固定回答:「这是纸面的自动落款,随字数和保存时间自动更新,是固定装饰,改不了,也没有开关能关。」')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不要即兴发挥别的说法,尤其不要编造设置入口')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('不得向用户指路不存在的按钮、菜单或设置项')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('不确定界面上有没有某个入口时,只说这件事做不到,不要猜路径')
   })

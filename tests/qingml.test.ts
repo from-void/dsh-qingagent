@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { QINGML_SYSTEM, completeTopLevelBlocks, countWords, outlineOf } from '../src/qingml.js'
+import {
+  QINGML_NESTED_BULLET_LIST_EXAMPLE,
+  QINGML_NESTED_TASK_LIST_EXAMPLE,
+  QINGML_SYSTEM,
+  completeTopLevelBlocks,
+  countWords,
+  outlineOf,
+} from '../src/qingml.js'
 
 describe('QingML 流边界与摘要', () => {
   it('要求元数据标题与正文纸面大标题双写且文字一致', () => {
@@ -13,6 +20,15 @@ describe('QingML 流边界与摘要', () => {
     const partial = '<title>题</title><h1>章</h1><p>未完成'
     expect(completeTopLevelBlocks(partial).blocks).toEqual(['<title>题</title>', '<h1>章</h1>'])
     expect(completeTopLevelBlocks(`${partial}</p>`).blocks).toHaveLength(3)
+  })
+
+  it('嵌套列表正面样例本身是完整 QingML 顶层块', () => {
+    for (const example of [QINGML_NESTED_BULLET_LIST_EXAMPLE, QINGML_NESTED_TASK_LIST_EXAMPLE]) {
+      expect(completeTopLevelBlocks(example)).toEqual({ blocks: [example], completeLength: example.length })
+      expect(QINGML_SYSTEM).toContain(example)
+    }
+    expect(QINGML_SYSTEM).toContain('列表的层级靠嵌套表达,不靠标题')
+    expect(QINGML_SYSTEM).toContain('用户要「大类下面再列具体的」「分几类、每类带几项」时,必须用这种嵌套列表,不要用「小标题+平级列表」')
   })
 
   it('生成标题层级、节首句和中英文字数', () => {
