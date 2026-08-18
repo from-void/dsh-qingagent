@@ -4,7 +4,6 @@ import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
 import { currentReviewStateFor, qingClientStore, type QingClientSnapshot } from './store.js'
-import { failureSummary } from './QingWriteToolCard.js'
 import styles from './QingWriteToolCard.module.css'
 
 /** 工具卡的具名文案与摘要装配;meta 来自各工具的 presentationMeta(#23)。 */
@@ -64,6 +63,12 @@ export function createQingToolCard(config: QingToolCardConfig) {
         ? config.summary(meta, snapshot)
         : config.runningSummary?.(snapshot) ?? ''
     const narrativeText = settled && !failed ? config.narrative?.(meta, snapshot) ?? '' : ''
+    const handleView = () => openToolCardDocument(
+      sessionId,
+      meta.engineSessionId,
+      snapshot,
+      () => props.qingLayout.openDetails(),
+    )
 
     return (
       <div className={styles.toolCard} data-state={state}>
@@ -77,7 +82,7 @@ export function createQingToolCard(config: QingToolCardConfig) {
             <button
               type="button"
               className={styles.viewButton}
-              onClick={() => { qingClientStore.reopenPanel(sessionId); props.qingLayout.openDetails() }}
+              onClick={handleView}
             >查看</button>
           ) : null}
         </div>
@@ -85,6 +90,25 @@ export function createQingToolCard(config: QingToolCardConfig) {
       </div>
     )
   }
+}
+
+/** 工具卡「查看」统一入口：旧卡只开面板，具名稿聚焦，已确认删除的稿保留 missing 纸面。 */
+export function openToolCardDocument(
+  sessionId: string,
+  engineSessionId: string | undefined,
+  snapshot: QingClientSnapshot,
+  openDetails: () => void,
+): void {
+  qingClientStore.reopenPanel(sessionId)
+  openDetails()
+  if (!engineSessionId || snapshot.docMissing?.engineSessionId === engineSessionId) return
+
+  void qingClientStore.focus(sessionId, engineSessionId).catch((error) => {
+    console.error('[qingagent-tool-card] focus failed', error)
+    window.dispatchEvent(new CustomEvent('qingagent:panel-toast', {
+      detail: '保存失败 · 未切换文稿',
+    }))
+  })
 }
 
 function isMeta(value: unknown): value is ToolCardMeta {
@@ -167,3 +191,14 @@ export const QingFocusToolCard = createQingToolCard({
   failedTitle: '切换预览未完成',
   summary: (meta) => titled(meta),
 })
+
+export function failureSummary(content: readonly unknown[]): string {
+  const text = content.flatMap((block) => {
+    if (!block || typeof block !== 'object') return []
+    const value = block as { type?: unknown; text?: unknown }
+    return value.type === 'text' && typeof value.text === 'string' ? [value.text] : []
+  }).join('\n').split(/\r?\n/, 1)[0]?.replace(/^Error:\s*/i, '').trim() ?? ''
+  if (/审阅|REVIEW_PENDING/i.test(text)) return '文稿审阅中'
+  if (/AGENT_BUSY|正在处理其他任务|引擎忙/i.test(text)) return '引擎忙'
+  return text.length > 48 ? `${text.slice(0, 47)}…` : text
+}
