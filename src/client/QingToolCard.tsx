@@ -101,7 +101,8 @@ export function openToolCardDocument(
 ): void {
   qingClientStore.reopenPanel(sessionId)
   openDetails()
-  if (!engineSessionId || snapshot.docMissing?.engineSessionId === engineSessionId) return
+  // docMissing 是集合语义(P68-b):已判定删除的稿一律不跳转,面板自己会显示「该文档已删除」。
+  if (!engineSessionId || snapshot.docMissing?.engineSessionIds.includes(engineSessionId)) return
 
   void qingClientStore.focus(sessionId, engineSessionId).catch((error) => {
     console.error('[qingagent-tool-card] focus failed', error)

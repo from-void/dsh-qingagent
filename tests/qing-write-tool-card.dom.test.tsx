@@ -224,8 +224,9 @@ describe('Qing write/edit tool card view navigation', () => {
 
       expect(openDetails).toHaveBeenCalledOnce()
       expect(focus).not.toHaveBeenCalled()
+      // docMissing 是集合语义(P68-b):已删除的稿持久累积,切走不忘。
       expect(qingClientStore.getSnapshot(sessionId).docMissing)
-        .toEqual({ engineSessionId })
+        .toEqual({ engineSessionIds: [engineSessionId] })
     } finally {
       act(() => root.unmount())
       host.remove()
