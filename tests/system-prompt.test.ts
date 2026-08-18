@@ -23,6 +23,17 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('目标定位不唯一时(多处命中、指代含糊、「那段/那块」无法唯一确定)必须先用原生 ask_user 让用户选')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('严禁把模糊的单数指代自行提升为「按关键词全局处理」')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('只有用户明确说了「所有/凡是/都/全部」等全局词时才按批量执行')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('用户给出**完整替换文本**时(「把 X 换成 Y」且 Y 是完整句/段),替换范围就是**整个 X**;不要只替换其中一部分而保留原文残句。**提交前**按用户给的整句核对替换范围是否恰好覆盖 X;提交后以工具返回为准,不再读稿复核')
+  })
+
+  it('attach 连接下不引导面板导出且不自产替代文件', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('【文件工具禁令】文稿正文的读写与导出交付,严禁经工作区文件工具(write/bash 等)——正文一律走 qing_* 工具。**当前这种连接方式下,右侧面板的导出功能不可用**:用户要文件时,如实告诉他这条连接导不了,请他在青简客户端里打开这篇再用客户端导出;**不要引导他去点右侧面板的导出按钮,也不要以"面板导不了"为由自己造文件替代**。')
+    expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('仅当面板导出不覆盖所需格式时才可自产文件')
+    expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('用户要文件时优先指引右侧面板的「导出」按钮下载')
+  })
+
+  it('按写作通道使用任务清单结构且不重复条目标记', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('【列表纪律】有序列表的编号由列表结构自动生成:列表项文本内严禁再手写「1.」「2.」等序号(否则删改后字面编号与真实序号错乱);任务/检查/待办类清单必须用**任务清单结构**承载——整篇起草(QingML)用 `<tasks><task>事项</task></tasks>`,局部编辑的 Markdown 字段用 `- [ ] 事项`;**两者都不要在条目文字里再写一遍 `- [ ]` 或 `☐`**,否则会和渲染出的勾选框重复。')
   })
 
   it('面向用户隐藏工具、参数、版本与原始错误等内部术语', () => {
@@ -58,6 +69,7 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('每一轮的最后都必须有一句面向用户的中文话,说清这轮做了什么、下一步要他做什么')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('不允许以工具调用作为一轮的结尾,也不允许停在冒号或半句话上')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('只说定性结论(如「改好了/已提交待你确认」),不要报字数、块数、章节数')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('收尾语只复述**已经确定发生的事**,措辞不得比原文更具体:用户或正文说「好多年」就说「好多年」,**不要替换成「十几年」这类你自己推断的数字或程度词**。')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('例外:提交审阅的那一轮由结果卡直接向用户说明,不受本条约束')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('不要为此把话硬塞在工具调用之前')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('返回 review 后，本次工具调用已经结束：不要重写、不要读稿复核、不要自动裁决')
