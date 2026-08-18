@@ -1,11 +1,16 @@
 .toolCard {
+  width: 100%;
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--dsw-font-family);
+}
+
+.toolSummaryLine {
   display: flex;
   align-items: center;
   width: 100%;
   min-width: 0;
   height: 24px;
-  color: var(--dsw-alias-label-secondary);
-  font-family: var(--dsw-font-family);
 }
 
 .toolTitle {
@@ -41,6 +46,14 @@
 
 .toolCard[data-state='failed'] .toolSummary {
   color: var(--dsw-alias-state-warn-label);
+}
+
+.toolNarrative {
+  margin: 2px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: normal;
 }
 
 .viewButton {
