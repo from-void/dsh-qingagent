@@ -4603,8 +4603,8 @@
   }
 }
 /* 纸内功能区几何换算:产品 top 64 = 纸上留白 52 + 纸内缩 12,right 18 以
-   「滚动容器宽=纸宽」为前提;插件纸上留白为 0 且容器弹性全宽(纸居中),
-   换算为:顶=纸内缩 12,右=纸右缘往内 18。 */
+   「滚动容器宽=纸宽」为前提;插件纸上留白为 0 且容器弹性全宽,尾部宿主适配
+   逐件居中纸面以对半分配富余,换算为:顶=纸内缩 12,右=纸右缘往内 18。 */
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-docfns {
   top: 12px;
   right: max(18px, calc((100% - min(var(--ws-paper-column-width), 100%)) / 2 + 18px));
@@ -4627,4 +4627,8 @@
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-paper-shell,
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-paper-surface {
   max-width: min(800px, 100%);
+  /* shell 是绝对定位且源规则只钉了 left:0;双向 offset + auto margin 才居中。
+     对 relative 的另两者 right:0 不产生位移;逐件 auto margin 不改变其它 flex 子项。 */
+  right: 0;
+  margin-inline: auto;
 }
