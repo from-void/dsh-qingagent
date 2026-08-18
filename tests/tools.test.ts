@@ -43,7 +43,7 @@ function exec(
     arguments: {},
     signal,
     token: Symbol('tool'),
-    agent: { id: 'dsh-1', options: { provider: 'fake', model: 'fake-model' } },
+    agent: { id: 'dsh-1', options: { provider: 'fake', model: 'fake-model' }, inject: vi.fn() },
     deferContext: vi.fn(),
     concludeTurn: vi.fn(),
   } as unknown as ToolRunContext
@@ -183,6 +183,51 @@ function paragraphDoc(...paragraphs: string[]): PmDoc {
 }
 
 describe('qing_write_draft', () => {
+  it('首稿成功后同回合建立 freshness，允许紧接一次局部补足', async () => {
+    let writeCommitted = false
+    let editCommitted = false
+    const fixture = harness([DRAFT_ONE], async (path, init) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        if (editCommitted) return doc({ docVersion: 2, state: 'editing', qingml: DRAFT_TWO, title: '测试稿' })
+        if (writeCommitted) return doc({ docVersion: 1, state: 'editing', qingml: DRAFT_ONE, title: '测试稿' })
+        return doc()
+      }
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 1, state: 'editing', agentBusy: false,
+          markdown: '# 开篇\n\n第一版正文。', title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        const body = JSON.parse(String(init?.body)) as { ops: Array<{ kind: string }> }
+        if (body.ops[0]?.kind === 'qingmlDraft') {
+          writeCommitted = true
+          return { status: 'committed', docVersion: 1 }
+        }
+        editCommitted = true
+        return { status: 'committed', docVersion: 2 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+    const preStep = fixture.listeners.get('agent/pre-step')!
+    await preStep({ agent: { id: 'dsh-1' }, turn: 1 }, async () => ({ kind: 'enter', messages: [] }))
+    await expect(fixture.tools.get('qing_write_draft')!.execute(
+      { brief: '重写已有稿', docRef: 'qing-1' },
+      exec(undefined, 'stale-rewrite', 'qing_write_draft'),
+    )).rejects.toThrow('qing_read_draft')
+
+    const writeExec = exec(undefined, 'fresh-write', 'qing_write_draft')
+    const written = await fixture.tools.get('qing_write_draft')!.execute({ brief: '写一篇短稿' }, writeExec)
+    expect(written).toMatchObject({ status: 'committed', words: expect.any(Number) })
+    expect(writeExec.agent?.inject).toHaveBeenCalled()
+
+    await expect(fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'strReplace', old: '第一版正文。', new: '修正后的正文。' }],
+    }, exec(undefined, 'fresh-edit', 'qing_edit_draft'))).resolves.toMatchObject({
+      status: 'committed', docVersion: 2,
+    })
+  })
+
   it('消费侧模型流、提交并以引擎读回的 official 文稿返回', async () => {
     let proposed = false
     const fixture = harness([DRAFT_ONE], async (path, init) => {
@@ -661,6 +706,56 @@ describe('qing_read_draft', () => {
 })
 
 describe('qing_edit_draft', () => {
+  it('本回合未读稿硬拦截，任一 read mode 成功后放行且下一回合重新变陈旧', async () => {
+    let edited = false
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({
+          docVersion: edited ? 3 : 2,
+          state: 'editing',
+          qingml: edited ? DRAFT_TWO : DRAFT_ONE,
+          title: '测试稿',
+        })
+      }
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '# 开篇\n\n第一版正文。', title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        edited = true
+        return { status: 'committed', docVersion: 3 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+    const preStep = fixture.listeners.get('agent/pre-step')!
+    await preStep({ agent: { id: 'dsh-1' }, turn: 4 }, async () => ({ kind: 'enter', messages: [] }))
+    const edit = fixture.tools.get('qing_edit_draft')!
+    const callsBeforeGate = vi.mocked(fixture.engine.fetchJson).mock.calls.length
+
+    const blocked = await edit.execute({
+      ops: [{ kind: 'strReplace', old: '第一版正文。', new: '修正后的正文。' }],
+    }, exec(undefined, 'stale-edit', 'qing_edit_draft')).catch((error: unknown) => error)
+    expect(blocked).toBeInstanceOf(Error)
+    expect((blocked as Error).message).toBe('请先调用 qing_read_draft 读取当前文稿，再基于最新内容修改。')
+    expect((blocked as Error).message).not.toMatch(/pendingReview|docRef|blockId|HTTP/i)
+    expect(vi.mocked(fixture.engine.fetchJson).mock.calls).toHaveLength(callsBeforeGate)
+
+    await fixture.tools.get('qing_read_draft')!.execute(
+      { mode: 'outline' },
+      exec(undefined, 'fresh-read', 'qing_read_draft'),
+    )
+    await expect(edit.execute({
+      ops: [{ kind: 'strReplace', old: '第一版正文。', new: '修正后的正文。' }],
+    }, exec(undefined, 'allowed-edit', 'qing_edit_draft'))).resolves.toMatchObject({ status: 'committed' })
+
+    await preStep({ agent: { id: 'dsh-1' }, turn: 5 }, async () => ({ kind: 'enter', messages: [] }))
+    await expect(edit.execute({
+      ops: [{ kind: 'strReplace', old: '修正后的正文。', new: '再次修改。' }],
+    }, exec(undefined, 'next-turn-edit', 'qing_edit_draft'))).rejects.toThrow('qing_read_draft')
+  })
+
   it('描述要求改标题时同批同步稿名和纸面大标题', () => {
     const fixture = harness([], async () => { throw new Error('不应访问引擎') })
     const tool = fixture.tools.get('qing_edit_draft')!
@@ -1330,6 +1425,12 @@ describe('qing_list_docs', () => {
       if (path.endsWith('/doc?format=qingml')) {
         return doc({ state, docVersion, qingml: DRAFT_ONE, title: '测试稿' })
       }
+      if (state === 'pendingReview' && path.endsWith('/review?format=render-model')) {
+        return {
+          sessionId: 'qing-1', docVersion, state, agentBusy: false,
+          baseVersion: docVersion, suggestions: [], editedDoc: candidateDoc('开篇', '第一版正文。'),
+        }
+      }
       throw new Error(`unexpected path: ${path}`)
     })
     const tool = fixture.tools.get('qing_list_docs')!
@@ -1371,6 +1472,12 @@ describe('qing_focus_doc', () => {
     const fixture = harness([], async (path) => {
       if (path.endsWith('/doc?format=qingml')) {
         return doc({ state: 'pendingReview', docVersion: 7, qingml: DRAFT_ONE, title: '测试稿' })
+      }
+      if (path.endsWith('/review?format=render-model')) {
+        return {
+          sessionId: 'qing-1', docVersion: 7, state: 'pendingReview', agentBusy: false,
+          baseVersion: 7, suggestions: [], editedDoc: candidateDoc('开篇', '第一版正文。'),
+        }
       }
       throw new Error(`unexpected path: ${path}`)
     })

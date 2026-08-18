@@ -4,10 +4,12 @@ import { Readable } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import type { BindingStore } from '../src/bindings.js'
-import { BridgeHub } from '../src/bridge.js'
+import { BridgeHub, type BridgeDocStateObserver } from '../src/bridge.js'
 import type { ExternalDoc, SessionBinding } from '../src/contracts.js'
+import { DocStateCache } from '../src/docState.js'
 import type { EngineService } from '../src/engine.js'
 import { EngineHttpError } from '../src/engine.js'
+import { createBridgeDocStateObserver } from '../src/index.js'
 import type { TelemetryCapture } from '../src/telemetry.js'
 
 interface CapturedResponse {
@@ -47,7 +49,10 @@ function request(
   return req
 }
 
-function fixture(bindingsBySession: Record<string, SessionBinding>) {
+function fixture(
+  bindingsBySession: Record<string, SessionBinding>,
+  docStateObserver?: BridgeDocStateObserver,
+) {
   let handler: ((request: IncomingMessage, response: ServerResponse) => void | Promise<void>) | undefined
   const lifecycle: Array<() => void> = []
   const ctx = {
@@ -75,15 +80,20 @@ function fixture(bindingsBySession: Record<string, SessionBinding>) {
   } as unknown as EngineService
   const bindings = {
     getBinding: (sessionId: string) => bindingsBySession[sessionId] ?? { docs: [] },
+    getActive: (sessionId: string) => {
+      const binding = bindingsBySession[sessionId]
+      return binding?.docs.find((doc) => doc.engineSessionId === binding.activeEngineSessionId)
+    },
     hasDoc: (sessionId: string, engineSessionId: string) =>
       (bindingsBySession[sessionId]?.docs ?? []).some((doc) => doc.engineSessionId === engineSessionId),
     setActive: vi.fn(),
     adoptDoc: vi.fn(),
   } as unknown as BindingStore
   const telemetry = { capture: vi.fn(async () => undefined) } as unknown as TelemetryCapture
-  const hub = new BridgeHub(ctx, engine, bindings, undefined, undefined, telemetry)
+  const hub = new BridgeHub(ctx, engine, bindings, undefined, undefined, telemetry, docStateObserver)
   hub.mount()
   return {
+    ctx,
     hub,
     engine,
     bindings,
@@ -414,6 +424,132 @@ describe('BridgeHub', () => {
       method: 'POST', body: JSON.stringify(commitBody),
     })
     dispose()
+  })
+
+  it('面板直写与审阅裁决成功后都通知同一份文稿状态缓存', async () => {
+    const binding = {
+      docs: [{ engineSessionId: 'qing-a', title: 'A', createdAt: '2026-08-15T00:00:00.000Z' }],
+      activeEngineSessionId: 'qing-a',
+    }
+    const documentChanged = vi.fn(async () => undefined)
+    const { handler, engine, dispose } = fixture(
+      { 'dsh-a': binding },
+      { documentChanged },
+    )
+    vi.mocked(engine.fetchJson).mockImplementation(async (path) => {
+      if (path.endsWith('/review/verdicts')) {
+        return { status: 'marked', docVersion: 3, patchIds: ['p-1'], verdict: 'accepted', reviewingCount: 0, seq: 1 }
+      }
+      if (path.endsWith('/review/commit')) {
+        return {
+          status: 'reviewed', docVersion: 4, acceptedCount: 1, rejectedCount: 0,
+          remainingCount: 0, outcomeQueued: true,
+          outcome: { acceptedCount: 1, rejectedCount: 0, hunks: [] }, seq: 2,
+        }
+      }
+      if (path.endsWith('/doc')) {
+        return { ok: true, clientMutationId: 'mutation-1', docVersion: 5, contentHash: 'hash-5', ts: 'now', charCount: 8 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    await handler(request(
+      'POST',
+      '/qingagent-bridge/review-verdicts?dshSessionId=dsh-a&engineSessionId=qing-a',
+      '127.0.0.1',
+      { expectedDocVersion: 3, patchId: 'p-1', verdict: 'accepted' },
+    ), response() as unknown as ServerResponse)
+    await handler(request(
+      'POST',
+      '/qingagent-bridge/review-commit?dshSessionId=dsh-a&engineSessionId=qing-a',
+      '127.0.0.1',
+      { expectedDocVersion: 3, action: 'commit' },
+    ), response() as unknown as ServerResponse)
+    await handler(request(
+      'PUT',
+      '/qingagent-bridge/doc-pm?dshSessionId=dsh-a&engineSessionId=qing-a',
+      '127.0.0.1',
+      {
+        expectedDocumentSnapshot: 4,
+        baseContentHash: 'hash-4',
+        clientMutationId: 'mutation-1',
+        doc: { type: 'doc', attrs: { schemaVersion: 1 }, content: [] },
+      },
+    ), response() as unknown as ServerResponse)
+
+    expect(documentChanged).toHaveBeenCalledTimes(3)
+    expect(documentChanged).toHaveBeenNthCalledWith(1, 'dsh-a', 'qing-a')
+    expect(documentChanged).toHaveBeenNthCalledWith(2, 'dsh-a', 'qing-a')
+    expect(documentChanged).toHaveBeenNthCalledWith(3, 'dsh-a', 'qing-a')
+    dispose()
+  })
+
+  it('review-commit 后刷新权威摘要并通过 agent.inject 推到下一步，注入不含正文或内部标识', async () => {
+    const binding = {
+      docs: [{ engineSessionId: 'qing-a', title: '旧标题', createdAt: '2026-08-15T00:00:00.000Z' }],
+      activeEngineSessionId: 'qing-a',
+    }
+    let delegate: BridgeDocStateObserver | undefined
+    const forwardingObserver: BridgeDocStateObserver = {
+      documentChanged: (...args) => delegate!.documentChanged(...args),
+    }
+    const runtime = fixture({ 'dsh-a': binding }, forwardingObserver)
+    const inject = vi.fn()
+    Object.assign(runtime.ctx, {
+      agents: { list: () => [{ id: 'dsh-a', inject }] },
+    })
+    const cache = new DocStateCache()
+    cache.update('dsh-a', {
+      state: 'pendingReview', words: 99, blocks: 9, structure: '旧结构',
+      title: '旧标题', docVersion: 3, patchCount: 1,
+    })
+    delegate = createBridgeDocStateObserver(runtime.ctx, runtime.engine, runtime.bindings, cache)
+    vi.mocked(runtime.engine.fetchJson).mockImplementation(async (path) => {
+      if (path.endsWith('/review/commit')) {
+        return {
+          status: 'reviewed', docVersion: 4, acceptedCount: 1, rejectedCount: 0,
+          remainingCount: 0, outcomeQueued: true,
+          outcome: { acceptedCount: 1, rejectedCount: 0, hunks: [] }, seq: 2,
+        }
+      }
+      if (path.endsWith('/doc?format=qingml')) {
+        return {
+          sessionId: 'qing-a', docVersion: 4, state: 'editing', agentBusy: false,
+          markdown: '# 新章\n\n机密正文。',
+          qingml: '<title>新标题</title><h1>新章</h1><p>机密正文。</p>',
+          title: '新标题',
+        } satisfies ExternalDoc
+      }
+      if (path.endsWith('/doc?format=pm')) {
+        return {
+          sessionId: 'qing-a', docVersion: 4, contentHash: 'hash-4', state: 'editing',
+          agentBusy: false, title: '新标题', ts: 'now', charCount: 7,
+          pmDoc: {
+            type: 'doc', attrs: { schemaVersion: 1 }, content: [
+              { type: 'heading', attrs: { blockId: 'h-1', level: 1 }, content: [{ type: 'text', text: '新章' }] },
+              { type: 'paragraph', attrs: { blockId: 'p-1' }, content: [{ type: 'text', text: '机密正文。' }] },
+            ],
+          },
+        }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    await runtime.handler(request(
+      'POST',
+      '/qingagent-bridge/review-commit?dshSessionId=dsh-a&engineSessionId=qing-a',
+      '127.0.0.1',
+      { expectedDocVersion: 3, action: 'commit' },
+    ), response() as unknown as ServerResponse)
+
+    expect(inject).toHaveBeenCalledOnce()
+    const injected = inject.mock.calls[0]?.[0] as { content: Array<{ text?: string }> }
+    const text = injected.content[0]?.text ?? ''
+    expect(text).toContain('【文稿状态】已落库生效,无待审稿。')
+    expect(text).toContain('《新标题》｜一个标题加 1 段正文｜约 7 字')
+    expect(text).not.toMatch(/机密正文|pendingReview|docRef|blockId|qing-a/u)
+    expect(cache.contextText('dsh-a')).toBe(text)
+    runtime.dispose()
   })
 
   it('直写完整透传 frozen baseline，并保留引擎 409 冲突响应', async () => {

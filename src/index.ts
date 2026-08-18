@@ -7,15 +7,23 @@ import type {} from '@deepseek-ai/dsh-storage-domain'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-tools'
 import { BindingDomainSpec, BindingStore } from './bindings.js'
-import { BridgeHub } from './bridge.js'
+import { BridgeHub, type BridgeDocStateObserver } from './bridge.js'
 import { EngineService } from './engine.js'
 import { QINGAGENT_SYSTEM_PROMPT } from './system-prompt.js'
 import { createTelemetry } from './telemetry.js'
-import { registerTools } from './tools.js'
+import { refreshDocState, registerTools } from './tools.js'
 import type { SideModelConfig } from './contracts.js'
+import {
+  AgentIndex,
+  DOC_STATE_STALE_LINE,
+  DocStateCache,
+  FreshnessTracker,
+  formatDocState,
+  injectDocState,
+} from './docState.js'
 
 export const name = 'dsh-qingagent'
-export const inject = ['llm', 'tools', 'webServer', 'storageDomain', 'systemPrompt']
+export const inject = ['agents', 'llm', 'tools', 'webServer', 'storageDomain', 'systemPrompt']
 
 export interface Config {
   engineUrl?: string
@@ -43,6 +51,27 @@ export const Config: z<Config> = z.object({
   ]),
 })
 
+export function createBridgeDocStateObserver(
+  ctx: Context,
+  engine: EngineService,
+  bindings: BindingStore,
+  docStates: DocStateCache,
+): BridgeDocStateObserver {
+  return {
+    documentChanged: async (dshSessionId, engineSessionId) => {
+      if (bindings.getActive(dshSessionId)?.engineSessionId !== engineSessionId) return
+      docStates.markDirty(dshSessionId)
+      const agent = ctx.agents.list().find((candidate) => String(candidate.id) === dshSessionId)
+      try {
+        const current = await refreshDocState({ engine, bindings }, docStates, dshSessionId)
+        if (current) injectDocState(agent, formatDocState(current))
+      } catch {
+        injectDocState(agent, DOC_STATE_STALE_LINE)
+      }
+    },
+  }
+}
+
 export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const resolved = {
     engineUrl: config.engineUrl ?? 'http://127.0.0.1:8080',
@@ -59,7 +88,18 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const domain = await ctx.storageDomain.open(BindingDomainSpec)
   ctx.effect(() => () => domain.close())
   const bindings = new BindingStore(domain, engine, (sessionId, binding) => bridge?.bindingChanged(sessionId, binding))
-  bridge = new BridgeHub(ctx, engine, bindings, undefined, undefined, telemetry)
+  const docStates = new DocStateCache()
+  const freshness = new FreshnessTracker()
+  const agentIndex = new AgentIndex()
+  bridge = new BridgeHub(
+    ctx,
+    engine,
+    bindings,
+    undefined,
+    undefined,
+    telemetry,
+    createBridgeDocStateObserver(ctx, engine, bindings, docStates),
+  )
   bridge.mount()
   engine.startMonitoring()
   void (async () => {
@@ -72,7 +112,30 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     order: 160,
     text: QINGAGENT_SYSTEM_PROMPT,
   }))
-  registerTools({ ctx, engine, bindings, bridge, telemetry, sideModel: config.sideModel })
+  ctx.effect(() => ctx.systemPrompt.context({
+    name: 'plugin:qingagent-doc-state',
+    order: 100,
+    text: (assemblyContext) => {
+      const scope = assemblyContext.scope
+      if (!scope || typeof scope !== 'object') return ''
+      const dshSessionId = agentIndex.get(scope)
+      if (!dshSessionId || !bindings.getActive(dshSessionId)) return ''
+      return docStates.contextText(dshSessionId)
+    },
+  }))
+  ctx.effect(() => ctx.on('agent/created', ({ agent }) => agentIndex.add(agent)))
+  ctx.effect(() => ctx.on('agent/disposed', ({ agent }) => agentIndex.delete(agent)))
+  for (const agent of ctx.agents.list()) agentIndex.add(agent)
+  registerTools({
+    ctx,
+    engine,
+    bindings,
+    bridge,
+    telemetry,
+    sideModel: config.sideModel,
+    docStates,
+    freshness,
+  })
 }
 
 export { BindingStore, BindingDomainSpec } from './bindings.js'
@@ -106,4 +169,13 @@ export {
 export { QINGJIAN_DOWNLOAD_URL, qingjianUnavailableMessage } from './onboarding.js'
 export { QINGML_SYSTEM, completeTopLevelBlocks, countWords, outlineOf } from './qingml.js'
 export { selectionSystemPrompt } from './selection.js'
+export {
+  AgentIndex,
+  DOC_STATE_STALE_LINE,
+  DocStateCache,
+  FRESH_DRAFT_REQUIRED_ERROR,
+  FreshnessTracker,
+  docStateLine,
+  formatDocState,
+} from './docState.js'
 export type * from './contracts.js'
