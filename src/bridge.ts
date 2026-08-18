@@ -29,6 +29,11 @@ import {
   DRAWIO_ROUTE_PATH,
   serveDrawioAsset,
 } from './drawioAssets.js'
+import {
+  CURRENT_PACKAGE_VERSION,
+  PluginUpdateChecker,
+  type UpdateCheckProvider,
+} from './updateCheck.js'
 
 const MAX_ASSET_BYTES = 50 * 1024 * 1024
 const MAX_ASSET_JSON_BYTES = 70 * 1024 * 1024
@@ -48,6 +53,7 @@ export class BridgeHub {
     private readonly engine: EngineService,
     private readonly bindings: BindingStore,
     private readonly drawioVendorRoot = DEFAULT_DRAWIO_VENDOR_ROOT,
+    private readonly updateChecker: UpdateCheckProvider = new PluginUpdateChecker(),
   ) {}
 
   mount(): void {
@@ -118,6 +124,20 @@ export class BridgeHub {
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1')
     try {
+      if (request.method === 'GET' && url.pathname === '/qingagent-bridge/update-check') {
+        let result
+        try {
+          result = await this.updateChecker.check()
+        } catch {
+          result = {
+            current: CURRENT_PACKAGE_VERSION,
+            latest: CURRENT_PACKAGE_VERSION,
+            hasUpdate: false,
+          }
+        }
+        writeJson(response, 200, result)
+        return
+      }
       if (request.method === 'POST' && url.pathname === '/qingagent-bridge/launch-client') {
         if (url.search) throw new HttpInputError('启动青简端点不接受路径或其他查询参数。')
         const launched = await this.engine.launchInstalledClient()
