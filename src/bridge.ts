@@ -48,6 +48,10 @@ interface Subscriber {
   heartbeat: ReturnType<typeof setInterval>
 }
 
+export interface BridgeDocStateObserver {
+  documentChanged(dshSessionId: string, engineSessionId: string): Promise<void> | void
+}
+
 export class BridgeHub {
   private readonly subscribers = new Set<Subscriber>()
   private readonly selections = new Map<string, QingSelection>()
@@ -59,6 +63,7 @@ export class BridgeHub {
     private readonly drawioVendorRoot = DEFAULT_DRAWIO_VENDOR_ROOT,
     private readonly updateChecker: UpdateCheckProvider = new PluginUpdateChecker(),
     private readonly telemetry?: TelemetryCapture,
+    private readonly docStateObserver?: BridgeDocStateObserver,
   ) {}
 
   mount(): void {
@@ -306,12 +311,15 @@ export class BridgeHub {
         return
       }
       if (request.method === 'PUT' && url.pathname === '/qingagent-bridge/doc-pm') {
+        const dshSessionId = requiredQuery(url, 'dshSessionId')
         const engineSessionId = this.authorizedEngineSessionId(url)
         const body = await readJsonBody(request, 8 * 1024 * 1024) as ExternalDocReplaceRequest
-        writeJson(response, 200, await this.engine.fetchJson<ExternalDocReplaceResponse>(
+        const replaced = await this.engine.fetchJson<ExternalDocReplaceResponse>(
           `/sessions/${encodeURIComponent(engineSessionId)}/doc`,
           { method: 'PUT', body: JSON.stringify(body) },
-        ))
+        )
+        if (replaced.ok) await this.documentChanged(dshSessionId, engineSessionId)
+        writeJson(response, 200, replaced)
         return
       }
       if (request.method === 'GET' && url.pathname === '/qingagent-bridge/review-render-model') {
@@ -322,12 +330,15 @@ export class BridgeHub {
         return
       }
       if (request.method === 'POST' && url.pathname === '/qingagent-bridge/review-verdicts') {
+        const dshSessionId = requiredQuery(url, 'dshSessionId')
         const engineSessionId = this.authorizedEngineSessionId(url)
         const body = await readJsonBody(request) as ExternalReviewVerdictRequest
-        writeJson(response, 200, await this.engine.fetchJson<ExternalReviewVerdictResponse>(
+        const verdict = await this.engine.fetchJson<ExternalReviewVerdictResponse>(
           `/sessions/${encodeURIComponent(engineSessionId)}/review/verdicts`,
           { method: 'POST', body: JSON.stringify(body) },
-        ))
+        )
+        await this.documentChanged(dshSessionId, engineSessionId)
+        writeJson(response, 200, verdict)
         return
       }
       if (request.method === 'POST' && url.pathname === '/qingagent-bridge/review-annotations-ignore') {
@@ -340,12 +351,15 @@ export class BridgeHub {
         return
       }
       if (request.method === 'POST' && url.pathname === '/qingagent-bridge/review-commit') {
+        const dshSessionId = requiredQuery(url, 'dshSessionId')
         const engineSessionId = this.authorizedEngineSessionId(url)
         const body = await readJsonBody(request) as ExternalReviewCommitPanelRequest
-        writeJson(response, 200, await this.engine.fetchJson<ExternalReviewCommitResponse>(
+        const reviewed = await this.engine.fetchJson<ExternalReviewCommitResponse>(
           `/sessions/${encodeURIComponent(engineSessionId)}/review/commit`,
           { method: 'POST', body: JSON.stringify(body) },
-        ))
+        )
+        await this.documentChanged(dshSessionId, engineSessionId)
+        writeJson(response, 200, reviewed)
         return
       }
       writeJson(response, 404, { error: 'bridge route not found' })
@@ -372,6 +386,14 @@ export class BridgeHub {
       throw new HttpNotFoundError('文稿不属于当前 DSH 会话。')
     }
     return engineSessionId
+  }
+
+  private async documentChanged(dshSessionId: string, engineSessionId: string): Promise<void> {
+    try {
+      await this.docStateObserver?.documentChanged(dshSessionId, engineSessionId)
+    } catch {
+      // 上游改动已经成功；摘要刷新失败不能把面板操作改写成失败。
+    }
   }
 
   private async state(dshSessionId: string): Promise<BridgeState> {

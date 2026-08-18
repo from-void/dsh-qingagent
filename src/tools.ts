@@ -44,6 +44,14 @@ import {
   wordsBucket,
   type TelemetryCapture,
 } from './telemetry.js'
+import {
+  DocStateCache,
+  FreshnessTracker,
+  docStateLine,
+  formatDocState,
+  injectDocState,
+  type DocStateSnapshot,
+} from './docState.js'
 
 interface ToolServices {
   ctx: Context
@@ -52,6 +60,13 @@ interface ToolServices {
   bridge: BridgeHub
   telemetry?: TelemetryCapture
   sideModel?: SideModelConfig
+  docStates?: DocStateCache
+  freshness?: FreshnessTracker
+}
+
+interface RuntimeToolServices extends ToolServices {
+  docStates: DocStateCache
+  freshness: FreshnessTracker
 }
 
 const textBlock = (text: string) => [{ type: 'text' as const, text }]
@@ -96,13 +111,6 @@ function describePmBlock(node: PmBlockNode, depth: number): string {
   const summary = pmNodeText(node).replace(/\s+/g, ' ').trim()
   const clipped = summary.length > 40 ? `${summary.slice(0, 40)}…` : summary || '(无文本)'
   return `${'  '.repeat(depth)}${node.attrs?.blockId ?? '(无块ID)'}｜${node.type ?? 'unknown'}｜${clipped}`
-}
-
-/** 【文稿状态】首行:所有 qing 工具返回共用,且只使用用户可理解的状态措辞。 */
-function docStateLine(state: string, patchCount?: number): string {
-  return state === 'pendingReview'
-    ? `【文稿状态】审阅中·${patchCount !== undefined ? `${patchCount} 处` : ''}待用户裁决。`
-    : '【文稿状态】已落库生效,无待审稿。'
 }
 
 const DOC_STATE_LABELS: Record<string, string> = {
@@ -167,18 +175,23 @@ const outlineSchema = {
 }
 
 export function registerTools(services: ToolServices): void {
-  const { ctx } = services
+  const runtime: RuntimeToolServices = {
+    ...services,
+    docStates: services.docStates ?? new DocStateCache(),
+    freshness: services.freshness ?? new FreshnessTracker(),
+  }
+  const { ctx } = runtime
   const reviewTurns = new ReviewTurnTracker()
-  installReviewTurnTracking(ctx, reviewTurns)
-  ctx.effect(() => ctx.tools.register(writeDraftTool(services)))
-  ctx.effect(() => ctx.tools.register(editDraftTool(services)))
-  ctx.effect(() => ctx.tools.register(reviewCommitTool(services, reviewTurns)))
-  ctx.effect(() => ctx.tools.register(readDraftTool(services)))
-  ctx.effect(() => ctx.tools.register(listDocsTool(services)))
-  ctx.effect(() => ctx.tools.register(focusDocTool(services)))
+  installTurnTracking(ctx, reviewTurns, runtime)
+  ctx.effect(() => ctx.tools.register(writeDraftTool(runtime)))
+  ctx.effect(() => ctx.tools.register(editDraftTool(runtime)))
+  ctx.effect(() => ctx.tools.register(reviewCommitTool(runtime, reviewTurns)))
+  ctx.effect(() => ctx.tools.register(readDraftTool(runtime)))
+  ctx.effect(() => ctx.tools.register(listDocsTool(runtime)))
+  ctx.effect(() => ctx.tools.register(focusDocTool(runtime)))
 }
 
-function writeDraftTool(services: ToolServices) {
+function writeDraftTool(services: RuntimeToolServices) {
   return defineTool({
     name: 'qing_write_draft',
     description: '根据写作简报生成完整 QingML 文稿并提交到青简。省略 docRef 会新建文稿；改写已有文稿必须传当前会话内的 docRef。',
@@ -257,6 +270,7 @@ function writeDraftTool(services: ToolServices) {
       let retried = false
       try {
         await assertEngineOnline(services.engine)
+        if (args.docRef) services.freshness.assertFresh(exec)
         let bound
         if (args.docRef) {
           if (!services.bindings.hasDoc(dshSessionId, args.docRef)) {
@@ -378,6 +392,15 @@ function writeDraftTool(services: ToolServices) {
             blocks_bucket: blocksBucket(outline.blocks),
             retried,
           })
+          rememberDocState(services, exec, {
+            state: proposal.status === 'review' ? 'pendingReview' : 'editing',
+            words,
+            blocks: outline.blocks,
+            structure: outline.structure,
+            title,
+            docVersion: official.docVersion,
+            ...(proposal.status === 'review' ? { patchCount: proposal.count } : {}),
+          }, true)
           return {
             title,
             blocks: outline.blocks,
@@ -417,7 +440,7 @@ function writeDraftTool(services: ToolServices) {
   })
 }
 
-function editDraftTool(services: ToolServices) {
+function editDraftTool(services: RuntimeToolServices) {
   return defineTool({
     name: 'qing_edit_draft',
     description: '对已有青简文稿做结构化局部修改。改标题时,若正文有与旧稿名相同的大标题块,要同时用 setTitle 改稿名(元数据)、用 strReplace 改纸面标题;两者必须在同一次 ops 里一起提交,文字保持一致。正文没有与旧稿名相同的大标题块时,允许只用 setTitle。删除整段/整节/清单项用 deleteBlock/deleteListItem(先 qing_read_draft mode:"blocks" 取块 ID,严禁用 strReplace 置空留残壳);改一句、插入一段或追加一节用相应操作;高亮、文字颜色、加粗一句话等行内标记用 markText,严禁为加标记用 qing_write_draft 整篇重写。markText add 会替换命中内容已有的同类型不同属性标记,同类型同属性则幂等提示;remove 仅移除属性全等的标记,调用前必须先用 qing_read_draft(mode:"blocks") 或读稿确认现有标记的确切 attrs;代码块内文本不支持行内标记;命中列表项时审阅卡会按顶层块呈现为整列表替换。strReplace 的 old/new 必须是纯文本内容，不含 ##、-、** 等 Markdown 语法标记。只有用户明确表达「所有/全部/凡是/都」等全局意图时,才用单个 strReplace + all:true 替换全部命中;all:true 不得与 nth 同时使用。all 缺省时,old 多处命中且未指定 nth 仍会拒绝并要求先向用户确认。多处修改必须放进同一次调用的 ops 数组一次提交；逐条调用会因首条进入审阅态而被 REVIEW_PENDING 拒绝。insertAfterLine 用的行号来自你读稿那一刻的稿子;同一批 ops 里一旦有插入或删除,其后所有行号都会整体偏移,不要再沿用读稿时的旧行号。需要在插入点之后继续改时,改用 insertAfterBlock 这类块级锚点(不受行号偏移影响),或留到下一回合重读后再改。命中待办清单、表格、嵌套列表这类多行块时,优先用 insertAfterBlock 等项级/块级 op;例外:指向多行块的最后一行是合法的,语义是插到整块之后(不是块内)——想在清单尾部追加子项时别用它,那会插到清单外面。拿不准结构时先 qing_read_draft(mode:"blocks") 看清再选。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
@@ -623,6 +646,7 @@ function editDraftTool(services: ToolServices) {
       const dshSessionId = sessionIdOf(exec)
       try {
         await assertEngineOnline(services.engine)
+        services.freshness.assertFresh(exec)
         const engineSessionId = resolveDocRef(services.bindings, dshSessionId, args.docRef)
         await services.bindings.setActive(dshSessionId, engineSessionId)
         const before = await readDocWithLines(services.engine, engineSessionId)
@@ -685,6 +709,15 @@ function editDraftTool(services: ToolServices) {
           op_kinds: [...new Set(ops.map((op) => op.kind))],
           outcome: proposal.status,
         })
+        rememberDocState(services, exec, {
+          state: proposal.status === 'review' ? 'pendingReview' : 'editing',
+          words,
+          blocks: outline.blocks,
+          structure: outline.structure,
+          title: outline.title,
+          docVersion: official.docVersion,
+          ...(proposal.status === 'review' ? { patchCount: proposal.count } : {}),
+        }, true)
         return {
           status: proposal.status,
           message: (proposal.status === 'review'
@@ -712,7 +745,7 @@ function editDraftTool(services: ToolServices) {
   })
 }
 
-function reviewCommitTool(services: ToolServices, reviewTurns: ReviewTurnTracker) {
+function reviewCommitTool(services: RuntimeToolServices, reviewTurns: ReviewTurnTracker) {
   return defineTool({
     name: 'qing_review_commit',
     description: '全量接受或拒绝青简文稿的待审变更。仅当用户在原话中明确授权（如“直接改不用问”“全部接受”“全部放弃”）才可调用；默认必须让用户逐处裁决。审阅中收到新的修改指令时，先调 qing_list_docs 确认文稿仍在审阅中，确认后用 ask_user 征询用户如何处理当前待审稿，禁止擅自 accept_all/reject_all。同一 DSH 会话回合最多调用一次。docRef 省略时使用活跃文稿。',
@@ -761,6 +794,7 @@ function reviewCommitTool(services: ToolServices, reviewTurns: ReviewTurnTracker
       const beforeTitle = before.title?.trim() || services.bindings.listDocs(dshSessionId)
         .find((doc) => doc.engineSessionId === engineSessionId)?.title || '未命名文稿'
       if (before.state !== 'pendingReview') {
+        await refreshAndPublishDocState(services, exec, true)
         return {
           status: 'no_pending_review' as const,
           message: `【文稿状态】已落库生效,当前无待审稿——此前的审阅已由用户在面板处理完毕。不要再次询问如何处置待审稿,直接按用户最新指令继续。${focusSuffix(services, dshSessionId)}`,
@@ -802,6 +836,14 @@ function reviewCommitTool(services: ToolServices, reviewTurns: ReviewTurnTracker
           retried: false,
         })
       }
+      rememberDocState(services, exec, {
+        state: 'editing',
+        words,
+        blocks: outline.blocks,
+        structure: outline.structure,
+        title: outline.title,
+        docVersion: official.docVersion,
+      }, true)
       return {
         status: 'reviewed' as const,
         message: `【文稿状态】已落库生效,无待审稿。\n${args.action === 'accept_all' ? '已接受' : '已拒绝'}全部待审变更（接受 ${reviewed.acceptedCount} 处，拒绝 ${reviewed.rejectedCount} 处）。请继续完成已排队编辑。${focusSuffix(services, dshSessionId)}`,
@@ -815,7 +857,7 @@ function reviewCommitTool(services: ToolServices, reviewTurns: ReviewTurnTracker
   })
 }
 
-function readDraftTool(services: ToolServices) {
+function readDraftTool(services: RuntimeToolServices) {
   return defineTool({
     name: 'qing_read_draft',
     description: '读取当前会话绑定的青简文稿。审阅态下 outline/full 默认读取尚未生效的待审候选；mode:"base" 才读取已提交基线。局部插入前用 mode:"lines" 取得已提交 Markdown 行号;删除块/清单项前用 mode:"blocks" 取得块 ID 清单。',
@@ -853,6 +895,14 @@ function readDraftTool(services: ToolServices) {
         readPmDoc(services.engine, engineSessionId),
       ])
       const mode = args.mode ?? 'outline'
+      const currentReviewCandidate = doc.state === 'pendingReview'
+        ? await readReviewCandidate(services.engine, engineSessionId)
+        : null
+      const currentQingml = currentReviewCandidate?.qingml ?? doc.qingml
+      const currentPmDoc = currentReviewCandidate?.pmDoc ?? basePmDoc
+      const currentOutline = outlineOf(currentQingml, doc.title)
+      const currentPatchCount = currentReviewCandidate?.renderModel.suggestions
+        .filter((suggestion) => suggestion.status === 'reviewing').length
       if (mode === 'blocks') {
         const outline = outlineOf(doc.qingml, doc.title)
         const lines = ['以下为已提交基线的块 ID 清单(供 deleteBlock/deleteListItem 使用;缩进项为清单项)。']
@@ -863,6 +913,15 @@ function readDraftTool(services: ToolServices) {
             for (const item of node.content ?? []) lines.push(describePmBlock(item, 1))
           }
         }
+        rememberDocState(services, exec, {
+          state: doc.state,
+          words: countDocVisibleChars(currentPmDoc),
+          blocks: currentOutline.blocks,
+          structure: currentOutline.structure,
+          title: currentOutline.title,
+          docVersion: doc.docVersion,
+          ...(currentPatchCount !== undefined ? { patchCount: currentPatchCount } : {}),
+        }, true)
         return {
           title: outline.title,
           words: countDocVisibleChars(basePmDoc),
@@ -881,6 +940,15 @@ function readDraftTool(services: ToolServices) {
         const notice = `${STR_REPLACE_LINES_NOTICE}\n${doc.state === 'pendingReview'
           ? '以下行号对应已提交基线（不含待审候选）。\n'
           : ''}`
+        rememberDocState(services, exec, {
+          state: doc.state,
+          words: countDocVisibleChars(currentPmDoc),
+          blocks: currentOutline.blocks,
+          structure: currentOutline.structure,
+          title: currentOutline.title,
+          docVersion: doc.docVersion,
+          ...(currentPatchCount !== undefined ? { patchCount: currentPatchCount } : {}),
+        }, true)
         return {
           title: outline.title,
           words: countDocVisibleChars(basePmDoc),
@@ -893,9 +961,7 @@ function readDraftTool(services: ToolServices) {
           docVersion: doc.docVersion,
         }
       }
-      const reviewCandidate = doc.state === 'pendingReview' && mode !== 'base'
-        ? await readReviewCandidate(services.engine, engineSessionId)
-        : null
+      const reviewCandidate = mode !== 'base' ? currentReviewCandidate : null
       const candidate = reviewCandidate?.qingml ?? doc.qingml
       const candidatePmDoc = reviewCandidate?.pmDoc ?? basePmDoc
       const outline = outlineOf(candidate, doc.title)
@@ -907,6 +973,15 @@ function readDraftTool(services: ToolServices) {
       const content = mode === 'full' || mode === 'base'
         ? `${notice}${candidate}`
         : `${notice}${outline.headings.map((heading) => `${'#'.repeat(heading.level)} ${heading.text}${heading.firstSentence ? `\n${heading.firstSentence}` : ''}`).join('\n') || '暂无标题层级。'}`
+      rememberDocState(services, exec, {
+        state: doc.state,
+        words: countDocVisibleChars(currentPmDoc),
+        blocks: currentOutline.blocks,
+        structure: currentOutline.structure,
+        title: currentOutline.title,
+        docVersion: doc.docVersion,
+        ...(currentPatchCount !== undefined ? { patchCount: currentPatchCount } : {}),
+      }, true)
       return {
         title: outline.title,
         words: countDocVisibleChars(candidatePmDoc),
@@ -922,7 +997,7 @@ function readDraftTool(services: ToolServices) {
   })
 }
 
-function listDocsTool(services: ToolServices) {
+function listDocsTool(services: RuntimeToolServices) {
   return defineTool({
     name: 'qing_list_docs',
     description: '列出青简文稿。默认列当前 DSH 会话绑定的文稿;scope:"library" 列整个青简文库最近更新的文稿(含其他会话的,最多 50 篇),配合 qing_focus_doc 可收养到本会话。',
@@ -979,6 +1054,7 @@ function listDocsTool(services: ToolServices) {
           sessions: Array<{ id: string; title: string | null; state: string; updatedAt: string }>
         }>('/sessions?limit=50')
         const boundIds = new Set(binding.docs.map((doc) => doc.engineSessionId))
+        await refreshAndPublishDocState(services, exec, false)
         return {
           engine: engine.state,
           docs: listing.sessions.map((session) => ({
@@ -1011,12 +1087,13 @@ function listDocsTool(services: ToolServices) {
           ...(docVersion !== undefined ? { docVersion } : {}),
         }
       }))
+      await refreshAndPublishDocState(services, exec, false)
       return { engine: engine.state, docs }
     },
   })
 }
 
-function focusDocTool(services: ToolServices) {
+function focusDocTool(services: RuntimeToolServices) {
   return defineTool({
     name: 'qing_focus_doc',
     description: '把右侧青简宣纸预览切换到指定文稿。docRef 未绑定到本会话时,会从青简文库收养该文稿(按 ID 或标题精确匹配且唯一;先用 qing_list_docs scope:"library" 查看文库)。',
@@ -1061,6 +1138,7 @@ function focusDocTool(services: ToolServices) {
         const doc = await services.bindings.setActive(dshSessionId, args.docRef)
         const current = await readDoc(services.engine, doc.engineSessionId)
         services.bridge.emit(dshSessionId, { type: 'focus-changed', engineSessionId: doc.engineSessionId })
+        await refreshAndPublishDocState(services, exec, false)
         return {
           engineSessionId: doc.engineSessionId,
           title: doc.title,
@@ -1093,6 +1171,7 @@ function focusDocTool(services: ToolServices) {
       const doc = await services.bindings.adoptDoc(dshSessionId, target.id, target.title)
       const current = await readDoc(services.engine, doc.engineSessionId)
       services.bridge.emit(dshSessionId, { type: 'focus-changed', engineSessionId: doc.engineSessionId })
+      await refreshAndPublishDocState(services, exec, false)
       return {
         engineSessionId: doc.engineSessionId,
         title: doc.title,
@@ -1106,6 +1185,73 @@ function focusDocTool(services: ToolServices) {
       }
     },
   })
+}
+
+interface DocStateReadServices {
+  engine: EngineService
+  bindings: BindingStore
+}
+
+/** 读取当前聚焦稿的权威摘要；正文只在进程内计算，缓存与注入均不保存正文。 */
+export async function refreshDocState(
+  services: DocStateReadServices,
+  cache: DocStateCache,
+  dshSessionId: string,
+): Promise<DocStateSnapshot | undefined> {
+  const active = services.bindings.getActive(dshSessionId)
+  if (!active) {
+    cache.dispose(dshSessionId)
+    return undefined
+  }
+  const [doc, basePmDoc] = await Promise.all([
+    readDoc(services.engine, active.engineSessionId),
+    readPmDoc(services.engine, active.engineSessionId),
+  ])
+  const reviewCandidate = doc.state === 'pendingReview'
+    ? await readReviewCandidate(services.engine, active.engineSessionId)
+    : null
+  const qingml = reviewCandidate?.qingml ?? doc.qingml
+  const pmDoc = reviewCandidate?.pmDoc ?? basePmDoc
+  const outline = outlineOf(qingml, doc.title ?? active.title)
+  const patchCount = reviewCandidate?.renderModel.suggestions
+    .filter((suggestion) => suggestion.status === 'reviewing').length
+  return cache.update(dshSessionId, {
+    state: doc.state,
+    words: countDocVisibleChars(pmDoc),
+    blocks: outline.blocks,
+    structure: outline.structure,
+    title: outline.title,
+    docVersion: doc.docVersion,
+    ...(patchCount !== undefined ? { patchCount } : {}),
+  })
+}
+
+function rememberDocState(
+  services: RuntimeToolServices,
+  exec: ToolRunContext,
+  snapshot: Omit<DocStateSnapshot, 'dirty'>,
+  establishesFreshness: boolean,
+): void {
+  const dshSessionId = sessionIdOf(exec)
+  const current = services.docStates.update(dshSessionId, snapshot)
+  if (establishesFreshness) services.freshness.markFresh(exec)
+  injectDocState(exec.agent, formatDocState(current))
+}
+
+async function refreshAndPublishDocState(
+  services: RuntimeToolServices,
+  exec: ToolRunContext,
+  establishesFreshness: boolean,
+): Promise<void> {
+  if (establishesFreshness) services.freshness.markFresh(exec)
+  const dshSessionId = sessionIdOf(exec)
+  try {
+    const current = await refreshDocState(services, services.docStates, dshSessionId)
+    if (current) injectDocState(exec.agent, formatDocState(current))
+  } catch {
+    services.docStates.markDirty(dshSessionId)
+    injectDocState(exec.agent, services.docStates.contextText(dshSessionId))
+  }
 }
 
 async function streamQingml(
@@ -1576,10 +1722,28 @@ class ReviewTurnTracker {
   }
 }
 
-function installReviewTurnTracking(ctx: Context, tracker: ReviewTurnTracker): void {
+function installTurnTracking(
+  ctx: Context,
+  reviewTurns: ReviewTurnTracker,
+  services: RuntimeToolServices,
+): void {
   ctx.effect(() => ctx.on('agent/pre-step', async (payload, next) => {
-    tracker.begin(String(payload.agent.id), payload.turn)
+    const dshSessionId = String(payload.agent.id)
+    reviewTurns.begin(dshSessionId, payload.turn)
+    services.freshness.begin(dshSessionId, payload.turn)
+    if (services.bindings.getActive(dshSessionId) && services.docStates.needsRefresh(dshSessionId)) {
+      try {
+        await refreshDocState(services, services.docStates, dshSessionId)
+      } catch {
+        services.docStates.markDirty(dshSessionId)
+      }
+    }
     return next()
   }))
-  ctx.effect(() => ctx.on('agent/disposed', ({ agent }) => tracker.dispose(String(agent.id))))
+  ctx.effect(() => ctx.on('agent/disposed', ({ agent }) => {
+    const dshSessionId = String(agent.id)
+    reviewTurns.dispose(dshSessionId)
+    services.freshness.dispose(dshSessionId)
+    services.docStates.dispose(dshSessionId)
+  }))
 }

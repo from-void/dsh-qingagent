@@ -3,7 +3,9 @@ import { QINGAGENT_SYSTEM_PROMPT } from '../src/system-prompt.js'
 
 describe('QINGAGENT_SYSTEM_PROMPT', () => {
   it('以最近工具状态为权威并要求新指令先刷新审阅态', () => {
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('文稿状态以最近一次 qing 工具返回的【文稿状态】行(或 qing_list_docs 的状态列)为准')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('当前注入的【文稿状态】行或最近一次 qing 工具返回的【文稿状态】行(含 qing_list_docs 的状态列)为同级权威,且都优先于聊天记忆')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('当前注入的【文稿状态】摘要或 qing_read_draft(mode:"outline" 或相应粒度)的返回为同级权威,二者都优先于聊天记忆')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('摘要明确未刷新时必须读稿')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('先调用一次 qing_list_docs 刷新文稿状态权威态')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('严禁不调工具就宣称文稿处于审阅态')
     expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('若结算后没有收到该消息,即为全部采纳')
