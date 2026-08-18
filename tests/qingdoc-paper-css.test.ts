@@ -157,3 +157,21 @@ describe('青简纸面移植契约', () => {
     expect(runtimeCss).toContain('@keyframes ws-folder-modal-panel-out')
   })
 })
+
+describe('状态限定选择器不得自套(P73 回归)', () => {
+  it('抽取产物里没有「面板套面板」的后代选择器,且 pendingReview 的删除块隐藏能命中', async () => {
+    const css = await readFile(resolve('src/qingdoc/qingdoc.css'), 'utf8')
+
+    // `body[data-content=…] #view-workspace …` 改写后带状态属性,曾因不等于 workspaceRoot 而被
+    // 再前缀一层 panelRoot,变成「面板根是另一个面板根的后代」——全页只有一个面板根,永不命中。
+    // 实测废掉 56 条状态规则(17 条 pendingReview,含被删块的 display:none)。
+    const selfNested = css.match(/\[data-qingagent-doc-panel\]\s+:is\(\[data-qingagent-doc-panel\]/g) ?? []
+    expect(selfNested).toEqual([])
+
+    // 正面锚:待审时被删的旧块必须能被隐藏(只留红删标记 widget + hover 看原文)。
+    // 选择器须直接以 :is([data-qingagent-doc-panel][data-content="pendingReview"] 开头。
+    expect(css).toMatch(
+      /:is\(\[data-qingagent-doc-panel\]\[data-content="pendingReview"\], #qingagent-doc-panel-specificity\) \.wf-doc \.wf-blockmark\.delete \{\s*display: ?none/,
+    )
+  })
+})

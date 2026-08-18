@@ -205,6 +205,10 @@ function scopeSelector(rawSelector) {
     '$1',
   )
   if (selector === '*') return `${panelRoot}, ${panelRoot} *`
+  // `body[data-content=…] #view-workspace` 会被上面改写成 `:is([data-qingagent-doc-panel][data-content=…], #…)`,
+  // 它带了状态属性,字面上不等于 workspaceRoot。若不在这里认作「已限定」,下面会再前缀一层 panelRoot,
+  // 变成「面板套面板」的后代选择器而永不命中(实测废掉 56 条状态规则,含 pendingReview 的删除块隐藏)。
+  if (selector.startsWith(`:is(${panelRoot}`)) return selector
   if (selector.startsWith(panelRoot) || selector.startsWith(workspaceRoot) || selector.startsWith('@')) return selector
   return `${panelRoot} ${selector}`
 }

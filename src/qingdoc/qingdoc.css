@@ -1924,26 +1924,26 @@
   :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .tbl-sel-toolbar.doc-toolbar::after {left:50%;transform:translateX(-50%)}
 
   /* editing idle · .wf-doc 可编辑 · 不加任何背景/focus 染色 */
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="editing"][data-tool="none"], #qingagent-doc-panel-specificity) .wf-doc {outline:none;background:transparent;cursor:text}
+  :is([data-qingagent-doc-panel][data-content="editing"][data-tool="none"], #qingagent-doc-panel-specificity) .wf-doc {outline:none;background:transparent;cursor:text}
 
   /* editing idle 下, 正文不显示 review 阶段的 patch 染色 · 表现为干净正文 */
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="editing"][data-tool="none"], #qingagent-doc-panel-specificity) .wf-doc .wf-patch-ins {
+  :is([data-qingagent-doc-panel][data-content="editing"][data-tool="none"], #qingagent-doc-panel-specificity) .wf-doc .wf-patch-ins {
     background:transparent;border:none;color:inherit;text-decoration:none;padding:0;
   }
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="editing"][data-tool="none"], #qingagent-doc-panel-specificity) .wf-doc .wf-sel {
+  :is([data-qingagent-doc-panel][data-content="editing"][data-tool="none"], #qingagent-doc-panel-specificity) .wf-doc .wf-sel {
     background:transparent;border-bottom:none;cursor:text;
   }
 
   /* 改动B:审批入口 patch 标记"逐处入场"——每个标记随 revealedPatchIds 递进而 mount，mount 即淡入。
      仅 pendingReview content 生效；若 data-content 未设亦安全降级（标记直接出现，功能不受影响）。 */
   @keyframes wf-patch-reveal {from{opacity:0;filter:blur(2px)}to{opacity:1;filter:blur(0)}}
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-patch-ins-wrap,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-patch-del-marker {
+  :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-patch-ins-wrap,
+:is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-patch-del-marker {
     animation:wf-patch-reveal .32s ease-out;
   }
   /* 发光特效:打字进行中(发光开关开启),新点亮的绿字随入场短暂泛光,与右栏环境辉光呼应。
      仅在 body[data-patch-revealing] 时生效——关闭发光开关即整体收敛为朴素淡入。 */
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .wf-doc .wf-patch-ins {
+  :is([data-qingagent-doc-panel][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .wf-doc .wf-patch-ins {
     animation:wf-patch-ins-glow .7s ease-out;
   }
   @keyframes wf-patch-ins-glow {
@@ -1952,7 +1952,7 @@
     100%{text-shadow:0 0 0 rgba(74,180,100,0)}
   }
   /* 发光特效:打字进行中给右栏挂 Apple-Intelligence 环境辉光(复用 locked/drafting 全文生成那套) */
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-right {
+  :is([data-qingagent-doc-panel][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-right {
     animation:ai-inner-glow 4s ease-in-out infinite;
   }
 
@@ -2121,7 +2121,7 @@
 
   /* locked · 文档区编辑锁的「正在编辑中」提示统一由 .ws-edit-lock(贴底,
      workspace-ink-skin.css)负责;旧的 .doc-lock-mask 居中提示已移除,避免重复。 */
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .wf-doc {
+  :is([data-qingagent-doc-panel][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .wf-doc {
     pointer-events:none;user-select:none;
   }
 
@@ -2945,7 +2945,7 @@
   :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .wf-blockmark {cursor:pointer}
   /* 块级删除/替换:被移除的旧块不留在正文(与行内删除同口径——折叠成红线 marker + hover 看原文),
      只保留独立的 wf-blockmark-del 折叠标记 widget。否则替换会把整张旧表格也画在正文里。 */
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-blockmark.delete {
+  :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-blockmark.delete {
     display:none;
   }
   /* 块级新增(整张表格/图表等):只保留左侧绿竖线,不叠 wf-patch-ins 的半截绿渐变——
@@ -2964,7 +2964,7 @@
   /* 审阅态图表允许交互(缩放按钮 / 平移看细节),不被 wf-doc 的 pointer-events:none 禁掉。
      只放开外层 .pm-diagram 即可突破;内部交由 React Flow 自管(勿用 * 覆盖,否则会破坏
      background/viewport/nodes/edge 各层各自的 pointer-events,导致平移与边命中失效)。 */
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .pm-diagram {
+  :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .pm-diagram {
     pointer-events:auto;
   }
   /* 结构块删除:折叠成一道红色细线标记(不显示被删内容),hover 看被删内容。
@@ -3033,28 +3033,28 @@
   }
 
   /* pendingReview · patch 单独操作 · 插在 .wf-patch-ins 之后 */
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc {
+  :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc {
     pointer-events:none;user-select:text;cursor:default;
   }
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-patch-ins-wrap,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-patch-replace-wrap {
+  :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-patch-ins-wrap,
+:is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-patch-replace-wrap {
     pointer-events:auto;
   }
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-blockmark,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-blockmark-del {
+  :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-blockmark,
+:is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-blockmark-del {
     pointer-events:auto;
   }
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .row-del,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-task-cb-change,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-table-row-add-hover {
+  :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .row-del,
+:is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-task-cb-change,
+:is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-table-row-add-hover {
     pointer-events:auto;
   }
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-patch-del-marker {
+  :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .wf-patch-del-marker {
     pointer-events:auto;
   }
   /* ============ Apple Intelligence inner glow · active tool ============ */
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-right,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-right {
+  :is([data-qingagent-doc-panel][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-right,
+:is([data-qingagent-doc-panel][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-right {
     animation: ai-inner-glow 4s ease-in-out infinite;
   }
 
@@ -3101,30 +3101,30 @@
   }
 
   /* Batch 5 · 低端 / 减少动态:仅关闭常驻 infinite 动画,high 默认规则不动。 */
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .au-dot,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .doc-empty.drafting::before,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .doc-drafting-page::after,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .doc-empty-loader,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .doc-empty-loader::after,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-right,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .ai-cursor::before,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .native-presentation-vignette,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .native-presentation-cursor::before,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-right,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-right,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .chat-loading-dots span {
+  :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .au-dot,
+:is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .doc-empty.drafting::before,
+:is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .doc-drafting-page::after,
+:is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .doc-empty-loader,
+:is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .doc-empty-loader::after,
+:is([data-qingagent-doc-panel][data-perf="low"][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-right,
+:is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .ai-cursor::before,
+:is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .native-presentation-vignette,
+:is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .native-presentation-cursor::before,
+:is([data-qingagent-doc-panel][data-perf="low"][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-right,
+:is([data-qingagent-doc-panel][data-perf="low"][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-right,
+:is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .chat-loading-dots span {
     animation:none;
   }
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .doc-empty-loader,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .chat-loading-dots span {
+  :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .doc-empty-loader,
+:is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .chat-loading-dots span {
     opacity:1;
     transform:none;
   }
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .doc-empty-loader::after {
+  :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .doc-empty-loader::after {
     opacity:.45;
     transform:translateX(0);
   }
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .presentation-tuning-panel {
+  :is([data-qingagent-doc-panel][data-perf="low"], #qingagent-doc-panel-specificity) .presentation-tuning-panel {
     backdrop-filter:none;
     -webkit-backdrop-filter:none;
   }
@@ -3135,12 +3135,12 @@
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .doc-drafting-page::after,
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .doc-empty-loader,
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .doc-empty-loader::after,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-right,
+:is([data-qingagent-doc-panel][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-right,
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ai-cursor::before,
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .native-presentation-vignette,
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .native-presentation-cursor::before,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-right,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-right,
+:is([data-qingagent-doc-panel][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-right,
+:is([data-qingagent-doc-panel][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-right,
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .chat-loading-dots span {
       animation:none;
     }
@@ -3252,8 +3252,8 @@
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .wf-doc .ws-find-hit {background:rgba(64,120,150,.22); color:inherit; border-radius:0}
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .wf-doc .ws-find-hit.is-current {background:rgba(196,150,58,.38); outline:2px solid rgba(176,128,32,.85); outline-offset:0}
 /* 审阅态双通道:命中切"只描边不填底",不与补丁底色打架(状态③) */
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .ws-find-hit {background:transparent; outline:1.5px solid rgba(64,120,150,.55); outline-offset:0}
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .ws-find-hit.is-current {background:rgba(196,150,58,.20); outline:2px solid rgba(176,128,32,.9)}
+:is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .ws-find-hit {background:transparent; outline:1.5px solid rgba(64,120,150,.55); outline-offset:0}
+:is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc .ws-find-hit.is-current {background:rgba(196,150,58,.20); outline:2px solid rgba(176,128,32,.9)}
 
 /* source: apps/web/src/pages/workspace/workspace-ink-skin.css:20-60 */
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) {
@@ -3444,11 +3444,11 @@
 }
 /* 审批态:审批条 fixed 脱流后给右栏留底部安全区,避免文档尾/改动/hover 弹层被浮条遮住,
    并让 scrollIntoView(block:center) 到末尾时有补偿空间 */
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .ws-right {
+:is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .ws-right {
   padding-bottom: 0 !important;
   scroll-padding-bottom: 104px;
 }
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc {
+:is([data-qingagent-doc-panel][data-content="pendingReview"], #qingagent-doc-panel-specificity) .wf-doc {
   padding-bottom: 156px !important;
 }
 
@@ -4447,9 +4447,9 @@
   opacity: 1;
 }
 /* 忙时屏蔽纸面所有点击/编辑(浮层、块手柄、调色钮),但 .ws-right 滚动不受影响 */
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-right .wf-doc,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-right .wf-doc,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-right .wf-doc {
+:is([data-qingagent-doc-panel][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-right .wf-doc,
+:is([data-qingagent-doc-panel][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-right .wf-doc,
+:is([data-qingagent-doc-panel][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-right .wf-doc {
   pointer-events: none;
 }
 
@@ -4519,9 +4519,9 @@
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-right .wf-doc {
   position: relative;
 }
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow {
+:is([data-qingagent-doc-panel][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
+:is([data-qingagent-doc-panel][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
+:is([data-qingagent-doc-panel][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow {
   opacity: 1;
   animation: ws-paper-breathe 3.6s ease-in-out infinite;
 }
@@ -4552,16 +4552,16 @@
 }
 
 /* 低端 / 减少动态:关掉呼吸与提示点动画,保留遮罩"能滚不能点"的纯功能态 */
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-perf="low"][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
+:is([data-qingagent-doc-panel][data-perf="low"][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
+:is([data-qingagent-doc-panel][data-perf="low"][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
+:is([data-qingagent-doc-panel][data-perf="low"][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
 [data-qingagent-doc-panel][data-perf="low"] > .ws-edit-lock .ws-edit-lock-hint-dot {
   animation: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  [data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
-[data-qingagent-doc-panel] :is([data-qingagent-doc-panel][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
+  :is([data-qingagent-doc-panel][data-tool="agentBusy"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
+:is([data-qingagent-doc-panel][data-tool="imageProgress"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
+:is([data-qingagent-doc-panel][data-patch-revealing="1"], #qingagent-doc-panel-specificity) .ws-paper-surface > .ws-editor-glow,
 [data-qingagent-doc-panel] > .ws-edit-lock .ws-edit-lock-hint-dot {
     animation: none;
   }
