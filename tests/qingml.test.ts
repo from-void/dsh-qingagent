@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest'
+import { aiDocumentSchema, aiIrToPm, qingmlParse } from '@qingagent/pm-schema'
 import {
+  QINGML_BLOCK_MATH_EXAMPLE,
+  QINGML_FOOTNOTE_EXAMPLE,
+  QINGML_INLINE_MATH_EXAMPLE,
   QINGML_NESTED_BULLET_LIST_EXAMPLE,
   QINGML_NESTED_TASK_LIST_EXAMPLE,
   QINGML_SYSTEM,
   completeTopLevelBlocks,
   countWords,
+  findQingmlSourceSyntaxLeaks,
   outlineOf,
 } from '../src/qingml.js'
 
@@ -29,6 +34,58 @@ describe('QingML 流边界与摘要', () => {
     }
     expect(QINGML_SYSTEM).toContain('列表的层级靠嵌套表达,不靠标题')
     expect(QINGML_SYSTEM).toContain('用户要「大类下面再列具体的」「分几类、每类带几项」时,必须用这种嵌套列表,不要用「小标题+平级列表」')
+  })
+
+  it('脚注与行内/块级公式正面样例均通过权威解析器和 AI-IR 校验器', () => {
+    const examples = [QINGML_FOOTNOTE_EXAMPLE, QINGML_INLINE_MATH_EXAMPLE, QINGML_BLOCK_MATH_EXAMPLE]
+    for (const example of examples) {
+      const parsed = qingmlParse(example)
+      expect(parsed.warnings.filter((warning) => warning.severity === 'bad-block')).toEqual([])
+      expect(aiDocumentSchema.safeParse({ blocks: parsed.blocks }).success).toBe(true)
+      expect(completeTopLevelBlocks(example)).toEqual({ blocks: [example], completeLength: example.length })
+      expect(QINGML_SYSTEM).toContain(example)
+    }
+
+    const footnotePm = aiIrToPm({ blocks: qingmlParse(QINGML_FOOTNOTE_EXAMPLE).blocks })
+    expect(footnotePm.content[0]).toMatchObject({
+      type: 'paragraph',
+      content: expect.arrayContaining([
+        { type: 'footnoteReference', attrs: { id: 'source_1', note: '《资料甲》，第 12 页。' } },
+      ]),
+    })
+    const inlineMathPm = aiIrToPm({ blocks: qingmlParse(QINGML_INLINE_MATH_EXAMPLE).blocks })
+    expect(inlineMathPm.content[0]).toMatchObject({
+      type: 'paragraph',
+      content: expect.arrayContaining([{ type: 'inlineMath', attrs: { latex: 'E=mc^2' } }]),
+    })
+    expect(qingmlParse(QINGML_BLOCK_MATH_EXAMPLE).blocks).toEqual([
+      { type: 'blockMath', latex: String.raw`\int_0^1 x^2\,dx=\frac{1}{3}` },
+    ])
+  })
+
+  it('系统提示硬性禁止 Markdown/GFM 脚注和公式源语法', () => {
+    expect(QINGML_SYSTEM).toContain('【源语法纪律】')
+    expect(QINGML_SYSTEM).toContain('严禁写 [^x]、[^x]: …')
+    expect(QINGML_SYSTEM).toContain('严禁写 $…$、$$…$$')
+    expect(QINGML_SYSTEM).toContain('要脚注就用 <footnote id="x">注文</footnote>')
+    expect(QINGML_SYSTEM).toContain('要行内公式就用 <math>…</math>')
+    expect(QINGML_SYSTEM).toContain('要块级公式就用 <math-block>…</math-block>')
+  })
+
+  it('识别正文文本节点中的 GFM 脚注引用与定义', () => {
+    expect(findQingmlSourceSyntaxLeaks('<p>结论见来源[^1]。</p>')).toContain('footnote-reference')
+    expect(findQingmlSourceSyntaxLeaks('<p>[^source1]: 《资料甲》</p>')).toContain('footnote-definition')
+  })
+
+  it('不误伤代码块、原生脚注/公式或普通方括号引用', () => {
+    const valid = [
+      '<pre lang="md">正文[^1]\n[^source1]: 来源</pre>',
+      QINGML_FOOTNOTE_EXAMPLE,
+      QINGML_INLINE_MATH_EXAMPLE,
+      QINGML_BLOCK_MATH_EXAMPLE,
+      '<p>详见附录[1]，以及变量 x。</p>',
+    ]
+    for (const qingml of valid) expect(findQingmlSourceSyntaxLeaks(qingml)).toEqual([])
   })
 
   it('生成标题层级、节首句和中英文字数', () => {

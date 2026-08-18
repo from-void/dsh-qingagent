@@ -30,6 +30,7 @@ import {
   correctionPrompt,
   countWords,
   extractTitle,
+  findQingmlSourceSyntaxLeaks,
   makeDraftPrompt,
   outlineOf,
 } from './qingml.js'
@@ -52,6 +53,7 @@ const STR_REPLACE_PLAIN_TEXT_ERROR = 'old 必须是纯文本内容,不要带 ## 
 const STR_REPLACE_LINES_NOTICE = '注意:strReplace 的 old 用纯文本,不要带行首 ## - 等标记。'
 const EMPTY_DRAFT_CORRECTION = '上一次只产出了标题、缺少正文。请重写整份文档,只输出包含完整正文块的 QingML;除 <title> 和 h1-h6 标题外,至少包含一个承载正文内容的顶层块。'
 const EMPTY_DRAFT_ERROR = '侧模型修正后仍只返回标题,缺少正文块,未提交文稿。'
+const SOURCE_SYNTAX_LEAK_ERROR = '侧模型修正后仍在正文中使用 Markdown/GFM 脚注源语法,未提交文稿。'
 // 局部 op 只接受纯文本/Markdown;QingML/HTML 原始标签会被当普通文字刻进正文(用户实测颜色事故)。
 const RAW_TAG_PATTERN = /<\/?\s*(article|title|h[1-6]|p|ul|ol|li|tasks?|blockquote|hr|pre|table|tr|td|th|callout|columns?|mermaid|drawio|math(?:-block)?|img|file|pennote|b|strong|i|em|u|s|del|code|a|mark|color|footnote|br|span|div)\b[^>]*>/i
 const RAW_TAG_ERROR = '检测到 QingML/HTML 标签:局部操作(strReplace/insertAfterLine/appendSection)只接受纯文本或 Markdown；直接写入 <mark>/<color> 等标签会把它们当普通文字刻进正文。样式类修改请改用 qing_edit_draft 的 markText 操作。'
@@ -236,6 +238,23 @@ function writeDraftTool(services: ToolServices) {
             qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, retryPrompt)
             if (isBodylessDraft(qingml)) throw new Error(EMPTY_DRAFT_ERROR)
           }
+          const sourceSyntaxLeaks = findQingmlSourceSyntaxLeaks(qingml)
+          if (sourceSyntaxLeaks.length > 0) {
+            const retryPrompt = makeDraftPrompt({
+              brief: args.brief,
+              title: args.title,
+              style: args.style,
+              correction: correctionPrompt(qingml, {
+                failureKind: 'markdown_footnote_source_syntax_leak',
+                kinds: sourceSyntaxLeaks,
+                required: '把脚注引用和注文合并写成引用位置上的 <footnote id="...">注文</footnote>，不要保留 [^x] 或 [^x]: 定义。',
+              }),
+            })
+            generation = randomUUID()
+            qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, retryPrompt)
+            if (isBodylessDraft(qingml)) throw new Error(EMPTY_DRAFT_ERROR)
+            if (findQingmlSourceSyntaxLeaks(qingml).length > 0) throw new Error(SOURCE_SYNTAX_LEAK_ERROR)
+          }
           try {
             proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
           } catch (error) {
@@ -249,6 +268,7 @@ function writeDraftTool(services: ToolServices) {
             generation = randomUUID()
             qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, retryPrompt)
             if (isBodylessDraft(qingml)) throw new Error(EMPTY_DRAFT_ERROR)
+            if (findQingmlSourceSyntaxLeaks(qingml).length > 0) throw new Error(SOURCE_SYNTAX_LEAK_ERROR)
             proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
           }
         } catch (error) {
