@@ -10,6 +10,7 @@ import { BindingDomainSpec, BindingStore } from './bindings.js'
 import { BridgeHub } from './bridge.js'
 import { EngineService } from './engine.js'
 import { QINGAGENT_SYSTEM_PROMPT } from './system-prompt.js'
+import { createTelemetry } from './telemetry.js'
 import { registerTools } from './tools.js'
 import type { SideModelConfig } from './contracts.js'
 
@@ -50,25 +51,48 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     autoLaunch: config.autoLaunch ?? false,
   }
   let bridge: BridgeHub | undefined
-  const engine = new EngineService(ctx, resolved, (status) => bridge?.engineStatus(status))
+  const telemetry = createTelemetry(ctx)
+  const engine = new EngineService(ctx, resolved, (status) => {
+    bridge?.engineStatus(status)
+    telemetry.trackEngineStatus(status)
+  })
   const domain = await ctx.storageDomain.open(BindingDomainSpec)
   ctx.effect(() => () => domain.close())
   const bindings = new BindingStore(domain, engine, (sessionId, binding) => bridge?.bindingChanged(sessionId, binding))
-  bridge = new BridgeHub(ctx, engine, bindings)
+  bridge = new BridgeHub(ctx, engine, bindings, undefined, undefined, telemetry)
   bridge.mount()
   engine.startMonitoring()
+  void (async () => {
+    await telemetry.init()
+    await telemetry.capturePluginActivated(await engine.status())
+  })().catch(() => undefined)
 
   ctx.effect(() => ctx.systemPrompt.section({
     name: 'plugin:qingagent-writing-discipline',
     order: 160,
     text: QINGAGENT_SYSTEM_PROMPT,
   }))
-  registerTools({ ctx, engine, bindings, bridge, sideModel: config.sideModel })
+  registerTools({ ctx, engine, bindings, bridge, telemetry, sideModel: config.sideModel })
 }
 
 export { BindingStore, BindingDomainSpec } from './bindings.js'
 export { BridgeHub, isLoopback } from './bridge.js'
 export { EngineConnection, EngineHttpError, EngineService } from './engine.js'
+export {
+  Telemetry,
+  TelemetryDomainSpec,
+  ageDaysBucket,
+  blocksBucket,
+  browserStyleUserAgent,
+  countBucket,
+  createTelemetry,
+  editRejectedReason,
+  engineStateBucket,
+  patchesBucket,
+  safeTelemetryErrorMessage,
+  validateBridgeTelemetryEvent,
+  wordsBucket,
+} from './telemetry.js'
 export {
   detectQingjianClientInstallation,
   launchDetectedQingjianClient,

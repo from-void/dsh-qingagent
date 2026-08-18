@@ -34,6 +34,10 @@ import {
   PluginUpdateChecker,
   type UpdateCheckProvider,
 } from './updateCheck.js'
+import {
+  validateBridgeTelemetryEvent,
+  type TelemetryCapture,
+} from './telemetry.js'
 
 const MAX_ASSET_BYTES = 50 * 1024 * 1024
 const MAX_ASSET_JSON_BYTES = 70 * 1024 * 1024
@@ -54,6 +58,7 @@ export class BridgeHub {
     private readonly bindings: BindingStore,
     private readonly drawioVendorRoot = DEFAULT_DRAWIO_VENDOR_ROOT,
     private readonly updateChecker: UpdateCheckProvider = new PluginUpdateChecker(),
+    private readonly telemetry?: TelemetryCapture,
   ) {}
 
   mount(): void {
@@ -136,6 +141,18 @@ export class BridgeHub {
           }
         }
         writeJson(response, 200, result)
+        return
+      }
+      if (request.method === 'POST' && url.pathname === '/qingagent-bridge/telemetry') {
+        if (url.search) throw new HttpInputError('遥测端点不接受查询参数。')
+        let event
+        try {
+          event = validateBridgeTelemetryEvent(await readJsonBody(request))
+        } catch (error) {
+          throw new HttpInputError(error instanceof Error ? error.message : '遥测请求无效。')
+        }
+        if (this.telemetry) void this.telemetry.capture(event.event, event.properties as never)
+        writeJson(response, 202, { accepted: true })
         return
       }
       if (request.method === 'POST' && url.pathname === '/qingagent-bridge/launch-client') {

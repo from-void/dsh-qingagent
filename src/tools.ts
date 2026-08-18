@@ -36,12 +36,21 @@ import {
   structureFactsOf,
 } from './qingml.js'
 import { isWholeDocReview } from './reviewMode.js'
+import {
+  blocksBucket,
+  countBucket,
+  editRejectedReason,
+  patchesBucket,
+  wordsBucket,
+  type TelemetryCapture,
+} from './telemetry.js'
 
 interface ToolServices {
   ctx: Context
   engine: EngineService
   bindings: BindingStore
   bridge: BridgeHub
+  telemetry?: TelemetryCapture
   sideModel?: SideModelConfig
 }
 
@@ -211,6 +220,7 @@ function writeDraftTool(services: ToolServices) {
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
       let generation = randomUUID()
+      let retried = false
       try {
         await assertEngineOnline(services.engine)
         let bound
@@ -235,6 +245,7 @@ function writeDraftTool(services: ToolServices) {
         try {
           qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, initialPrompt)
           if (isBodylessDraft(qingml)) {
+            retried = true
             const retryPrompt = makeDraftPrompt({
               brief: args.brief,
               title: args.title,
@@ -326,6 +337,11 @@ function writeDraftTool(services: ToolServices) {
             })
           }
           if (proposal.status === 'review') exec.concludeTurn()
+          void services.telemetry?.capture('draft_created', {
+            words_bucket: wordsBucket(words),
+            blocks_bucket: blocksBucket(outline.blocks),
+            retried,
+          })
           return {
             title,
             blocks: outline.blocks,
@@ -618,6 +634,11 @@ function editDraftTool(services: ToolServices) {
           exec.concludeTurn()
         }
         const countLine = editCountLine(prepared.opResults, prepared.affectedCount)
+        void services.telemetry?.capture('draft_edited', {
+          ops_bucket: countBucket(ops.length),
+          op_kinds: [...new Set(ops.map((op) => op.kind))],
+          outcome: proposal.status,
+        })
         return {
           status: proposal.status,
           message: (proposal.status === 'review'
@@ -635,6 +656,7 @@ function editDraftTool(services: ToolServices) {
           wholeDocReview,
         }
       } catch (error) {
+        void services.telemetry?.capture('edit_rejected', { reason: editRejectedReason(error) })
         throw sanitizeToolBoundaryError(error)
       } finally {
         services.bridge.clearSelection(dshSessionId)
@@ -725,6 +747,14 @@ function reviewCommitTool(services: ToolServices, reviewTurns: ReviewTurnTracker
         blocks: outline.blocks,
         words,
       })
+      const settledPatches = reviewed.acceptedCount + reviewed.rejectedCount
+      if (settledPatches > 0) {
+        void services.telemetry?.capture('review_settled', {
+          action: args.action === 'reject_all' ? 'discard' : 'commit',
+          patches_bucket: patchesBucket(settledPatches),
+          retried: false,
+        })
+      }
       return {
         status: 'reviewed' as const,
         message: `【文稿状态】已落库生效,无待审稿。\n${args.action === 'accept_all' ? '已接受' : '已拒绝'}全部待审变更（接受 ${reviewed.acceptedCount} 处，拒绝 ${reviewed.rejectedCount} 处）。请继续完成已排队编辑。${focusSuffix(services, dshSessionId)}`,

@@ -52,6 +52,12 @@ import { BridgeHttpError, currentPanelReviewStateFor, qingClientStore } from './
 import type { QingLibraryDoc } from './store.js'
 import { WholeDocReviewNav } from './WholeDocReviewNav.js'
 import { isWholeDocReview } from '../reviewMode.js'
+import {
+  capturePanelTelemetry,
+  beginPanelMount,
+  endPanelMount,
+  panelPatchesBucket,
+} from './telemetry.js'
 export { computeExternalReviewChangeRatio } from '../reviewMode.js'
 export { QingBrandBadge } from './QingBrandBadge.js'
 import {
@@ -107,6 +113,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const autoCommitKeyRef = useRef<string | null>(null)
   const reviewSubmittingRef = useRef(false)
   const reviewSettlementRetryPendingRef = useRef(false)
+  const reportedMissingDocsRef = useRef(new Set<string>())
   const wholeDocScrollMemRef = useRef<Record<'new' | 'old', number>>({ new: 0, old: 0 })
   const snapshotRef = useRef(snapshot)
   snapshotRef.current = snapshot
@@ -115,6 +122,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
     () => qingClientStore.retain(sessionId, () => props.qingLayout.openDetails()),
     [sessionId, props.qingLayout],
   )
+
+  useEffect(() => {
+    capturePanelTelemetry('panel_opened', { source: beginPanelMount(sessionId) })
+    return () => endPanelMount(sessionId)
+  }, [sessionId])
 
   useLayoutEffect(() => {
     const root = rootRef.current
@@ -128,6 +140,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const docMissing = Boolean(
     activeEngineSessionId && missingEngineSessionIdSet.has(activeEngineSessionId),
   )
+  useEffect(() => {
+    if (!docMissing || !activeEngineSessionId || reportedMissingDocsRef.current.has(activeEngineSessionId)) return
+    reportedMissingDocsRef.current.add(activeEngineSessionId)
+    capturePanelTelemetry('doc_missing_shown', {})
+  }, [activeEngineSessionId, docMissing])
   const docs = (snapshot.state?.docs ?? [])
     .filter((doc) => !missingEngineSessionIdSet.has(doc.engineSessionId))
   const activeBound = docs.find((doc) => doc.engineSessionId === activeEngineSessionId)
@@ -725,6 +742,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
     const settledSuggestions = (commitSnapshot.reviewModel?.suggestions ?? [])
       .filter((suggestion) => suggestion.status === 'reviewing' || suggestion.status === 'accepted' || suggestion.status === 'rejected')
     const settledSuggestionIds = new Set(settledSuggestions.map((suggestion) => suggestion.id))
+    let retried = false
     const pushOutcomeToConversation = () => {
       if (!props.qingSendMessage || settledSuggestions.length === 0) return
       const hunks = settledSuggestions.map((suggestion) => ({
@@ -763,6 +781,13 @@ export function QingDocPanel(props: QingDocPanelProps) {
       reviewSettlementRetryPendingRef.current = false
       setReviewSettlementRetryPending(false)
       setToast(action === 'reject_all' ? '已放弃本轮修改' : '修改已提交')
+      if (settledSuggestionIds.size > 0) {
+        capturePanelTelemetry('review_settled', {
+          action: action === 'reject_all' ? 'discard' : 'commit',
+          patches_bucket: panelPatchesBucket(settledSuggestionIds.size),
+          retried,
+        })
+      }
       pushOutcomeToConversation()
       const refreshPanel = async () => {
         await qingClientStore.refreshPanel(sessionId, activeEngineSessionId)
@@ -818,6 +843,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
               docVersion: authoritative.panelDoc.docVersion,
             })
             try {
+              retried = true
               const response = await qingClientStore.reviewCommit(sessionId, activeEngineSessionId, {
                 expectedDocVersion: authoritative.panelDoc.docVersion,
                 action,

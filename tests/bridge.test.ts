@@ -8,6 +8,7 @@ import { BridgeHub } from '../src/bridge.js'
 import type { ExternalDoc, SessionBinding } from '../src/contracts.js'
 import type { EngineService } from '../src/engine.js'
 import { EngineHttpError } from '../src/engine.js'
+import type { TelemetryCapture } from '../src/telemetry.js'
 
 interface CapturedResponse {
   status?: number
@@ -79,18 +80,47 @@ function fixture(bindingsBySession: Record<string, SessionBinding>) {
     setActive: vi.fn(),
     adoptDoc: vi.fn(),
   } as unknown as BindingStore
-  const hub = new BridgeHub(ctx, engine, bindings)
+  const telemetry = { capture: vi.fn(async () => undefined) } as unknown as TelemetryCapture
+  const hub = new BridgeHub(ctx, engine, bindings, undefined, undefined, telemetry)
   hub.mount()
   return {
     hub,
     engine,
     bindings,
+    telemetry,
     handler: handler!,
     dispose: () => { for (const cleanup of lifecycle.reverse()) cleanup() },
   }
 }
 
 describe('BridgeHub', () => {
+  it('telemetry route 只接受严格白名单，非法事件与任意字符串均拒绝且不外发', async () => {
+    const { handler, telemetry, dispose } = fixture({})
+    const accepted = response()
+    await handler(request('POST', '/qingagent-bridge/telemetry', '127.0.0.1', {
+      event: 'panel_opened', properties: { source: 'tool_card' },
+    }), accepted as unknown as ServerResponse)
+    expect(accepted.status).toBe(202)
+    expect(telemetry.capture).toHaveBeenCalledWith('panel_opened', { source: 'tool_card' })
+
+    vi.mocked(telemetry.capture).mockClear()
+    for (const body of [
+      { event: 'draft_created', properties: { words_bucket: 'secret' } },
+      { event: 'feedback_clicked', properties: { target: 'bug', message: 'private text' } },
+      { event: 'update_clicked', properties: { from_version: '/home/alice/token', to_version: '0.2.0' } },
+      { event: 'doc_missing_shown', properties: { title: '不应外发' } },
+    ]) {
+      const rejected = response()
+      await handler(
+        request('POST', '/qingagent-bridge/telemetry', '127.0.0.1', body),
+        rejected as unknown as ServerResponse,
+      )
+      expect(rejected.status).toBe(400)
+    }
+    expect(telemetry.capture).not.toHaveBeenCalled()
+    dispose()
+  })
+
   it('拒绝非回环地址', async () => {
     const { handler, dispose } = fixture({})
     const res = response()

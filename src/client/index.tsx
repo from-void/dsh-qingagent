@@ -20,6 +20,7 @@ import {
   qingSelectionReferenceSource,
 } from './selectionReference.js'
 import { installSelectionBubbleDecor } from './selectionBubbleDecor.js'
+import { markPanelOpenSource } from './telemetry.js'
 
 export const name = 'dsh-qingagent-client'
 export const inject = ['slots', 'layout', 'sessions', 'conversation', 'inputTriggers']
@@ -105,6 +106,9 @@ export function apply(ctx: ClientContext): void {
     const syncPanelRegistration = () => {
       const shouldRegister = currentSessionId !== undefined && qingClientStore.hasPanelContent(currentSessionId)
       if (shouldRegister && !disposePanel) {
+        const shouldAutoOpen = currentSessionId !== undefined
+          && qingClientStore.getSnapshot(currentSessionId).state?.engine.state !== 'online'
+        if (shouldAutoOpen && currentSessionId) markPanelOpenSource(currentSessionId, 'auto')
         disposePanel = slots.register({
           name: 'details',
           priority: -10,
@@ -128,9 +132,7 @@ export function apply(ctx: ClientContext): void {
             },
           }),
         }, QingDocPanel)
-        if (currentSessionId && qingClientStore.getSnapshot(currentSessionId).state?.engine.state !== 'online') {
-          layout.openDetails()
-        }
+        if (shouldAutoOpen) layout.openDetails()
       } else if (!shouldRegister && disposePanel) {
         disposePanel()
         disposePanel = undefined

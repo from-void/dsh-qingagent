@@ -173,6 +173,34 @@ npx @deepseek-ai/dsh plugin --profile web add dsh-qingagent@latest
 
 绑定数据存于 `@deepseek-ai/dsh-storage-domain` 的 `dsh_qingagent` v1 domain。
 
+### 匿名使用统计
+
+插件默认开启匿名使用统计，事件由 DSH 的 Node 进程发送到自托管 Umami：`https://t.qingagent.com/api/send`。服务端会像普通网站服务一样看到请求 IP；插件不发送正文、标题、字数原值、写作简报、用户消息、会话 ID、文稿引用、文件路径、工作区 / profile 名或错误堆栈。
+
+每条事件的公共属性仅有：随机生成并存于独立 `dsh_qingagent_telemetry` 存储域的匿名 `device_id`、`pluginVersion`、可取得时的 `dshVersion`、`platform`、`arch`、`nodeVersion`、`locale`。事件属性如下，所有计数只发分桶、不发原值：
+
+| 事件 | 属性 |
+|---|---|
+| `plugin_activated` | 首次运行、装机龄分桶、引擎状态、是否写过 / 编辑过 / 审阅过 |
+| `panel_opened` | 打开来源（工具卡 / 手动 / 自动） |
+| `draft_created` | 字数分桶、块数分桶、是否触发空壳重试 |
+| `draft_edited` | 操作数分桶、去重后的操作类型、结果（已提交 / 待审） |
+| `edit_rejected` | 拒绝原因枚举 |
+| `review_settled` | 提交 / 放弃、补丁数分桶、是否发生 409 重试 |
+| `engine_unreachable` | 连接状态原因枚举；仅状态翻转时发送 |
+| `update_clicked` / `feedback_clicked` | 前后版本号 / 反馈目标枚举 |
+| `doc_missing_shown` | 无额外属性 |
+
+当前采集项以本节为准，变更时会同步更新。
+
+设置以下任一环境变量即可完全关闭，不会创建匿名 ID，也不会发送事件：
+
+```bash
+DSH_QINGAGENT_TELEMETRY_DISABLED=1
+# 或尊重青简全局开关
+QINGAGENT_TELEMETRY_DISABLED=1
+```
+
 ---
 
 ## 从源码开发
