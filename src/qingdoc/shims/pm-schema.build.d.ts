@@ -14,14 +14,49 @@ export interface StyleTemplateItem {
   builtin: boolean
 }
 
+export type AiRunMark =
+  | { type: 'bold' | 'italic' | 'underline' | 'strike' | 'strikeThrough' | 'code' | 'math' }
+  | { type: 'link'; href: string; title?: string | null }
+  | { type: 'textColor' | 'highlight'; color: string }
+
+export type AiRun =
+  | { text: string; marks?: AiRunMark[] }
+  | { type: 'footnote'; id?: string; note: string }
+
+export interface AiListItem {
+  runs: AiRun[]
+  children?: AiBlock[]
+}
+
+export interface AiTaskListItem extends AiListItem {
+  checked?: boolean
+}
+
+export interface AiTableCell {
+  blocks: AiBlock[]
+  header?: boolean
+  backgroundColor?: string
+  colspan?: number
+  rowspan?: number
+}
+
+export type AiBlock =
+  | { type: 'paragraph' | 'heading' | 'penNote'; runs: AiRun[] }
+  | { type: 'blockquote' | 'callout'; runs?: AiRun[]; blocks?: AiBlock[] }
+  | { type: 'bulletList' | 'orderedList'; items: AiListItem[] }
+  | { type: 'taskList'; items: AiTaskListItem[] }
+  | { type: 'table'; rows: Array<{ cells: AiTableCell[] }> }
+  | { type: 'columnList'; columns: Array<{ blocks: AiBlock[] }> }
+  | { type: 'codeBlock' | 'horizontalRule' | 'image' | 'fileAttachment' | 'blockMath' | 'diagram' }
+
 export function qingmlParse(text: string): {
   title: string | null
-  blocks: Array<Record<string, unknown>>
+  blocks: AiBlock[]
   warnings: Array<Record<string, unknown>>
 }
-export function aiIrToPm(input: { blocks: Array<Record<string, unknown>> }): PmDoc
-export function pmToAiIr(doc: PmDoc): { blocks: Array<Record<string, unknown>> }
-export function aiBlocksToQingml(blocks: ReadonlyArray<Record<string, unknown>>): string
+export function aiIrToPm(input: { blocks: AiBlock[] }): PmDoc
+export function pmToAiIr(doc: PmDoc): { blocks: AiBlock[] }
+export function aiBlocksToQingml(blocks: ReadonlyArray<AiBlock>): string
 export function countVisibleChars(text: string): number
 export function countDocVisibleChars(doc: PmDoc): number
 export interface PmMarkdownBlockLineSpan {

@@ -1,3 +1,5 @@
+import { qingmlParse, type AiBlock, type AiRun } from '@qingagent/pm-schema'
+
 /**
  * 给侧模型的契约必须与 feat/external-qingml 的解析器保持同一白名单。
  * 这里故意写成静态系统提示，避免把青简 token、旧正文或宿主提示泄露给浏览器。
@@ -5,6 +7,12 @@
 export const QINGML_NESTED_BULLET_LIST_EXAMPLE = '<ul><li>大类甲<ul><li>具体项一</li><li>具体项二</li></ul></li><li>大类乙</li></ul>'
 
 export const QINGML_NESTED_TASK_LIST_EXAMPLE = '<tasks><task>父任务<tasks><task>子任务</task></tasks></task></tasks>'
+
+export const QINGML_FOOTNOTE_EXAMPLE = '<p>这项结论已有研究支持<footnote id="source_1">《资料甲》，第 12 页。</footnote>。</p>'
+
+export const QINGML_INLINE_MATH_EXAMPLE = '<p>质能关系为 <math>E=mc^2</math>。</p>'
+
+export const QINGML_BLOCK_MATH_EXAMPLE = '<math-block>\\int_0^1 x^2\\,dx=\\frac{1}{3}</math-block>'
 
 export const QINGML_SYSTEM = `你是青简写作侧模型。只输出一份完整 QingML 文档，不要解释，不要 Markdown 围栏；第一个非空字符必须是 <。
 
@@ -20,7 +28,73 @@ export const QINGML_SYSTEM = `你是青简写作侧模型。只输出一份完�
 
 结构约束：列表项放在相应列表中；列表的层级靠嵌套表达,不靠标题:<li> 内放一个子 <ul>/<ol> 即下一级,<task> 内放子 <tasks> 即子任务。嵌套项目列表正面样例:${QINGML_NESTED_BULLET_LIST_EXAMPLE}。嵌套任务清单正面样例:${QINGML_NESTED_TASK_LIST_EXAMPLE}。用户要「大类下面再列具体的」「分几类、每类带几项」时,必须用这种嵌套列表,不要用「小标题+平级列表」——标题是章节切分,不是列表层级；表格只含 tr，tr 只含 th/td；单元格可含块；callout、blockquote、pennote 内只放行内内容；pre、mermaid、drawio、math-block 内是原样文本，不能再嵌标签；columns 至少两个 column；footnote id 匹配 [A-Za-z0-9_-]{1,64} 且内容为纯文本。
 
+脚注正面样例:${QINGML_FOOTNOTE_EXAMPLE}。<footnote> 放在引用位置，id 是稳定标识，标签正文就是注文；不要另写脚注定义。行内公式正面样例:${QINGML_INLINE_MATH_EXAMPLE}。块级公式正面样例:${QINGML_BLOCK_MATH_EXAMPLE}。公式的 LaTeX 放在标签正文中，不写成属性。
+
+【源语法纪律】正文文本节点里严禁出现 Markdown/GFM 源语法字面量：严禁写 [^x]、[^x]: … 这类脚注引用或定义，要脚注就用 <footnote id="x">注文</footnote>；严禁写 $…$、$$…$$ 这类公式定界符，要行内公式就用 <math>…</math>，要块级公式就用 <math-block>…</math-block>。代码示例若必须展示这些字面量，只能放进 <pre>。
+
 内容要求：严格保持 <title> 与正文开头 <h1> 的标题文字完全一致,再写清楚的章节层级和正文；忠实满足简报，不编造事实。禁止 script/style、on* 属性、未知标签、javascript: 链接。`
+
+export type QingmlSourceSyntaxLeak = 'footnote-reference' | 'footnote-definition'
+
+const MARKDOWN_FOOTNOTE_REFERENCE_PATTERN = /\[\^[0-9]+\]/u
+const MARKDOWN_FOOTNOTE_DEFINITION_PATTERN = /\[\^[A-Za-z0-9]+\][ \t]*:/u
+
+function collectRunSourceSyntaxLeaks(runs: readonly AiRun[], leaks: Set<QingmlSourceSyntaxLeak>): void {
+  for (const run of runs) {
+    if (!('text' in run) || run.marks?.some((mark) => mark.type === 'math')) continue
+    if (MARKDOWN_FOOTNOTE_REFERENCE_PATTERN.test(run.text)) leaks.add('footnote-reference')
+    if (MARKDOWN_FOOTNOTE_DEFINITION_PATTERN.test(run.text)) leaks.add('footnote-definition')
+  }
+}
+
+function collectBlockSourceSyntaxLeaks(block: AiBlock, leaks: Set<QingmlSourceSyntaxLeak>): void {
+  switch (block.type) {
+    case 'paragraph':
+    case 'heading':
+    case 'penNote':
+      collectRunSourceSyntaxLeaks(block.runs, leaks)
+      return
+    case 'blockquote':
+    case 'callout':
+      if (block.runs) collectRunSourceSyntaxLeaks(block.runs, leaks)
+      else block.blocks?.forEach((child) => collectBlockSourceSyntaxLeaks(child, leaks))
+      return
+    case 'bulletList':
+    case 'orderedList':
+      for (const item of block.items) {
+        collectRunSourceSyntaxLeaks(item.runs, leaks)
+        item.children?.forEach((child) => collectBlockSourceSyntaxLeaks(child, leaks))
+      }
+      return
+    case 'taskList':
+      for (const item of block.items) {
+        collectRunSourceSyntaxLeaks(item.runs, leaks)
+        item.children?.forEach((child) => collectBlockSourceSyntaxLeaks(child, leaks))
+      }
+      return
+    case 'table':
+      block.rows.forEach((row) => row.cells.forEach((cell) =>
+        cell.blocks.forEach((child) => collectBlockSourceSyntaxLeaks(child, leaks))))
+      return
+    case 'columnList':
+      block.columns.forEach((column) =>
+        column.blocks.forEach((child) => collectBlockSourceSyntaxLeaks(child, leaks)))
+      return
+    default:
+      // codeBlock、inlineMath/blockMath 和图表源码不是正文文本节点，不参与泄漏检测。
+      return
+  }
+}
+
+/**
+ * 在落库前检查解析后的正文文本节点，避免把 GFM 脚注源语法当普通文字写进纸面。
+ * 基于 AI-IR 而非原始字符串检查，可自然排除代码块和原生脚注/公式节点。
+ */
+export function findQingmlSourceSyntaxLeaks(qingml: string): QingmlSourceSyntaxLeak[] {
+  const leaks = new Set<QingmlSourceSyntaxLeak>()
+  for (const block of qingmlParse(qingml).blocks) collectBlockSourceSyntaxLeaks(block, leaks)
+  return [...leaks]
+}
 
 export interface CompleteBlocks {
   blocks: string[]

@@ -12,6 +12,7 @@ import { registerTools } from '../src/tools.js'
 const DRAFT_ONE = '<title>测试稿</title><h1>开篇</h1><p>第一版正文。</p>'
 const DRAFT_TWO = '<title>测试稿</title><h1>开篇</h1><p>修正后的正文。</p>'
 const EMPTY_DRAFT = '<title>测试稿</title><h1>测试稿</h1>'
+const FOOTNOTE_SOURCE_LEAK_DRAFT = '<title>测试稿</title><h1>开篇</h1><p>第一版正文[^1]。</p><p>[^1]: 《资料甲》</p>'
 const ONLINE_ENGINE: EngineStatusSnapshot = { state: 'online', engineUrl: 'http://127.0.0.1:8080' }
 
 function doc(overrides: Partial<ExternalDoc> = {}): ExternalDoc {
@@ -301,6 +302,45 @@ describe('qing_write_draft', () => {
     expect(proposals).toBe(2)
     expect(JSON.stringify(fixture.requests[1])).toContain('上一次 QingML 被青简拒绝')
     expect(JSON.stringify(fixture.requests[1])).toContain('bad_structure')
+  })
+
+  it('正文泄漏 GFM 脚注源语法时落库前拒绝并重写一次', async () => {
+    let proposed = false
+    const fixture = harness([FOOTNOTE_SOURCE_LEAK_DRAFT, DRAFT_TWO], async (path, init) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return proposed ? doc({ docVersion: 1, state: 'editing', qingml: DRAFT_TWO, title: '测试稿' }) : doc()
+      }
+      if (path.endsWith('/proposals')) {
+        proposed = true
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          ops: [{ kind: 'qingmlDraft', qingml: DRAFT_TWO }],
+        })
+        return { status: 'committed', docVersion: 1 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    await expect(fixture.tools.get('qing_write_draft')!.execute({ brief: '写一篇带脚注的测试稿' }, exec()))
+      .resolves.toMatchObject({ status: 'committed' })
+    expect(fixture.stream).toHaveBeenCalledTimes(2)
+    const retryRequest = fixture.requests[1] as { messages: Array<{ content: Array<{ text: string }> }> }
+    expect(retryRequest.messages[0]?.content[0]?.text).toContain('markdown_footnote_source_syntax_leak')
+    expect(retryRequest.messages[0]?.content[0]?.text).toContain(String.raw`<footnote id=\"...\">注文</footnote>`)
+    expect(fixture.engine.fetchJson).toHaveBeenCalledWith(expect.stringContaining('/proposals'), expect.anything())
+  })
+
+  it('重写后仍泄漏 GFM 脚注源语法时拒绝落库', async () => {
+    let proposals = 0
+    const fixture = harness([FOOTNOTE_SOURCE_LEAK_DRAFT, FOOTNOTE_SOURCE_LEAK_DRAFT], async (path) => {
+      if (path.endsWith('/doc?format=qingml')) return doc()
+      if (path.endsWith('/proposals')) proposals += 1
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    await expect(fixture.tools.get('qing_write_draft')!.execute({ brief: '写一篇带脚注的测试稿' }, exec()))
+      .rejects.toThrow('侧模型修正后仍在正文中使用 Markdown/GFM 脚注源语法,未提交文稿')
+    expect(fixture.stream).toHaveBeenCalledTimes(2)
+    expect(proposals).toBe(0)
   })
 
   it('第二次提交仍失败时上浮，并只广播一次 draft-failed', async () => {
