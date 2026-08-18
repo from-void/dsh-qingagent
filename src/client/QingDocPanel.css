@@ -19,6 +19,231 @@
   line-height: 1.8;
 }
 
+[data-qingagent-doc-panel] .qingbrand-badge {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+[data-qingagent-doc-panel] .qingbrand-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #00000000;
+  color: #ece3d0;
+  font: inherit;
+  cursor: pointer;
+}
+
+[data-qingagent-doc-panel] .qingbrand-trigger:focus-visible {
+  outline: 1px solid #cfb477;
+  outline-offset: 4px;
+}
+
+[data-qingagent-doc-panel] .qingbrand-new {
+  position: absolute;
+  top: -11px;
+  right: -22px;
+  padding: 1px 4px;
+  border: 1px solid #f0c5b9;
+  border-radius: 0;
+  background: #a73d2d;
+  color: #fff8ed;
+  font-family: Arial, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+[data-qingagent-doc-panel] .qingbrand-hover-card,
+[data-qingagent-doc-panel] .qingbrand-update-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 80;
+  box-sizing: border-box;
+  border: 1px solid #cfb477;
+  border-radius: 0;
+  background: #faf6ec;
+  color: #40362a;
+  box-shadow: 0 8px 22px #33291f33;
+}
+
+[data-qingagent-doc-panel] .qingbrand-hover-card {
+  width: 260px;
+  padding: 14px;
+}
+
+[data-qingagent-doc-panel] .qingbrand-card-title {
+  margin: 0 0 10px;
+  color: #40362a;
+  font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+[data-qingagent-doc-panel] .qingbrand-feedback-links {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+[data-qingagent-doc-panel] .qingbrand-feedback-links a,
+[data-qingagent-doc-panel] .qingbrand-update-trigger,
+[data-qingagent-doc-panel] .qingbrand-command-row button,
+[data-qingagent-doc-panel] .qingbrand-update-heading button {
+  box-sizing: border-box;
+  border: 1px solid #cfb477;
+  border-radius: 0;
+  background: #f4eddf;
+  color: #6d5331;
+  font: inherit;
+}
+
+[data-qingagent-doc-panel] .qingbrand-feedback-links a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 31px;
+  padding: 5px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+[data-qingagent-doc-panel] .qingbrand-feedback-links a:hover,
+[data-qingagent-doc-panel] .qingbrand-feedback-links a:focus-visible,
+[data-qingagent-doc-panel] .qingbrand-update-trigger:hover,
+[data-qingagent-doc-panel] .qingbrand-update-trigger:focus-visible,
+[data-qingagent-doc-panel] .qingbrand-command-row button:hover,
+[data-qingagent-doc-panel] .qingbrand-command-row button:focus-visible,
+[data-qingagent-doc-panel] .qingbrand-update-heading button:hover,
+[data-qingagent-doc-panel] .qingbrand-update-heading button:focus-visible {
+  border-color: #a8823f;
+  outline: 1px solid #a8823f;
+  outline-offset: 1px;
+  background: #ece3d0;
+  color: #40362a;
+}
+
+[data-qingagent-doc-panel] .qingbrand-update-trigger {
+  display: flex;
+  width: 100%;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 9px 0 0;
+  padding: 5px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+[data-qingagent-doc-panel] .qingbrand-update-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 0;
+  background: #a73d2d;
+}
+
+[data-qingagent-doc-panel] .qingbrand-update-popover {
+  width: min(410px, calc(100vw - 40px));
+  padding: 16px;
+}
+
+[data-qingagent-doc-panel] .qingbrand-update-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+[data-qingagent-doc-panel] .qingbrand-update-heading strong {
+  color: #40362a;
+  font-family: "Noto Serif SC", "Songti SC", SimSun, serif;
+  font-size: 15px;
+}
+
+[data-qingagent-doc-panel] .qingbrand-update-heading button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 22px;
+  cursor: pointer;
+}
+
+[data-qingagent-doc-panel] .qingbrand-update-version,
+[data-qingagent-doc-panel] .qingbrand-update-note,
+[data-qingagent-doc-panel] .qingbrand-copy-status {
+  margin: 8px 0 0;
+  color: #7a6956;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+[data-qingagent-doc-panel] .qingbrand-update-popover label {
+  display: block;
+  margin-top: 13px;
+  color: #6d5331;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+[data-qingagent-doc-panel] .qingbrand-command-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+[data-qingagent-doc-panel] .qingbrand-command-row input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 6px 8px;
+  border: 1px solid #cfb477;
+  border-radius: 0;
+  outline: 0;
+  background: #fffaf0;
+  color: #40362a;
+  font-family: Consolas, "SFMono-Regular", monospace;
+  font-size: 11px;
+}
+
+[data-qingagent-doc-panel] .qingbrand-command-row input:focus {
+  border-color: #a8823f;
+  outline: 1px solid #a8823f;
+}
+
+[data-qingagent-doc-panel] .qingbrand-command-row button {
+  min-width: 54px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+[data-qingagent-doc-panel] .qingbrand-copy-status {
+  min-height: 17px;
+  color: #a8823f;
+}
+
+[data-qingagent-doc-panel] .qingbrand-update-note {
+  margin-top: 4px;
+  color: #6d5331;
+}
+
 @media (max-width: 700px) {
   [data-qingagent-doc-panel][data-content="docMissing"] .ws-right {
     padding: 20px;
@@ -27,5 +252,9 @@
   [data-qingagent-doc-panel][data-content="docMissing"] .qingdoc-doc-missing {
     min-height: calc(100% - 40px);
     padding: 40px 32px;
+  }
+
+  [data-qingagent-doc-panel] .qingbrand-hover-card {
+    width: 240px;
   }
 }

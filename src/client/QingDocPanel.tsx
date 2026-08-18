@@ -45,6 +45,7 @@ import { buildReviewPresentationModel } from './reviewPresentation.js'
 import { installDetailsColumnWidth } from './detailsWidth.js'
 import { decideIncomingPanelDocument } from './incomingPanelDocument.js'
 import { QINGJIAN_ICON_DATA_URI } from './qingjianIcon.js'
+import { QingBrandBadge } from './QingBrandBadge.js'
 import { QingConnectionGuide } from './QingConnectionGuide.js'
 import { ensureQingdocRuntimeCss } from './runtimeCss.js'
 import { BridgeHttpError, currentPanelReviewStateFor, qingClientStore } from './store.js'
@@ -52,6 +53,7 @@ import type { QingLibraryDoc } from './store.js'
 import { WholeDocReviewNav } from './WholeDocReviewNav.js'
 import { isWholeDocReview } from '../reviewMode.js'
 export { computeExternalReviewChangeRatio } from '../reviewMode.js'
+export { QingBrandBadge } from './QingBrandBadge.js'
 import {
   assembleDshReviewQuery,
   DSH_DEAI_STYLE_TEMPLATES,
@@ -73,6 +75,7 @@ export type QingDocPanelProps = PropsRuntime<'details'> & InjectedProps
 const EMPTY_PATCH_IDS = new Set<string>()
 const EMPTY_ANNOTATIONS: never[] = []
 const MISSING_DOCUMENT_TITLE = '该文档已删除'
+
 export function QingDocPanel(props: QingDocPanelProps) {
   ensureQingdocRuntimeCss()
   const sessionId = String(props.useSession((session) => session.sessionId))
@@ -983,7 +986,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
         />
         <header className="qingdoc-stage-controls">
           <div className="qingdoc-heading">
-            <span className="qingdoc-brand">青简</span>
+            <QingBrandBadge />
             <span className="qingdoc-status" role="status">
               {engineStatus.state === 'starting' ? '正在启动' : engineStatus.state === 'handshake-failed' ? '握手失败' : '未连接'}
             </span>
@@ -1029,7 +1032,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
       />
       <header className="qingdoc-stage-controls">
         <div className="qingdoc-heading">
-          <span className="qingdoc-brand">青简</span>
+          <QingBrandBadge />
           <QingDocSwitcher
             sessionId={sessionId}
             docs={docs}

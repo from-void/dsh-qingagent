@@ -147,6 +147,36 @@ describe('青简纸面移植契约', () => {
     expect(panelCss).not.toMatch(/var\(\s*--dsw-/)
   })
 
+  it('品牌 hover 卡与更新浮层只进面板 CSS，并保持直角固定色与两处 header 接线', async () => {
+    const [generatedCss, panelCss, panelSource, brandSource] = await Promise.all([
+      readFile(resolve('src/qingdoc/qingdoc.css'), 'utf8'),
+      readFile(resolve('src/client/QingDocPanel.css'), 'utf8'),
+      readFile(resolve('src/client/QingDocPanel.tsx'), 'utf8'),
+      readFile(resolve('src/client/QingBrandBadge.tsx'), 'utf8'),
+    ])
+    const badgeStyles = panelCss.slice(
+      panelCss.indexOf('[data-qingagent-doc-panel] .qingbrand-badge'),
+      panelCss.indexOf('@media (max-width: 700px)'),
+    )
+    const radii = [...badgeStyles.matchAll(/border-radius:\s*([^;]+);/g)]
+      .map((match) => match[1]!.trim())
+
+    expect(generatedCss).not.toContain('.qingbrand-')
+    expect(badgeStyles).toContain('.qingbrand-hover-card')
+    expect(badgeStyles).toContain('.qingbrand-update-popover')
+    expect(badgeStyles).toContain('grid-template-columns: 1fr 1fr;')
+    expect(badgeStyles).toContain('width: 100%;')
+    expect(badgeStyles).not.toMatch(/var\(\s*--dsw-/)
+    expect(badgeStyles).not.toMatch(/\btransparent\b|\brgba?\(|\bhsla?\(/)
+    expect(radii.length).toBeGreaterThan(0)
+    expect(radii.every((radius) => radius === '0')).toBe(true)
+    expect(panelSource.match(/<QingBrandBadge \/>/g)).toHaveLength(2)
+    expect(brandSource).toContain('target="_blank" rel="noreferrer"')
+    expect(brandSource).toContain('aria-expanded={updateOpen}')
+    expect(brandSource).toContain('aria-controls={updateOpen ? updatePopoverId : undefined}')
+    expect(brandSource).toContain('运行后需重启 DSH 生效')
+  })
+
   it('workspace scope 保留青简 #view-workspace 的 ID 权重', async () => {
     const [css, generator] = await Promise.all([
       readFile(resolve('src/qingdoc/qingdoc.css'), 'utf8'),

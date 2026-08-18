@@ -74,6 +74,11 @@ export {
   launchDetectedQingjianClient,
   QingjianClientInstallationDetector,
 } from './clientInstallation.js'
+export {
+  CURRENT_PACKAGE_VERSION,
+  isNewer,
+  PluginUpdateChecker,
+} from './updateCheck.js'
 export { QINGJIAN_DOWNLOAD_URL, qingjianUnavailableMessage } from './onboarding.js'
 export { QINGML_SYSTEM, completeTopLevelBlocks, countWords, outlineOf } from './qingml.js'
 export { selectionSystemPrompt } from './selection.js'
