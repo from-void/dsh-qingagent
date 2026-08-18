@@ -8,9 +8,11 @@ import {
   QINGML_NESTED_TASK_LIST_EXAMPLE,
   QINGML_SYSTEM,
   completeTopLevelBlocks,
+  convertQingmlSourceSyntax,
   countWords,
   findQingmlSourceSyntaxLeaks,
   outlineOf,
+  structureFactsOf,
 } from '../src/qingml.js'
 
 describe('QingML 流边界与摘要', () => {
@@ -86,6 +88,63 @@ describe('QingML 流边界与摘要', () => {
       '<p>详见附录[1]，以及变量 x。</p>',
     ]
     for (const qingml of valid) expect(findQingmlSourceSyntaxLeaks(qingml)).toEqual([])
+  })
+
+  it('把配对的 GFM 脚注确定性转换为原生脚注并删除定义行', () => {
+    const source = '<title>测试稿</title><h1>测试稿</h1><p>结论见来源[^1]。</p><p>[^1]: 《资料甲》，第 12 页。</p>'
+    const result = convertQingmlSourceSyntax(source)
+
+    expect(result).toMatchObject({ convertedFootnotes: 1, convertedFormulas: 0, converted: 1, leaks: [] })
+    expect(result.qingml).toContain('<footnote id="1">《资料甲》，第 12 页。</footnote>')
+    expect(result.qingml).not.toContain('[^1]')
+    expect(result.qingml).not.toContain('《资料甲》，第 12 页。</p>')
+    expect(qingmlParse(result.qingml).blocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'paragraph',
+        runs: expect.arrayContaining([{ type: 'footnote', id: '1', note: '《资料甲》，第 12 页。' }]),
+      }),
+    ]))
+  })
+
+  it('把块级与带 LaTeX 特征的行内公式转换为原生公式结构', () => {
+    const result = convertQingmlSourceSyntax('<p>$$E=mc^2$$</p><p>门票 $100 起，参数为 $\\alpha$。</p>')
+
+    expect(result).toMatchObject({ convertedFootnotes: 0, convertedFormulas: 2, converted: 2, leaks: [] })
+    expect(result.qingml).toContain('<math-block>E=mc^2</math-block>')
+    expect(result.qingml).toContain('<math>\\alpha</math>')
+    expect(qingmlParse(result.qingml).blocks).toEqual([
+      { type: 'blockMath', latex: 'E=mc^2' },
+      { type: 'paragraph', runs: [{ text: '门票 $100 起，参数为 ' }, { text: '\\alpha', marks: [{ type: 'math' }] }, { text: '。' }] },
+    ])
+  })
+
+  it('保守跳过货币、代码块和已有公式节点', () => {
+    const source = '<p>价格有 $5、$100 起，环境变量 $var。</p><pre>$var 与 $x=1$</pre><p><math>$x=1$</math></p>'
+    const result = convertQingmlSourceSyntax(source)
+
+    expect(result).toEqual({
+      qingml: source,
+      convertedFootnotes: 0,
+      convertedFormulas: 0,
+      converted: 0,
+      leaks: [],
+    })
+  })
+
+  it('引用没有对应定义时保留残留并报出不可转换项', () => {
+    const source = '<p>结论见来源[^missing]。</p>'
+    const result = convertQingmlSourceSyntax(source)
+
+    expect(result.qingml).toBe(source)
+    expect(result.converted).toBe(0)
+    expect(result.leaks).toContain('footnote-reference')
+  })
+
+  it('按原生结构统计脚注及行内/块级公式', () => {
+    const qingml = '<p>甲<footnote id="a">来源甲</footnote>，公式 <math>x=1</math>。</p><blockquote><math-block>y=2</math-block></blockquote>'
+    expect(structureFactsOf(qingml)).toEqual({ footnotes: 1, formulas: 2 })
+    expect(outlineOf(qingml).structure).toContain('1 处脚注')
+    expect(outlineOf(qingml).structure).toContain('2 个公式')
   })
 
   it('生成标题层级、节首句和中英文字数', () => {

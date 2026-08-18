@@ -19,8 +19,13 @@ export type AiRunMark =
   | { type: 'link'; href: string; title?: string | null }
   | { type: 'textColor' | 'highlight'; color: string }
 
+export interface AiTextRun {
+  text: string
+  marks?: AiRunMark[]
+}
+
 export type AiRun =
-  | { text: string; marks?: AiRunMark[] }
+  | AiTextRun
   | { type: 'footnote'; id?: string; note: string }
 
 export interface AiListItem {
@@ -41,13 +46,21 @@ export interface AiTableCell {
 }
 
 export type AiBlock =
-  | { type: 'paragraph' | 'heading' | 'penNote'; runs: AiRun[] }
-  | { type: 'blockquote' | 'callout'; runs?: AiRun[]; blocks?: AiBlock[] }
-  | { type: 'bulletList' | 'orderedList'; items: AiListItem[] }
-  | { type: 'taskList'; items: AiTaskListItem[] }
-  | { type: 'table'; rows: Array<{ cells: AiTableCell[] }> }
-  | { type: 'columnList'; columns: Array<{ blocks: AiBlock[] }> }
-  | { type: 'codeBlock' | 'horizontalRule' | 'image' | 'fileAttachment' | 'blockMath' | 'diagram' }
+  | { blockId?: string; type: 'paragraph'; runs: AiRun[]; textAlign?: string }
+  | { blockId?: string; type: 'heading'; level: 1 | 2 | 3 | 4 | 5 | 6; anchor?: string | null; runs: AiRun[]; textAlign?: string }
+  | { blockId?: string; type: 'penNote'; runs: AiRun[] }
+  | { blockId?: string; type: 'blockquote' | 'callout'; runs?: AiRun[]; blocks?: AiBlock[]; emoji?: string | null; tone?: string | null }
+  | { blockId?: string; type: 'bulletList'; items: AiListItem[] }
+  | { blockId?: string; type: 'orderedList'; items: AiListItem[]; start?: number | null; listStyle?: string | null }
+  | { blockId?: string; type: 'taskList'; items: AiTaskListItem[] }
+  | { blockId?: string; type: 'table'; rows: Array<{ cells: AiTableCell[]; header?: boolean }> }
+  | { blockId?: string; type: 'columnList'; columns: Array<{ blocks: AiBlock[]; widthRatio?: number | null }> }
+  | { blockId?: string; type: 'codeBlock'; language?: string | null; text: string }
+  | { blockId?: string; type: 'horizontalRule' }
+  | { blockId?: string; type: 'image'; src: string; alt?: string | null; title?: string | null; caption?: string | null; width?: number | null; height?: number | null; align?: string | null }
+  | { blockId?: string; type: 'fileAttachment'; fileId: string; filename: string; mimeType: string; size: number }
+  | { blockId?: string; type: 'blockMath'; latex: string }
+  | { blockId?: string; type: 'diagram'; lang: string; source: string; svg?: string | null }
 
 export function qingmlParse(text: string): {
   title: string | null
