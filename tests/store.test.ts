@@ -209,6 +209,105 @@ describe('QingClientStore 生成终态', () => {
     ])
   })
 
+  it('refreshPanel 对确定删除维持 docMissing，重复刷新仍保持，成功读回后清除', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    let restored = false
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/qingagent-bridge/state?')) {
+        return Response.json({
+          dshSessionId: 'dsh-missing',
+          binding: {
+            docs: [
+              { engineSessionId: 'qing-missing', title: '昨日旧稿', createdAt: '2026-08-15T00:00:00.000Z' },
+              { engineSessionId: 'qing-live', title: '可用文稿', createdAt: '2026-08-15T00:01:00.000Z' },
+            ],
+            activeEngineSessionId: 'qing-missing',
+          },
+          docs: [
+            {
+              engineSessionId: 'qing-missing', title: '昨日旧稿', createdAt: '2026-08-15T00:00:00.000Z',
+              state: 'editing', docVersion: 3,
+            },
+            {
+              engineSessionId: 'qing-live', title: '可用文稿', createdAt: '2026-08-15T00:01:00.000Z',
+              state: 'editing', docVersion: 2,
+            },
+          ],
+          activeDoc: {
+            sessionId: 'qing-missing', docVersion: 3, state: 'editing', agentBusy: false,
+            markdown: '', qingml: '<p>旧正文</p>', title: '昨日旧稿',
+          },
+          engine: { state: 'online', engineUrl: 'http://127.0.0.1:8080' },
+        } satisfies BridgeState)
+      }
+      if (url.startsWith('/qingagent-bridge/doc-pm?')) {
+        if (!restored) {
+          return Response.json(
+            { error: '青简会话不存在', code: 'SESSION_NOT_FOUND', nextStep: '不要重试原引用' },
+            { status: 404 },
+          )
+        }
+        return Response.json({
+          sessionId: 'qing-missing', docVersion: 4, contentHash: 'hash-4', state: 'editing',
+          agentBusy: false, title: '恢复文稿', ts: 't4',
+          pmDoc: { type: 'doc', attrs: { schemaVersion: 1 }, content: [] },
+        })
+      }
+      if (url.startsWith('/qingagent-bridge/review-render-model?')) {
+        return Response.json({
+          sessionId: 'qing-missing', docVersion: 4, state: 'editing', agentBusy: false,
+          baseVersion: 4, suggestions: [],
+        })
+      }
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const store = new QingClientStore()
+    const release = store.retain('dsh-missing')
+    await vi.waitFor(() => expect(store.getSnapshot('dsh-missing').state).toBeDefined())
+
+    await expect(store.refreshPanel('dsh-missing', 'qing-missing')).rejects.toMatchObject({ status: 404 })
+    expect(store.getSnapshot('dsh-missing')).toMatchObject({
+      docMissing: { engineSessionId: 'qing-missing' },
+      panelEngineSessionId: 'qing-missing',
+      panelLoading: false,
+    })
+    expect(store.getSnapshot('dsh-missing').panelDoc).toBeUndefined()
+    expect(store.getSnapshot('dsh-missing').state?.docs.map((doc) => doc.engineSessionId))
+      .toEqual(['qing-live'])
+
+    await expect(store.refreshPanel('dsh-missing', 'qing-missing')).rejects.toMatchObject({ status: 404 })
+    expect(store.getSnapshot('dsh-missing').docMissing).toEqual({ engineSessionId: 'qing-missing' })
+
+    restored = true
+    await store.refreshPanel('dsh-missing', 'qing-missing')
+    expect(store.getSnapshot('dsh-missing').docMissing).toBeUndefined()
+    expect(store.getSnapshot('dsh-missing').panelDoc).toMatchObject({ title: '恢复文稿', docVersion: 4 })
+    release()
+  })
+
+  it.each([
+    ['500 响应', () => Response.json(
+      { error: '引擎暂时不可用', code: 'SESSION_NOT_FOUND' },
+      { status: 500 },
+    )],
+    ['网络异常', () => Promise.reject(new TypeError('bridge disconnected'))],
+    ['只有 error 字段的 404', () => Response.json(
+      { error: 'SESSION_NOT_FOUND' },
+      { status: 404 },
+    )],
+  ])('refreshPanel 遇到%s不得猜成 docMissing', async (_name, respond) => {
+    vi.stubGlobal('fetch', vi.fn(respond))
+    const store = new QingClientStore()
+
+    await expect(store.refreshPanel('dsh-not-missing', 'qing-1')).rejects.toBeDefined()
+
+    expect(store.getSnapshot('dsh-not-missing').docMissing).toBeUndefined()
+    expect(store.getSnapshot('dsh-not-missing').error)
+      .toBe('与青简桥的实时连接暂时中断，浏览器会自动重连。')
+  })
+
   it('编辑态也装配 render-model annotations，缺省补丁不会误计审阅数', async () => {
     const pmDoc = {
       type: 'doc', attrs: { schemaVersion: 1 },

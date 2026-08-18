@@ -114,6 +114,50 @@ describe('BridgeHub', () => {
     dispose()
   })
 
+  it('/state 只剔除 404 + SESSION_NOT_FOUND，其他读取失败保留为 offline', async () => {
+    const binding = {
+      docs: [
+        { engineSessionId: 'qing-missing', title: '已删稿', createdAt: '2026-08-15T00:00:00.000Z' },
+        { engineSessionId: 'qing-error-only', title: '字段误导稿', createdAt: '2026-08-15T00:01:00.000Z' },
+        { engineSessionId: 'qing-offline', title: '暂时离线稿', createdAt: '2026-08-15T00:02:00.000Z' },
+        { engineSessionId: 'qing-live', title: '仍在稿', createdAt: '2026-08-15T00:03:00.000Z' },
+      ],
+      activeEngineSessionId: 'qing-missing',
+    }
+    const { handler, engine, dispose } = fixture({ 'dsh-a': binding })
+    vi.mocked(engine.fetchJson).mockImplementation(async (path) => {
+      if (path.includes('qing-missing')) {
+        throw new EngineHttpError(404, { error: '青简会话不存在', code: 'SESSION_NOT_FOUND' })
+      }
+      if (path.includes('qing-error-only')) {
+        throw new EngineHttpError(404, { error: 'SESSION_NOT_FOUND' })
+      }
+      if (path.includes('qing-offline')) {
+        throw new EngineHttpError(500, { error: '引擎暂时不可用', code: 'SESSION_NOT_FOUND' })
+      }
+      return {
+        sessionId: 'qing-live', docVersion: 7, state: 'editing', agentBusy: false,
+        markdown: '', qingml: '<p>正文</p>', title: '仍在稿',
+      }
+    })
+    const res = response()
+
+    await handler(
+      request('GET', '/qingagent-bridge/state?dshSessionId=dsh-a'),
+      res as unknown as ServerResponse,
+    )
+
+    const state = JSON.parse(res.body)
+    expect(state.binding.docs).toHaveLength(4)
+    expect(state.docs).toEqual([
+      expect.objectContaining({ engineSessionId: 'qing-error-only', state: 'offline' }),
+      expect.objectContaining({ engineSessionId: 'qing-offline', state: 'offline' }),
+      expect.objectContaining({ engineSessionId: 'qing-live', state: 'editing', docVersion: 7 }),
+    ])
+    expect(state.activeDoc).toBeUndefined()
+    dispose()
+  })
+
   it('启动端点不解析客户端路径，只调用 host 无参启动器', async () => {
     const { handler, engine, dispose } = fixture({})
     const res = response()

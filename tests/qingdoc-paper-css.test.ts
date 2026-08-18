@@ -110,6 +110,26 @@ describe('青简纸面移植契约', () => {
     expect(radii.every((radius) => radius === '0')).toBe(true)
   })
 
+  it('docMissing 使用面板自有的直角暖纸样式，不污染生成 CSS', async () => {
+    const [generatedCss, panelCss, panelSource] = await Promise.all([
+      readFile(resolve('src/qingdoc/qingdoc.css'), 'utf8'),
+      readFile(resolve('src/client/QingDocPanel.css'), 'utf8'),
+      readFile(resolve('src/client/QingDocPanel.tsx'), 'utf8'),
+    ])
+    const missingRule = panelCss.match(
+      /\[data-qingagent-doc-panel\]\[data-content="docMissing"\] \.qingdoc-doc-missing \{([\s\S]*?)\n\}/,
+    )?.[1]
+
+    expect(panelSource).toContain("import './QingDocPanel.css'")
+    expect(panelSource).toContain("? 'docMissing'")
+    expect(generatedCss).not.toContain('.qingdoc-doc-missing')
+    expect(missingRule).toBeDefined()
+    expect(missingRule).toContain('border-radius: 0;')
+    expect(missingRule).toContain('background: #faf6ec;')
+    expect(missingRule).toContain('color: #40362a;')
+    expect(panelCss).not.toMatch(/var\(\s*--dsw-/)
+  })
+
   it('workspace scope 保留青简 #view-workspace 的 ID 权重', async () => {
     const [css, generator] = await Promise.all([
       readFile(resolve('src/qingdoc/qingdoc.css'), 'utf8'),
