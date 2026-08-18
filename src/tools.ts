@@ -157,6 +157,11 @@ function writeDraftTool(services: ToolServices) {
           engineSessionId: { type: 'string', required: true },
           docVersion: { type: 'integer', required: true },
           patchCount: { type: 'integer', description: 'review 态的待裁决处数。' },
+          patchIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'review 态本批次的补丁 ID。',
+          },
           wholeDocReview: { type: 'boolean', required: true },
           outline: { ...outlineSchema, required: true },
           warning: { type: 'string', description: '落库块数与提交块数不符时的缺损警告。' },
@@ -182,6 +187,7 @@ function writeDraftTool(services: ToolServices) {
         patchCount: value.patchCount ?? 0,
         wholeDocReview: value.wholeDocReview,
         engineSessionId: value.engineSessionId,
+        ...(value.status === 'review' ? { patchIds: value.patchIds } : {}),
       }),
     },
     timeoutMs: 240_000,
@@ -313,7 +319,9 @@ function writeDraftTool(services: ToolServices) {
             engineSessionId: bound.engineSessionId,
             docVersion: official.docVersion,
             wholeDocReview,
-            ...(proposal.status === 'review' ? { patchCount: proposal.count } : {}),
+            ...(proposal.status === 'review'
+              ? { patchCount: proposal.count, patchIds: proposal.patchIds }
+              : {}),
             outline: outline.headings.map((heading) => `${'  '.repeat(Math.max(0, heading.level - 1))}${heading.text}`),
           }
         } catch (error) {
@@ -491,6 +499,11 @@ function editDraftTool(services: ToolServices) {
           words: { type: 'integer', required: true },
           docVersion: { type: 'integer', required: true },
           reviewCount: { type: 'integer', required: true },
+          patchIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'review 态本批次的补丁 ID。',
+          },
           wholeDocReview: { type: 'boolean', required: true },
         },
       },
@@ -503,6 +516,7 @@ function editDraftTool(services: ToolServices) {
         words: value.words,
         reviewCount: value.reviewCount,
         wholeDocReview: value.wholeDocReview,
+        ...(value.status === 'review' ? { patchIds: value.patchIds } : {}),
       }),
     },
     presentCall: () => ({ card: 'generic', title: '正在局部修改青简文稿', kind: 'edit' }),
@@ -576,6 +590,7 @@ function editDraftTool(services: ToolServices) {
           words,
           docVersion: official.docVersion,
           reviewCount: proposal.status === 'review' ? proposal.count : 0,
+          ...(proposal.status === 'review' ? { patchIds: proposal.patchIds } : {}),
           wholeDocReview,
         }
       } catch (error) {

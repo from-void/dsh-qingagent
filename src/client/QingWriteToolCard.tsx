@@ -29,7 +29,7 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
   const failure = failed ? failureSummary(settledBlock?.content ?? []) : ''
   const state = failed ? 'failed' : settled ? 'complete' : 'running'
   const reviewState = meta?.status === 'review'
-    ? currentReviewStateFor(snapshot, meta.engineSessionId)
+    ? currentReviewStateFor(snapshot, meta.engineSessionId, meta.patchIds)
     : 'unknown'
   const pendingReview = reviewState === 'pending'
   // 「块」是内部概念不暴露;运行态无字数时摘要留空(标题「正在写作」已足够,避免「正在写作·写作中」废话)。
@@ -81,6 +81,7 @@ interface ToolMeta {
   status?: string
   patchCount?: number
   wholeDocReview?: boolean
+  patchIds?: string[]
 }
 
 function isMeta(value: unknown): value is ToolMeta {

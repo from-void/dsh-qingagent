@@ -30,7 +30,11 @@ const pmDoc = {
   }],
 }
 
-async function loadPendingReviewSnapshot(sessionId: string, engineSessionId: string): Promise<void> {
+async function loadPendingReviewSnapshot(
+  sessionId: string,
+  engineSessionId: string,
+  suggestionIds: readonly string[] = [`patch-${engineSessionId}`],
+): Promise<void> {
   vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
     const url = String(input)
     if (url.startsWith('/qingagent-bridge/doc-pm?')) {
@@ -53,7 +57,7 @@ async function loadPendingReviewSnapshot(sessionId: string, engineSessionId: str
         agentBusy: false,
         baseVersion: 1,
         previewDoc: pmDoc,
-        suggestions: [{ id: `patch-${engineSessionId}`, kind: 'replace', status: 'reviewing' }],
+        suggestions: suggestionIds.map((id) => ({ id, kind: 'replace', status: 'reviewing' })),
       }))
     }
     if (url.startsWith('/qingagent-bridge/state?')) {
@@ -119,6 +123,7 @@ describe('Qing write/edit review tool card narratives', () => {
       status: 'review',
       reviewCount: 3,
       wholeDocReview: false,
+      patchIds: [`patch-${engineSessionId}`],
     }
 
     try {
@@ -131,6 +136,16 @@ describe('Qing write/edit review tool card narratives', () => {
       expect(host.firstElementChild?.firstElementChild?.textContent)
         .toContain('《局部修改稿》 · 3 处待裁决 · 请在右侧逐处确认')
       expect(host.textContent).not.toMatch(/\bv\d+\b|ai-block-|qing_edit_draft|字数|块/)
+
+      act(() => qingClientStore.applyReviewVerdict(
+        sessionId,
+        engineSessionId,
+        [`patch-${engineSessionId}`],
+        'accepted',
+      ))
+      expect(host.querySelector('p')?.textContent)
+        .toBe('改好了 3 处,都在右侧面板,逐条确认或驳回即可。')
+      expect(host.textContent).toContain('3 处待裁决')
 
       act(() => qingClientStore.applyReviewCommit(sessionId, engineSessionId, 2))
       expect(host.querySelector('p')?.textContent).toBe('当时改了 3 处,已处理完。')
@@ -163,6 +178,7 @@ describe('Qing write/edit review tool card narratives', () => {
         <QingEditToolCard {...props('edit-whole-review-card', {
           engineSessionId: 'qing-edit-whole',
           title: '整篇修改稿', status: 'review', reviewCount: 8, wholeDocReview: true,
+          patchIds: ['patch-qing-edit-whole'],
         }) as unknown as ComponentProps<typeof QingEditToolCard>} />,
       ))
       expect(host.querySelector('p')?.textContent).toBe('新版已写好,在右侧等你确认采用或退回。')
@@ -181,6 +197,7 @@ describe('Qing write/edit review tool card narratives', () => {
         <QingWriteToolCard {...props('write-review-card', {
           engineSessionId: 'qing-write-review',
           title: '新稿', status: 'review', words: 688, patchCount: 2, wholeDocReview: false,
+          patchIds: ['patch-qing-write-review'],
         }) as unknown as ComponentProps<typeof QingWriteToolCard>} />,
       ))
       expect(host.querySelector('p')?.textContent).toBe('新版已写好,在右侧等你确认采用或退回。')
@@ -194,6 +211,7 @@ describe('Qing write/edit review tool card narratives', () => {
         <QingWriteToolCard {...props('write-whole-review-card', {
           engineSessionId: 'qing-write-whole',
           title: '整篇新稿', status: 'review', words: 688, patchCount: 9, wholeDocReview: true,
+          patchIds: ['patch-qing-write-whole'],
         }) as unknown as ComponentProps<typeof QingWriteToolCard>} />,
       ))
       expect(host.querySelector('p')?.textContent).toBe('新版已写好,在右侧等你确认采用或退回。')
@@ -232,7 +250,7 @@ describe('Qing write/edit review tool card narratives', () => {
         await loadPendingReviewSnapshot(sessionId, engineSessionId)
         act(() => root.render(
           <QingEditToolCard {...props(sessionId, {
-            ...meta, engineSessionId,
+            ...meta, engineSessionId, patchIds: [`patch-${engineSessionId}`],
           }) as unknown as ComponentProps<typeof QingEditToolCard>} />,
         ))
         const narrative = host.querySelector('p')?.textContent ?? ''
@@ -245,6 +263,7 @@ describe('Qing write/edit review tool card narratives', () => {
       act(() => root.render(
         <QingWriteToolCard {...props('whole-review', {
           engineSessionId: 'qing-whole-review', title: '整篇稿', status: 'review', wholeDocReview: true,
+          patchIds: ['patch-qing-whole-review'],
         }) as unknown as ComponentProps<typeof QingWriteToolCard>} />,
       ))
       narratives.push(host.querySelector('p')?.textContent ?? '')
@@ -258,18 +277,22 @@ describe('Qing write/edit review tool card narratives', () => {
     }
   })
 
-  it('无法把 snapshot 可靠关联到该文稿时降级为历史事实，不猜测仍有待审', () => {
+  it('旧卡缺少 patchIds 时即使同稿待审也降级为历史事实', async () => {
     vi.stubGlobal('EventSource', FakeEventSource)
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
+    const sessionId = 'legacy-review-card'
+    const engineSessionId = 'qing-legacy-review'
+    await loadPendingReviewSnapshot(sessionId, engineSessionId)
     const host = document.createElement('div')
     document.body.append(host)
     const root = createRoot(host)
     const props = {
       block: {
         kind: 'tool-result', isError: false, content: [],
-        meta: { title: '旧卡片', status: 'review', reviewCount: 2, wholeDocReview: false },
+        meta: {
+          engineSessionId, title: '旧卡片', status: 'review', reviewCount: 2, wholeDocReview: false,
+        },
       },
-      useSession: (selector: (session: { sessionId: string }) => unknown) => selector({ sessionId: 'unknown-review' }),
+      useSession: (selector: (session: { sessionId: string }) => unknown) => selector({ sessionId }),
       qingLayout: { openDetails: vi.fn() },
     }
 
@@ -279,6 +302,56 @@ describe('Qing write/edit review tool card narratives', () => {
       ))
       expect(host.querySelector('p')?.textContent).toBe('当时改了 2 处。')
       expect(host.textContent).not.toMatch(/逐条确认|驳回|在右侧|已采纳|已驳回|已处理完/)
+    } finally {
+      act(() => root.unmount())
+      host.remove()
+    }
+  })
+
+  it('同一 docVersion 的新批次待审时只给匹配 patchIds 的卡显示指路语', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const sessionId = 'same-version-review-batches'
+    const engineSessionId = 'qing-same-version'
+    await loadPendingReviewSnapshot(sessionId, engineSessionId, ['patch-b1'])
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    const props = (meta: Record<string, unknown>) => ({
+      block: { kind: 'tool-result', isError: false, content: [], meta },
+      useSession: (selector: (session: { sessionId: string }) => unknown) => selector({ sessionId }),
+      qingLayout: { openDetails: vi.fn() },
+    })
+
+    try {
+      act(() => root.render(
+        <QingEditToolCard {...props({
+          engineSessionId,
+          title: '批次 A',
+          status: 'review',
+          reviewCount: 2,
+          wholeDocReview: false,
+          patchIds: ['patch-a1', 'patch-a2'],
+          docVersion: 1,
+        }) as unknown as ComponentProps<typeof QingEditToolCard>} />,
+      ))
+      expect(host.querySelector('p')?.textContent).toBe('当时改了 2 处。')
+      expect(host.textContent).not.toMatch(/逐条确认|待裁决|在右侧/)
+
+      act(() => root.render(
+        <QingEditToolCard {...props({
+          engineSessionId,
+          title: '批次 B',
+          status: 'review',
+          reviewCount: 1,
+          wholeDocReview: false,
+          patchIds: ['patch-b1'],
+          docVersion: 1,
+        }) as unknown as ComponentProps<typeof QingEditToolCard>} />,
+      ))
+      expect(host.querySelector('p')?.textContent)
+        .toBe('改好了 1 处,都在右侧面板,逐条确认或驳回即可。')
+      expect(host.firstElementChild?.firstElementChild?.textContent)
+        .toContain('《批次 B》 · 1 处待裁决 · 请在右侧逐处确认')
     } finally {
       act(() => root.unmount())
       host.remove()

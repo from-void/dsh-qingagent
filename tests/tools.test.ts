@@ -380,6 +380,7 @@ describe('qing_write_draft', () => {
       words: countDocVisibleChars(reviewPmDoc),
       docVersion: 1,
       outline: ['候选标题'],
+      patchIds: ['patch-1'],
     })
     expect(context.concludeTurn).toHaveBeenCalledOnce()
     const generationEvents = fixture.events.filter(({ event }) =>
@@ -394,7 +395,12 @@ describe('qing_write_draft', () => {
     const rendered = fixture.tools.get('qing_write_draft')!.output?.render({}, result as never)
     expectReviewEndMessage((rendered?.[0] as { text: string }).text)
     expect(fixture.tools.get('qing_write_draft')!.output?.presentationMeta?.({}, result as never))
-      .toMatchObject({ status: 'review', patchCount: 1, wholeDocReview: true })
+      .toMatchObject({
+        status: 'review', patchCount: 1, patchIds: ['patch-1'], wholeDocReview: true,
+      })
+    expect(fixture.tools.get('qing_write_draft')!.output?.schema).toMatchObject({
+      properties: { patchIds: { type: 'array', items: { type: 'string' } } },
+    })
   })
 
   it('失败也清理 host 选段，并在失败卡提取首行原因摘要', async () => {
@@ -950,10 +956,15 @@ describe('qing_edit_draft', () => {
     const result = await fixture.tools.get('qing_edit_draft')!.execute({ ops }, context)
 
     expect(result).toMatchObject({
-      status: 'review', reviewCount: 3, docVersion: 2,
+      status: 'review', reviewCount: 3, docVersion: 2, patchIds: ['p-1', 'p-2', 'p-3'],
       message: expect.stringContaining('改动已提交审阅，右侧面板等待用户裁决'),
     })
     expect((result as { message: string }).message).not.toMatch(/v\d+/)
+    expect(fixture.tools.get('qing_edit_draft')!.output?.presentationMeta?.({}, result as never))
+      .toMatchObject({ status: 'review', patchIds: ['p-1', 'p-2', 'p-3'] })
+    expect(fixture.tools.get('qing_edit_draft')!.output?.schema).toMatchObject({
+      properties: { patchIds: { type: 'array', items: { type: 'string' } } },
+    })
     expectReviewEndMessage((result as { message: string }).message)
     expect(context.concludeTurn).toHaveBeenCalledOnce()
     expect(fixture.bridge.clearSelection).toHaveBeenCalledWith('dsh-1')
