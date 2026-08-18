@@ -113,11 +113,22 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('「禁止反复整篇重写」禁的是重写手段和自驱循环,**不是禁止这一次局部修正**')
   })
 
-  it('审核结果回流只用一句话确认且不复述或追加建议', () => {
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('只需**一句话**确认结果(如「好的,采纳的已生效,被拒的已还原」)')
+  it('审核结果回流:全采纳一句话收尾', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('**拒绝 0 处(全部采纳)**:只需**一句话**确认结果')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('不复述改动清单,不总结改了什么,不主动追加建议——用户问起再说')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('这一句话同时就是【回合收尾纪律】要求的收尾语,不另加第二句')
     expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('只需简短确认,等待用户下一步指示')
+  })
+
+  // 用户定的四步:不管已采纳的 → review 被拒的 → 反问是不是哪里改得不好 → 当轮就给方案。
+  it('审核结果回流:有拒绝时不复述已采纳、就被拒项求证并当轮给方案', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('也不要复述或总结那些已采纳的改动')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('**拒绝 1 处及以上**:只针对被拒的那几处处理')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('同一条回复里依次做完三件事,不要拆到下一回合、也不要只问不给')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('先读回流消息里附的被拒条目原文与当时的改法,自己判断问题可能出在哪')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('问得具体,不要泛泛地问「哪里不满意」')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('**当轮就给出针对这几处的替代方案**')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('方案未经用户同意前不要动手改稿')
   })
 
   it('要求正式回复与深度思考都使用中文和用户语言', () => {
