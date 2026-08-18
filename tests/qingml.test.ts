@@ -20,7 +20,31 @@ describe('QingML 流边界与摘要', () => {
     const outline = outlineOf(qingml)
     expect(outline.title).toBe('测试稿')
     expect(outline.blocks).toBe(4)
+    expect(outline.structure).toBe('一个标题、1 个小标题和 2 段正文')
     expect(outline.headings[0]).toMatchObject({ level: 1, text: '第一章', firstSentence: '这是首句。' })
     expect(countWords(qingml)).toBeGreaterThan(10)
+  })
+
+  it('用用户语言概括标题与正文段落', () => {
+    const paragraphs = Array.from({ length: 6 }, (_, index) => `<p>第 ${index + 1} 段。</p>`).join('')
+    expect(outlineOf(`<title>测试稿</title><h1>测试稿</h1>${paragraphs}`).structure)
+      .toBe('一个标题加 6 段正文')
+  })
+
+  it('清单和表格各按一个顶层内容计数，嵌套清单不重复', () => {
+    const qingml = [
+      '<title>混合稿</title>',
+      '<ul><li>甲<ul><li>乙</li></ul></li></ul>',
+      '<table><tr><th>列</th></tr><tr><td>值</td></tr></table>',
+    ].join('')
+    const structure = outlineOf(qingml).structure
+    expect(structure).toBe('1 个清单加 1 张表格')
+    expect(structure).not.toContain('段')
+  })
+
+  it('纯清单稿不虚构正文段落', () => {
+    const structure = outlineOf('<title>清单稿</title><tasks><task checked="false">事项</task></tasks>').structure
+    expect(structure).toBe('1 个清单')
+    expect(structure).not.toContain('段')
   })
 })

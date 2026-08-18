@@ -24,6 +24,18 @@ export function pmToAiIr(doc: PmDoc): { blocks: Array<Record<string, unknown>> }
 export function aiBlocksToQingml(blocks: ReadonlyArray<Record<string, unknown>>): string
 export function countVisibleChars(text: string): number
 export function countDocVisibleChars(doc: PmDoc): number
+export interface PmMarkdownBlockLineSpan {
+  blockIndex: number
+  blockId: string
+  blockType: string
+  startLine: number
+  contentEndLine: number
+  endLine: number
+}
+export function pmToMarkdownWithLineMap(doc: PmDoc): {
+  markdown: string
+  blocks: PmMarkdownBlockLineSpan[]
+}
 
 export interface DocSuggestion {
   id: string
