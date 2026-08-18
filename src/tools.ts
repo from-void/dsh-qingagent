@@ -51,6 +51,7 @@ const REVIEW_REPEAT_ERROR = '本回合已裁决过一次，禁止连环裁决；
 const REVIEW_PENDING_ERROR = '文稿正在审阅中。待审内容可能是你此前轮次提交的,也可能来自其他会话——不要断言归属。先用 ask_user 向用户说明存在待审稿,经用户明确授权后才可处置;不得代为提交或放弃。'
 const STR_REPLACE_PLAIN_TEXT_ERROR = 'old 必须是纯文本内容,不要带 ## 等 markdown 标记'
 const STR_REPLACE_LINES_NOTICE = '注意:strReplace 的 old 用纯文本,不要带行首 ## - 等标记。'
+const PM_INLINE_ATOM_PLACEHOLDER = '\uFFFC'
 const EMPTY_DRAFT_CORRECTION = '上一次只产出了标题、缺少正文。请重写整份文档,只输出包含完整正文块的 QingML;除 <title> 和 h1-h6 标题外,至少包含一个承载正文内容的顶层块。'
 const EMPTY_DRAFT_ERROR = '侧模型修正后仍只返回标题,缺少正文块,未提交文稿。'
 const SOURCE_SYNTAX_LEAK_ERROR = '侧模型修正后仍在正文中使用 Markdown/GFM 脚注源语法,未提交文稿。'
@@ -1087,7 +1088,8 @@ async function prepareEditOps(
   ops: ExternalEditProposalOp[],
 ): Promise<ExternalEditProposalOp[]> {
   const lineOps = ops.flatMap((op, index) => op.kind === 'insertAfterLine' ? [{ op, index }] : [])
-  if (lineOps.length === 0) return ops
+  const strReplaceOps = ops.flatMap((op, index) => op.kind === 'strReplace' ? [{ op, index }] : [])
+  if (lineOps.length === 0 && strReplaceOps.length === 0) return ops
 
   for (const { index } of lineOps) {
     if (ops.slice(0, index).some((op) => LINE_SHIFTING_BLOCK_OPS.has(op.kind))) {
@@ -1096,6 +1098,9 @@ async function prepareEditOps(
   }
 
   const pmDoc = await readPmDoc(engine, engineSessionId)
+  assertStrReplaceTargets(pmDoc, strReplaceOps)
+  if (lineOps.length === 0) return ops
+
   const spans = pmToMarkdownWithLineMap(pmDoc).blocks
   for (const { op } of lineOps) {
     const span = spans.find((item) => op.line >= item.startLine && op.line <= item.endLine)
@@ -1111,6 +1116,63 @@ async function prepareEditOps(
     right.op.line - left.op.line || right.index - left.index)
   let lineIndex = 0
   return ops.map((op) => op.kind === 'insertAfterLine' ? descending[lineIndex++]!.op : op)
+}
+
+interface PmTextNodeLike {
+  type?: string
+  content?: PmTextNodeLike[]
+  text?: string
+}
+
+/** 与引擎 findLiteralMatches 同口径：文本节点跨 mark 拼接，hardBreak 投影为换行，块之间不串接。 */
+function pmTextBlocks(doc: PmDoc): string[] {
+  const blocks: string[] = []
+  const visit = (node: PmTextNodeLike): void => {
+    if (node.type === 'paragraph' || node.type === 'heading' || node.type === 'codeBlock' || node.type === 'penNote') {
+      blocks.push((node.content ?? []).map((child) => {
+        if (child.type === 'hardBreak') return '\n'
+        if (child.type === 'inlineMath' || child.type === 'footnoteReference') return PM_INLINE_ATOM_PLACEHOLDER
+        return child.type === 'text' && typeof child.text === 'string' ? child.text : ''
+      }).join(''))
+    }
+    for (const child of node.content ?? []) visit(child)
+  }
+  for (const node of doc.content as PmTextNodeLike[]) visit(node)
+  return blocks
+}
+
+function countLiteralMatches(blocks: readonly string[], find: string): number {
+  if (!find) return 0
+  let count = 0
+  for (const block of blocks) {
+    let index = block.indexOf(find)
+    while (index >= 0) {
+      count += 1
+      index = block.indexOf(find, index + find.length)
+    }
+  }
+  return count
+}
+
+function assertStrReplaceTargets(
+  doc: PmDoc,
+  ops: Array<{ op: Extract<ExternalEditProposalOp, { kind: 'strReplace' }>; index: number }>,
+): void {
+  if (ops.length === 0) return
+  const blocks = pmTextBlocks(doc)
+  for (const { op, index } of ops) {
+    let matches = countLiteralMatches(blocks, op.old)
+    if (matches === 0) {
+      const normalizedOld = normalizeStrReplaceText(op.old)
+      if (normalizedOld !== op.old) matches = countLiteralMatches(blocks, normalizedOld)
+    }
+    if (matches === 0) {
+      throw new Error(`第 ${index + 1} 个 strReplace 的 old 命中 0 处；请重新读取文稿，并改用当前正文中的精确文字。`)
+    }
+    if (matches >= 2 && op.nth === undefined) {
+      throw new Error(`第 ${index + 1} 个 strReplace 的 old 命中 ${matches} 处，未指定 nth；目标不唯一时先用原生 ask_user 让用户选。`)
+    }
+  }
 }
 
 async function proposeEditOpsWithPlainTextRetry(
