@@ -230,6 +230,9 @@ export function suggestionToBlockPatchInputs(
   suggestion: DocSuggestion,
   order?: number,
 ): BlockPatchInput[]
+export function mergeGranularListBlockPatchInputs(
+  inputs: readonly BlockPatchInput[],
+): BlockPatchInput[]
 export function derivePatchPresentation(
   doc: ViewDocumentSnapshot,
   patches: ReadonlyArray<PatchOverlayInput>,

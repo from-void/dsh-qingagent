@@ -4,6 +4,7 @@ import type {
 } from '../contracts.js'
 import {
   derivePatchPresentation,
+  mergeGranularListBlockPatchInputs,
   pmDocToViewDocumentSnapshot,
   suggestionToBlockPatchInputs,
   suggestionToPatchOverlay,
@@ -47,8 +48,11 @@ export function buildReviewPresentationModel(
     return overlay ? [overlay] : []
   })
   const overlayCoveredIds = new Set(overlayInputs.map((input) => input.id))
-  const blockPatchInputs = suggestions.flatMap((suggestion, order) =>
-    overlayCoveredIds.has(suggestion.id) ? [] : suggestionToBlockPatchInputs(suggestion, order))
+  // P74:同一父清单的多个项级 hunk 必须合并成一条输入,否则每条 replace 输入
+  // 各自渲染整份清单,纸面把同一份清单重复 N 遍(N=项级改动数)。
+  // 与青简客户端 useWorkspacePageController 的 blockPatchInputs 收集器保持一致。
+  const blockPatchInputs = mergeGranularListBlockPatchInputs(suggestions.flatMap((suggestion, order) =>
+    overlayCoveredIds.has(suggestion.id) ? [] : suggestionToBlockPatchInputs(suggestion, order)))
   const presentation = derivePatchPresentation(doc, overlayInputs, blockPatchInputs)
   const reviewingIds = new Set(
     suggestions.filter((suggestion) => suggestion.status === 'reviewing').map((suggestion) => suggestion.id),
