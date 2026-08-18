@@ -37,6 +37,15 @@ DeepSeek Harness（DSH）是 DeepSeek 开源的「一切皆插件」Agent 框架
 - **一个会话多篇稿**：`qing_list_docs` / `qing_focus_doc` 切换右侧预览；
 - **「在青简中打开」**：深链拉起桌面客户端，接着改——同一本机库。
 
+### 实拍：在 DSH 里写一篇带图表、表格和公式的稿子
+
+| | |
+|---|---|
+| <img src="docs/assets/dsh-diagram.webp" alt="DSH 对话与宣纸面板里的 Mermaid 流程图"> | <img src="docs/assets/dsh-table-math.webp" alt="表格与行内、块级公式"> |
+| **左边聊，右边成稿**——一句话交代要求，Agent 调用青简工具落库，右侧宣纸面板同步长出正文；Mermaid 流程图带「可视化编辑 / 编辑 Mermaid」按钮，drawio 工程图双击即开 | **完整排版能力**——表格、行内公式与块级公式（KaTeX）、任务清单、代码块，与青简桌面端同一套渲染 |
+| <img src="docs/assets/dsh-review.webp" alt="审阅态逐条裁决"> | <img src="docs/assets/dsh-onboarding.webp" alt="未连接青简时的引导卡"> |
+| **审阅态逐条裁决**——顶栏显示「审阅中 · N 处」，正文标出增删，底部工具条上一处 / 下一处 / 提交 / 放弃全部 | **三态引导卡**——未装、已装未启动、握手失败各给对应指引；青简起来后自动恢复，不用重启 DSH |
+
 ---
 
 ## 与青简主仓的关系

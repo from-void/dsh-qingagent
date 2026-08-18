@@ -37,6 +37,15 @@ Describe what you want in the conversation, and the agent drafts, edits and subm
 - **Several drafts per session**: `qing_list_docs` / `qing_focus_doc` switch the preview on the right;
 - **"Open in qingagent"**: a deep link launches the desktop client so you can keep editing — same local library.
 
+### In action: writing a piece with diagrams, tables and formulas inside DSH
+
+| | |
+|---|---|
+| <img src="docs/assets/dsh-diagram.webp" alt="A Mermaid flowchart in the paper panel next to the DSH conversation"> | <img src="docs/assets/dsh-table-math.webp" alt="Tables with inline and block formulas"> |
+| **Chat on the left, manuscript on the right** — state the requirement once and the agent writes through the qingagent engine while the paper panel fills in; Mermaid diagrams carry "visual edit / edit Mermaid" buttons and drawio drawings open on double-click | **Full typesetting** — tables, inline and block math (KaTeX), task lists and code blocks, rendered exactly as in the qingagent desktop app |
+| <img src="docs/assets/dsh-review.webp" alt="Per-change verdicts in review mode"> | <img src="docs/assets/dsh-onboarding.webp" alt="Onboarding card when qingagent is not connected"> |
+| **Per-change verdicts** — the header shows "reviewing · N changes", additions and deletions are marked in the text, and the bottom bar offers previous / next / commit / discard all | **Three-state onboarding** — not installed, installed but not running, or handshake failed, each with the right guidance; once qingagent is up the plugin recovers without restarting DSH |
+
 ---
 
 ## Relationship with the qingagent repo
