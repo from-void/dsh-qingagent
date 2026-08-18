@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/logo.svg" alt="青简 QingAgent" width="112">
+
 # dsh-qingagent
 
 **在 DeepSeek Harness 里使用青简**

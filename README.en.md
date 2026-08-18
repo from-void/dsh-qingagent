@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/logo.svg" alt="qingagent" width="112">
+
 # dsh-qingagent
 
 **qingagent inside DeepSeek Harness**
