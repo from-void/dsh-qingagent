@@ -4602,6 +4602,3164 @@
     padding-left: 48px !important;
   }
 }
+/* source: packages/ui-kit/src/tokens.css:4-48 (component portals) */
+[data-drawio-editor-host="true"],
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer, .graph-diagram-pan-tip) {
+  /* 中性色板:暖墨纸系(原 slate-blue 冷色 base 已废弃,全站统一暖化)。
+   * 暖值与 workspace-ink-skin 的逐容器暖化保持一致(墨 #2f2a22 / 金棕 mark #a8823f)。 */
+  --bg-window: #e7ddc9;
+  --bg-canvas: #faf6ec;
+  --bg-paper-deep: #efe7d6;
+  --bg-subtle: rgba(120, 90, 50, 0.07);
+  --bg-panel: rgba(120, 90, 50, 0.05);
+  --bg-hover: rgba(120, 90, 50, 0.1);
+  --line-1: rgba(120, 90, 50, 0.16);
+  --line-2: rgba(120, 90, 50, 0.28);
+  --line-3: rgba(120, 90, 50, 0.42);
+  --line-ink: #2f2a22;
+  --ink-1: #2f2a22;
+  --ink-2: #5c5346;
+  --ink-3: #8a7f6e;
+  --ink-4: #b3a791;
+  --ink-cool: #8a7f6e;
+  --ink-on-dark: #ece3d0;
+  --mark: #a8823f;
+  --mark-soft: rgba(168, 130, 63, 0.14);
+  --diff-ins-bg: #e6ecd7;
+  --diff-ins-ink: #3a4e1d;
+  --diff-ins-bd: #c2cfa4;
+  --diff-del-bg: #f1dfd7;
+  --diff-del-ink: #6b2d1a;
+  --diff-del-bd: #d7b6a4;
+  --sel-bg: #f1e4a8;
+  --ink-surface: #1a1410;
+  --ink-surface-2: #221c15;
+  --shadow-1: 0 1px 2px rgba(50, 38, 18, 0.06);
+  --shadow-2: 0 6px 20px rgba(50, 38, 18, 0.1), 0 1px 3px rgba(50, 38, 18, 0.06);
+  --shadow-3: 0 24px 60px rgba(50, 38, 18, 0.2), 0 4px 12px rgba(50, 38, 18, 0.08);
+  --font-display: "EB Garamond", "Newsreader", "Source Serif Pro", "Charter", Georgia, serif;
+  --font-sans: "Noto Sans SC", "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
+    "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --font-zh-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun",
+    "宋体", serif;
+  --r-sm: 0;
+  --r: 0;
+  --r-lg: 0;
+  --r-pill: 999px;
+  --z-popover: 10020;
+}
+/* source: apps/web/src/pages/workspace/components/MediaBlockToolbar.css:1-64 */
+[data-qingagent-doc-panel] .pm-image-toolbar,
+[data-drawio-editor-host="true"] .pm-image-toolbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 4px;
+  border: 1px solid rgba(55, 45, 32, 0.12);
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 6px 22px rgba(55, 45, 32, 0.14);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+[data-qingagent-doc-panel] .pm-image-chrome,
+[data-drawio-editor-host="true"] .pm-image-chrome,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-chrome {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+[data-qingagent-doc-panel] .pm-image-tool,
+[data-drawio-editor-host="true"] .pm-image-tool,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-tool {
+  min-width: 26px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-2, #4a4034);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+[data-qingagent-doc-panel] .pm-image-tool:hover,
+[data-drawio-editor-host="true"] .pm-image-tool:hover,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-tool:hover {
+  background: var(--bg-hover);
+}
+
+[data-qingagent-doc-panel] .pm-image-tool.is-active,
+[data-drawio-editor-host="true"] .pm-image-tool.is-active,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-tool.is-active {
+  border-color: rgba(168, 130, 63, 0.38);
+  background: var(--mark-soft);
+  color: var(--mark, #8f6d30);
+}
+
+[data-qingagent-doc-panel] .pm-image-tool--wide,
+[data-drawio-editor-host="true"] .pm-image-tool--wide,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-tool--wide {
+  min-width: 58px;
+}
+
+[data-qingagent-doc-panel] .pm-image-tool--icon,
+[data-drawio-editor-host="true"] .pm-image-tool--icon,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-tool--icon {
+  display: inline-grid;
+  width: 26px;
+  min-width: 26px;
+  padding: 0;
+  place-items: center;
+}
+
+[data-qingagent-doc-panel] .pm-image-tool-icon,
+[data-drawio-editor-host="true"] .pm-image-tool-icon,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-tool-icon {
+  display: block;
+  width: 15px;
+  height: 15px;
+  color: currentColor;
+}
+
+/* source: apps/web/src/pages/workspace/components/ImageView.css:1-128 */
+[data-qingagent-doc-panel] .pm-image,
+[data-drawio-editor-host="true"] .pm-image,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image,
+[data-qingagent-doc-panel] .pm-image-readonly,
+[data-drawio-editor-host="true"] .pm-image-readonly,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-readonly {
+  position: relative;
+}
+
+[data-qingagent-doc-panel] .pm-image.is-selected .pm-image-frame,
+[data-drawio-editor-host="true"] .pm-image.is-selected .pm-image-frame,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image.is-selected .pm-image-frame {
+  outline: 2px solid var(--mark);
+  outline-offset: 2px;
+}
+
+[data-qingagent-doc-panel] .pm-image-frame,
+[data-drawio-editor-host="true"] .pm-image-frame,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-frame {
+  position: relative;
+}
+
+[data-qingagent-doc-panel] .pm-image-media,
+[data-drawio-editor-host="true"] .pm-image-media,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-media {
+  position: relative;
+  max-width: 100%;
+  line-height: 0;
+}
+
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .wf-doc .pm-image-media img,
+[data-drawio-editor-host="true"] #view-workspace .wf-doc .pm-image-media img,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) #view-workspace .wf-doc .pm-image-media img,
+[data-qingagent-doc-panel] .pm-image-media img,
+[data-drawio-editor-host="true"] .pm-image-media img,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-media img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0;
+  border-radius: var(--r-sm, 6px);
+}
+
+[data-qingagent-doc-panel] .pm-image-caption,
+[data-drawio-editor-host="true"] .pm-image-caption,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-caption {
+  margin-top: 6px;
+  color: var(--ink-3, #777);
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+[data-qingagent-doc-panel] .pm-image:hover .pm-image-toolbar,
+[data-drawio-editor-host="true"] .pm-image:hover .pm-image-toolbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image:hover .pm-image-toolbar,
+[data-qingagent-doc-panel] .pm-image.is-selected .pm-image-toolbar,
+[data-drawio-editor-host="true"] .pm-image.is-selected .pm-image-toolbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image.is-selected .pm-image-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+[data-qingagent-doc-panel] .pm-image-resize-handle,
+[data-drawio-editor-host="true"] .pm-image-resize-handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-resize-handle {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  z-index: 2;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--mark);
+  box-shadow: 0 2px 8px rgba(55, 45, 32, 0.28);
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+[data-qingagent-doc-panel] .pm-image:hover .pm-image-resize-handle,
+[data-drawio-editor-host="true"] .pm-image:hover .pm-image-resize-handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image:hover .pm-image-resize-handle,
+[data-qingagent-doc-panel] .pm-image.is-selected .pm-image-resize-handle,
+[data-drawio-editor-host="true"] .pm-image.is-selected .pm-image-resize-handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image.is-selected .pm-image-resize-handle {
+  opacity: 1;
+}
+
+[data-qingagent-doc-panel] .pm-image-fullscreen-btn,
+[data-drawio-editor-host="true"] .pm-image-fullscreen-btn,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-fullscreen-btn {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(55, 45, 32, 0.14);
+  border-radius:0;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink-2, #4a4034);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+[data-qingagent-doc-panel] .pm-image-readonly:hover .pm-image-fullscreen-btn,
+[data-drawio-editor-host="true"] .pm-image-readonly:hover .pm-image-fullscreen-btn,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-readonly:hover .pm-image-fullscreen-btn {
+  opacity: 1;
+}
+
+[data-qingagent-doc-panel] .pm-image-upload-overlay,
+[data-drawio-editor-host="true"] .pm-image-upload-overlay,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-upload-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm, 6px);
+  background: rgba(246, 241, 231, 0.78);
+  color: var(--ink-2, #4a4034);
+  font-size: 12px;
+  line-height: 1;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+}
+
+[data-qingagent-doc-panel] .pm-image-upload-overlay.is-error,
+[data-drawio-editor-host="true"] .pm-image-upload-overlay.is-error,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-upload-overlay.is-error {
+  background: rgba(253, 232, 226, 0.82);
+  color: #9f3d2e;
+}
+
+[data-qingagent-doc-panel] .pm-image-upload-spinner,
+[data-drawio-editor-host="true"] .pm-image-upload-spinner,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-upload-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(74, 64, 52, 0.22);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: pm-image-upload-spin 0.9s linear infinite;
+}
+
+[data-qingagent-doc-panel] .pm-image-upload-overlay.is-error .pm-image-upload-spinner,
+[data-drawio-editor-host="true"] .pm-image-upload-overlay.is-error .pm-image-upload-spinner,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-image-upload-overlay.is-error .pm-image-upload-spinner {
+  display: none;
+}
+
+@keyframes pm-image-upload-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* source: apps/web/src/pages/workspace/components/MediaZoomFullscreen.css:1-130 */
+[data-qingagent-doc-panel] .media-zoom-fullscreen,
+[data-drawio-editor-host="true"] .media-zoom-fullscreen,
+body:has([data-qingagent-doc-panel]) > .media-zoom-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  background: rgba(20, 18, 16, 0.76);
+  backdrop-filter: blur(2px);
+}
+
+[data-qingagent-doc-panel] .media-zoom-toolbar,
+[data-drawio-editor-host="true"] .media-zoom-toolbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-toolbar {
+  position: fixed;
+  top: 18px;
+  right: 22px;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+[data-qingagent-doc-panel] .media-zoom-btn,
+[data-drawio-editor-host="true"] .media-zoom-btn,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-btn {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius:0;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+[data-qingagent-doc-panel] .media-zoom-btn:hover,
+[data-drawio-editor-host="true"] .media-zoom-btn:hover,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-btn:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+[data-qingagent-doc-panel] .media-zoom-btn:focus-visible,
+[data-drawio-editor-host="true"] .media-zoom-btn:focus-visible,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-btn:focus-visible { outline: 1px solid var(--mark); outline-offset: 2px; }
+[data-qingagent-doc-panel] .media-zoom-btn--close,
+[data-drawio-editor-host="true"] .media-zoom-btn--close,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-btn--close { display:flex;align-items:center;justify-content:center;width:34px;padding:0; }
+[data-qingagent-doc-panel] .media-zoom-btn--close svg,
+[data-drawio-editor-host="true"] .media-zoom-btn--close svg,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-btn--close svg { width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round; }
+
+[data-qingagent-doc-panel] .media-zoom-btn--text,
+[data-drawio-editor-host="true"] .media-zoom-btn--text,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-btn--text {
+  min-width: 48px;
+  font-size: 13px;
+}
+
+[data-qingagent-doc-panel] .media-zoom-viewport,
+[data-drawio-editor-host="true"] .media-zoom-viewport,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: default;
+  touch-action: none;
+}
+
+[data-qingagent-doc-panel] .media-zoom-viewport.is-panning,
+[data-drawio-editor-host="true"] .media-zoom-viewport.is-panning,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-viewport.is-panning,
+[data-qingagent-doc-panel] .media-zoom-viewport.is-panning .media-zoom-content,
+[data-drawio-editor-host="true"] .media-zoom-viewport.is-panning .media-zoom-content,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-viewport.is-panning .media-zoom-content {
+  cursor: grabbing;
+}
+
+[data-qingagent-doc-panel] .media-zoom-content,
+[data-drawio-editor-host="true"] .media-zoom-content,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  width: min(90vw, 1100px);
+  max-width: 96vw;
+  padding: 24px;
+  border-radius:0;
+  /* 全屏预览所见即所得:用文档纸米黄 #efe7d6 作底,等于图嵌进正文后的真实观感 */
+  background: var(--bg-paper-deep);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
+  cursor: grab;
+  /* 不在这里常驻 will-change:transform —— 那会把内容常驻合成层、把矢量 SVG 栅格化,
+   * 默认(scale=1)全屏看图表就发糊(用户反馈"全屏甘特图还是有点模糊")。
+   * 改为仅在拖拽平移时由组件内联挂 will-change,静止/缩放后保持矢量清晰。 */
+}
+
+[data-qingagent-doc-panel] .media-zoom-content svg,
+[data-drawio-editor-host="true"] .media-zoom-content svg,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-content svg {
+  display: block;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+[data-qingagent-doc-panel] .media-zoom-content img,
+[data-drawio-editor-host="true"] .media-zoom-content img,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-content img {
+  display: block;
+  max-width: min(96vw, 1200px);
+  max-height: 88vh;
+  width: auto;
+  height: auto;
+  margin: 0;
+  border-radius:0;
+}
+
+[data-qingagent-doc-panel] .media-zoom-content--image,
+[data-drawio-editor-host="true"] .media-zoom-content--image,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-content--image {
+  width: auto;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* SVG 配图全屏:SVG 的 <img> 只有 viewBox 没固有宽高,width:auto 会塌成 0(全屏空白)——
+   这里给【显式宽】+ 文档纸米黄底(所见即所得,等于嵌进正文的观感)。 */
+[data-qingagent-doc-panel] .media-zoom-content--svg,
+[data-drawio-editor-host="true"] .media-zoom-content--svg,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-content--svg {
+  width: min(90vw, 1000px);
+  padding: 24px;
+  background: var(--bg-paper-deep);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
+}
+[data-qingagent-doc-panel] .media-zoom-content--svg img,
+[data-drawio-editor-host="true"] .media-zoom-content--svg img,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-content--svg img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: 86vh;
+  margin: 0;
+  border-radius: 0;
+}
+[data-qingagent-doc-panel] .media-zoom-content--ask-preview,
+[data-drawio-editor-host="true"] .media-zoom-content--ask-preview,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-content--ask-preview {
+  width: min(92vw, 1280px);
+  max-width: none;
+  max-height: none;
+  min-height: min(82vh, 820px);
+  padding: clamp(28px, 4vw, 58px);
+  overflow: visible;
+}
+[data-qingagent-doc-panel] .media-zoom-content--ask-preview .auq-preview-doc--fullscreen,
+[data-drawio-editor-host="true"] .media-zoom-content--ask-preview .auq-preview-doc--fullscreen,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-content--ask-preview .auq-preview-doc--fullscreen { min-height:70vh;font-size:15px;line-height:1.8; }
+[data-qingagent-doc-panel] .media-zoom-content--ask-preview .auq-preview-fullscreen,
+[data-drawio-editor-host="true"] .media-zoom-content--ask-preview .auq-preview-fullscreen,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-content--ask-preview .auq-preview-fullscreen { display:none; }
+[data-qingagent-doc-panel] .media-zoom-content--ask-preview .auq-preview-diagram,
+[data-drawio-editor-host="true"] .media-zoom-content--ask-preview .auq-preview-diagram,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-content--ask-preview .auq-preview-diagram { display:block;width:100%;padding:0;border:0;background:transparent;color:inherit;text-align:inherit; }
+[data-qingagent-doc-panel] .media-zoom-content--ask-preview .auq-preview-diagram .pm-diagram-view--readonly,
+[data-drawio-editor-host="true"] .media-zoom-content--ask-preview .auq-preview-diagram .pm-diagram-view--readonly,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-content--ask-preview .auq-preview-diagram .pm-diagram-view--readonly,
+[data-qingagent-doc-panel] .media-zoom-content--ask-preview .auq-preview-diagram .pm-diagram-svg,
+[data-drawio-editor-host="true"] .media-zoom-content--ask-preview .auq-preview-diagram .pm-diagram-svg,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-content--ask-preview .auq-preview-diagram .pm-diagram-svg,
+[data-qingagent-doc-panel] .media-zoom-content--ask-preview .auq-preview-diagram .pm-diagram-svg-inner,
+[data-drawio-editor-host="true"] .media-zoom-content--ask-preview .auq-preview-diagram .pm-diagram-svg-inner,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-content--ask-preview .auq-preview-diagram .pm-diagram-svg-inner { width:100%;min-height:min(52vh,620px);height:auto; }
+[data-qingagent-doc-panel] .media-zoom-content--ask-preview .auq-preview-diagram svg,
+[data-drawio-editor-host="true"] .media-zoom-content--ask-preview .auq-preview-diagram svg,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .media-zoom-content--ask-preview .auq-preview-diagram svg { width:100% !important;max-width:none !important;height:auto !important; }
+
+/* source: apps/web/src/pages/workspace/components/DiagramView.css:1-379 */
+/* 图表块(diagram / mermaid)样式 */
+[data-qingagent-doc-panel] .pm-diagram,
+[data-drawio-editor-host="true"] .pm-diagram,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram {
+  margin: 14px 0;
+  border-radius:0;
+}
+/* 整块对齐:仅当图表宽度小于栏宽(用户拖窄/设了 width)时可见效果;满栏宽时三种一致。
+   把 .pm-diagram-view 在块内左/中/右摆放(margin auto)。 */
+[data-qingagent-doc-panel] .pm-diagram[data-align="left"] .pm-diagram-view,
+[data-drawio-editor-host="true"] .pm-diagram[data-align="left"] .pm-diagram-view,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram[data-align="left"] .pm-diagram-view {
+  margin-right: auto;
+  margin-left: 0;
+}
+[data-qingagent-doc-panel] .pm-diagram[data-align="center"] .pm-diagram-view,
+[data-drawio-editor-host="true"] .pm-diagram[data-align="center"] .pm-diagram-view,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram[data-align="center"] .pm-diagram-view {
+  margin-left: auto;
+  margin-right: auto;
+}
+[data-qingagent-doc-panel] .pm-diagram[data-align="right"] .pm-diagram-view,
+[data-drawio-editor-host="true"] .pm-diagram[data-align="right"] .pm-diagram-view,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram[data-align="right"] .pm-diagram-view {
+  margin-left: auto;
+  margin-right: 0;
+}
+/* 选中描边落在内画布上(而非整块):宽度被拖窄后描边仍贴合实际尺寸,不会留全栏宽的空框。
+   颜色统一成图表框的棕色(rgb(176,138,62)),与画布边框/圆点句柄一致,不再用朱红。 */
+[data-qingagent-doc-panel] .pm-diagram.is-selected .pm-diagram-view,
+[data-drawio-editor-host="true"] .pm-diagram.is-selected .pm-diagram-view,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram.is-selected .pm-diagram-view {
+  outline: 2px solid rgba(176, 138, 62, 0.95);
+  outline-offset: 0;
+}
+[data-qingagent-doc-panel] .pm-diagram-view,
+[data-drawio-editor-host="true"] .pm-diagram-view,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-view {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 内部画布铺满,不留内边框/留白(用户反馈"边框没必要")。 */
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius:0;
+  /* 内容由内层容器(.graph-diagram-canvas / .pm-diagram-svg)各自 overflow:hidden 裁剪;
+     这里放开溢出,好让右下角圆点句柄能"骑"在边框线上(用户要求落在边框上)而不被裁掉。 */
+  overflow: visible;
+  box-sizing: border-box;
+  /* 默认尺寸:占满栏宽 + 一个合理高度;内层画布 height:100% 跟随,拖高时不再被卡住留空带。
+     内联 style(用户拖拽落进 attrs 的 width/height)会覆盖这两条默认值。 */
+  width: 100%;
+  max-width: 100%;
+  height: min(56vh, 520px);
+  min-height: 160px;
+}
+[data-qingagent-doc-panel] .pm-diagram-view--error,
+[data-drawio-editor-host="true"] .pm-diagram-view--error,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-view--error {
+  height: auto !important;
+  min-height: 0;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+/* 圆点拖拽句柄:替代原生 resize:vertical 的双斜线("两个拖拽点"),骑在图表块右下角边框线上,
+   同时调宽+高;悬停/选中图表块时显现。圆心对齐边框角(right/bottom 各 -8px,圆点 16px → 居中压线),
+   用户要求"落在边框上"。颜色统一成图表框棕色 rgb(176,138,62),不再朱红。 */
+[data-qingagent-doc-panel] .pm-diagram-resize-handle,
+[data-drawio-editor-host="true"] .pm-diagram-resize-handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-resize-handle {
+  position: absolute;
+  right: -8px;
+  bottom: -8px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgb(176, 138, 62);
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 4px rgba(47, 42, 34, 0.28);
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  z-index: 3;
+  touch-action: none;
+}
+[data-qingagent-doc-panel] .pm-diagram:hover .pm-diagram-resize-handle,
+[data-drawio-editor-host="true"] .pm-diagram:hover .pm-diagram-resize-handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram:hover .pm-diagram-resize-handle,
+[data-qingagent-doc-panel] .pm-diagram.is-selected .pm-diagram-resize-handle,
+[data-drawio-editor-host="true"] .pm-diagram.is-selected .pm-diagram-resize-handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram.is-selected .pm-diagram-resize-handle,
+[data-qingagent-doc-panel] .pm-diagram-view:focus-within .pm-diagram-resize-handle,
+[data-drawio-editor-host="true"] .pm-diagram-view:focus-within .pm-diagram-resize-handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-view:focus-within .pm-diagram-resize-handle {
+  opacity: 0.9;
+}
+[data-qingagent-doc-panel] .pm-diagram-resize-handle:hover,
+[data-drawio-editor-host="true"] .pm-diagram-resize-handle:hover,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-resize-handle:hover {
+  opacity: 1;
+}
+[data-qingagent-doc-panel] .pm-diagram-svg,
+[data-drawio-editor-host="true"] .pm-diagram-svg,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-svg {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  overflow: hidden; /* 放大平移时裁掉溢出,不撑破图表块 */
+}
+/* 就地缩放/平移的变换层(双指 pinch / ctrl+滚轮 驱动,见 MermaidPreview.tsx) */
+[data-qingagent-doc-panel] .pm-diagram-svg-inner,
+[data-drawio-editor-host="true"] .pm-diagram-svg-inner,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-svg-inner {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* will-change 不在此常驻:常驻会把 SVG 栅格化致文字发糊。仅缩放态由内联 style 临时加(见 MermaidPreview)。 */
+}
+/* 在容器内"等比铺满且绝不溢出/变形":svg 自带 viewBox + preserveAspectRatio(默认 meet),
+   给 100%×100% 盒子即按比例缩放居中适配——拖宽拖高都不会把饼图/时序图撑变形或溢出边框
+   (此前 width:100%+height:auto+max-height:100% 会在限高时强行压宽 → 椭圆/溢出,用户反馈"饼图变形")。 */
+[data-qingagent-doc-panel] .pm-diagram-svg svg,
+[data-drawio-editor-host="true"] .pm-diagram-svg svg,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-svg svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  display: block;
+}
+/* 嵌在编辑器图表块里的只读 SVG 外壳:填满外层 .pm-diagram-view(而非自带 56vh 默认高),
+   否则外层放开 overflow 后内层按自身高把图顶出边框(用户反馈饼图溢出)。独立快照场景(无外层
+   .pm-diagram-view)不匹配此规则,仍用默认高。 */
+[data-qingagent-doc-panel] .pm-diagram-view .pm-diagram-view--readonly,
+[data-drawio-editor-host="true"] .pm-diagram-view .pm-diagram-view--readonly,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-view .pm-diagram-view--readonly {
+  height: 100%;
+  min-height: 0;
+}
+/* SVG 图表全屏查看(MediaZoomFullscreen 内):跟随卡片内容区,svg 等比铺满。 */
+[data-qingagent-doc-panel] .pm-diagram-zoom-svg,
+[data-drawio-editor-host="true"] .pm-diagram-zoom-svg,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-zoom-svg {
+  width: 100%;
+}
+[data-qingagent-doc-panel] .pm-diagram-zoom-svg svg,
+[data-drawio-editor-host="true"] .pm-diagram-zoom-svg svg,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-zoom-svg svg {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  display: block;
+}
+[data-qingagent-doc-panel] .pm-diagram-empty,
+[data-drawio-editor-host="true"] .pm-diagram-empty,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 160px;
+  color: var(--ink-3, #999);
+  font-size: 13px;
+  padding: 20px;
+}
+[data-qingagent-doc-panel] .pm-diagram-error,
+[data-drawio-editor-host="true"] .pm-diagram-error,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-error {
+  color: var(--danger, #b42318);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  width: 100%;
+  font-family: var(--font-mono);
+  /* 出错时也不许撑变形:限高可滚、限宽。 */
+  max-width: 100%;
+  max-height: 220px;
+  overflow: auto;
+}
+[data-qingagent-doc-panel] .pm-diagram-renderer-fallback,
+[data-drawio-editor-host="true"] .pm-diagram-renderer-fallback,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-renderer-fallback {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+[data-qingagent-doc-panel] .pm-diagram-visual-notice,
+[data-drawio-editor-host="true"] .pm-diagram-visual-notice,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-visual-notice {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 11;
+  max-width: min(520px, calc(100% - 20px));
+  padding: 7px 10px;
+  border: 1px solid var(--line-2, rgba(47, 42, 34, 0.18));
+  border-radius: 0;
+  background: var(--bg-canvas, #fffaf0);
+  color: var(--ink-2, #5c5346);
+  font: 12px/1.45 var(--font-zh-serif);
+  box-shadow: 0 4px 14px rgba(47, 42, 34, 0.08);
+  pointer-events: none;
+}
+/* 全屏编辑器内部按钮；外部预览工具栏统一复用图片块的 .pm-image-tool。 */
+[data-qingagent-doc-panel] .pm-diagram-tool,
+[data-drawio-editor-host="true"] .pm-diagram-tool,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-tool {
+  min-width: 26px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius:0;
+  background: transparent;
+  color: var(--ink-2, #4a4034);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
+}
+[data-qingagent-doc-panel] .pm-diagram-tool:hover:not(:disabled),
+[data-drawio-editor-host="true"] .pm-diagram-tool:hover:not(:disabled),
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-tool:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+[data-qingagent-doc-panel] .pm-diagram-tool:focus-visible,
+[data-drawio-editor-host="true"] .pm-diagram-tool:focus-visible,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-tool:focus-visible {
+  outline: 1px solid var(--mark, #8f6d30);
+  outline-offset: 1px;
+}
+[data-qingagent-doc-panel] .pm-diagram-tool:disabled,
+[data-drawio-editor-host="true"] .pm-diagram-tool:disabled,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-tool:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+[data-qingagent-doc-panel] .pm-diagram-tool.is-active,
+[data-drawio-editor-host="true"] .pm-diagram-tool.is-active,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-tool.is-active {
+  border-color: rgba(168, 130, 63, 0.38);
+  background: var(--mark-soft);
+  color: var(--mark, #8f6d30);
+}
+[data-qingagent-doc-panel] .pm-diagram-tool--icon,
+[data-drawio-editor-host="true"] .pm-diagram-tool--icon,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-tool--icon {
+  width: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+[data-qingagent-doc-panel] .pm-diagram-tool--wide,
+[data-drawio-editor-host="true"] .pm-diagram-tool--wide,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-tool--wide {
+  min-width: 58px;
+  gap: 2px;
+}
+[data-qingagent-doc-panel] .pm-diagram-tool-sep,
+[data-drawio-editor-host="true"] .pm-diagram-tool-sep,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-tool-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: rgba(55, 45, 32, 0.14);
+}
+/* SVG 图表外部工具栏只负责显隐，结构/视觉来自图片块共享组件。 */
+[data-qingagent-doc-panel] .pm-diagram-svg-viewbar,
+[data-drawio-editor-host="true"] .pm-diagram-svg-viewbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-svg-viewbar {
+  opacity: 0;
+  pointer-events: none;
+}
+[data-qingagent-doc-panel] .pm-diagram:hover .pm-diagram-svg-viewbar,
+[data-drawio-editor-host="true"] .pm-diagram:hover .pm-diagram-svg-viewbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram:hover .pm-diagram-svg-viewbar,
+[data-qingagent-doc-panel] .pm-diagram.is-selected .pm-diagram-svg-viewbar,
+[data-drawio-editor-host="true"] .pm-diagram.is-selected .pm-diagram-svg-viewbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram.is-selected .pm-diagram-svg-viewbar,
+[data-qingagent-doc-panel] .pm-diagram-view:hover .pm-diagram-svg-viewbar,
+[data-drawio-editor-host="true"] .pm-diagram-view:hover .pm-diagram-svg-viewbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-view:hover .pm-diagram-svg-viewbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 文字编辑按钮(可视化编辑 / 编辑 Mermaid)移到左下角(用户反馈:右上角让位给统一工具栏)。 */
+[data-qingagent-doc-panel] .pm-diagram-view-actions,
+[data-drawio-editor-host="true"] .pm-diagram-view-actions,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-view-actions {
+  position: absolute;
+  z-index: 12;
+  bottom: 10px;
+  left: 10px;
+  display: flex;
+  gap: 8px;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease,
+    visibility 0s linear 0.16s;
+}
+[data-qingagent-doc-panel] .pm-diagram-view:hover .pm-diagram-view-actions,
+[data-drawio-editor-host="true"] .pm-diagram-view:hover .pm-diagram-view-actions,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-view:hover .pm-diagram-view-actions,
+[data-qingagent-doc-panel] .pm-diagram.is-selected .pm-diagram-view-actions,
+[data-drawio-editor-host="true"] .pm-diagram.is-selected .pm-diagram-view-actions,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram.is-selected .pm-diagram-view-actions,
+[data-qingagent-doc-panel] .pm-diagram-view:focus-within .pm-diagram-view-actions,
+[data-drawio-editor-host="true"] .pm-diagram-view:focus-within .pm-diagram-view-actions,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-view:focus-within .pm-diagram-view-actions {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+[data-qingagent-doc-panel] .pm-diagram-view-btn,
+[data-drawio-editor-host="true"] .pm-diagram-view-btn,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-view-btn {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(47, 42, 34, 0.18);
+  border-radius:0;
+  background: rgba(143, 109, 48, 0.96);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(47, 42, 34, 0.08);
+}
+[data-qingagent-doc-panel] .pm-diagram-view-btn:hover,
+[data-drawio-editor-host="true"] .pm-diagram-view-btn:hover,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-view-btn:hover {
+  background: #755821;
+}
+[data-qingagent-doc-panel] .pm-diagram-view-btn:disabled,
+[data-drawio-editor-host="true"] .pm-diagram-view-btn:disabled,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-view-btn:disabled {
+  opacity: 0.58;
+  cursor: wait;
+}
+[data-qingagent-doc-panel] .pm-diagram-view-btn.is-unavailable:disabled,
+[data-drawio-editor-host="true"] .pm-diagram-view-btn.is-unavailable:disabled,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-view-btn.is-unavailable:disabled {
+  cursor: not-allowed;
+}
+[data-qingagent-doc-panel] .pm-diagram-view-btn--ghost,
+[data-drawio-editor-host="true"] .pm-diagram-view-btn--ghost,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-view-btn--ghost {
+  background: var(--bg-canvas, #fffaf0);
+  color: var(--ink-1, #2f2a22);
+}
+[data-qingagent-doc-panel] .pm-diagram-view-btn--ghost:hover,
+[data-drawio-editor-host="true"] .pm-diagram-view-btn--ghost:hover,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-view-btn--ghost:hover {
+  border-color: rgba(143, 109, 48, 0.72);
+  background: var(--bg-hover, #f3ecdd);
+  color: var(--ink-1, #2f2a22);
+}
+/* 全屏覆盖层(legacy,已不再由图表使用) */
+[data-qingagent-doc-panel] .pm-diagram-fullscreen,
+[data-drawio-editor-host="true"] .pm-diagram-fullscreen,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: rgba(20, 18, 16, 0.72);
+  backdrop-filter: blur(2px);
+  cursor: zoom-out;
+}
+[data-qingagent-doc-panel] .pm-diagram-fullscreen-body,
+[data-drawio-editor-host="true"] .pm-diagram-fullscreen-body,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-fullscreen-body {
+  /* 定宽:svg 用 width:100% 才有参照(此前 width:auto 无参照 → svg 塌成 0 宽 → 全屏一片空白) */
+  width: min(90vw, 1100px);
+  max-width: 96vw;
+  max-height: 92vh;
+  overflow: auto;
+  background: #fff;
+  border-radius:0;
+  padding: 24px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
+  cursor: default;
+}
+[data-qingagent-doc-panel] .pm-diagram-fullscreen-body svg,
+[data-drawio-editor-host="true"] .pm-diagram-fullscreen-body svg,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-fullscreen-body svg {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  max-height: 84vh;
+  display: block;
+}
+[data-qingagent-doc-panel] .pm-diagram-fullscreen-close,
+[data-drawio-editor-host="true"] .pm-diagram-fullscreen-close,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-fullscreen-close {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius:0;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+}
+[data-qingagent-doc-panel] .pm-diagram-edit,
+[data-drawio-editor-host="true"] .pm-diagram-edit,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-edit {
+  border: 1px solid var(--qj-cinnabar, #9e2b25);
+  border-radius:0;
+  overflow: hidden;
+}
+[data-qingagent-doc-panel] .pm-diagram-preview,
+[data-drawio-editor-host="true"] .pm-diagram-preview,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-preview {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.015);
+  border-bottom: 1px dashed rgba(0, 0, 0, 0.1);
+  min-height: 60px;
+}
+[data-qingagent-doc-panel] .pm-diagram-source,
+[data-drawio-editor-host="true"] .pm-diagram-source,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-source {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  border: none;
+  outline: none;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-1, #222);
+  background: #fbfbfa;
+}
+[data-qingagent-doc-panel] .pm-diagram-actions,
+[data-drawio-editor-host="true"] .pm-diagram-actions,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f5f4f2;
+}
+[data-qingagent-doc-panel] .pm-diagram-btn,
+[data-drawio-editor-host="true"] .pm-diagram-btn,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-btn {
+  padding: 4px 14px;
+  font-size: 12px;
+  border-radius:0;
+  border: 1px solid var(--qj-cinnabar, #9e2b25);
+  background: var(--qj-cinnabar, #9e2b25);
+  color: #fff;
+  cursor: pointer;
+}
+[data-qingagent-doc-panel] .pm-diagram-btn:disabled,
+[data-drawio-editor-host="true"] .pm-diagram-btn:disabled,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-btn:disabled {
+  border-color: var(--line-2, rgba(47, 42, 34, 0.18));
+  background: var(--bg-paper-deep, #efe7d6);
+  color: var(--ink-3, #8c857a);
+  cursor: not-allowed;
+}
+[data-qingagent-doc-panel] .pm-diagram-btn--ghost,
+[data-drawio-editor-host="true"] .pm-diagram-btn--ghost,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-btn--ghost {
+  background: transparent;
+  color: var(--ink-2, #444);
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+/* source: apps/web/src/pages/workspace/components/DrawioEditorOverlay.css:1-106 */
+[data-qingagent-doc-panel] .drawio-editor-overlay,
+[data-drawio-editor-host="true"] .drawio-editor-overlay,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .drawio-editor-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483100;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-paper-deep);
+  color: var(--ink-1);
+  font-family: var(--font-zh-serif);
+  overscroll-behavior: contain;
+}
+
+[data-qingagent-doc-panel] .drawio-editor-overlay__topbar,
+[data-drawio-editor-host="true"] .drawio-editor-overlay__topbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .drawio-editor-overlay__topbar {
+  min-width: 0;
+}
+
+[data-qingagent-doc-panel] .drawio-editor-overlay__heading,
+[data-drawio-editor-host="true"] .drawio-editor-overlay__heading,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .drawio-editor-overlay__heading {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  gap: 12px;
+}
+
+[data-qingagent-doc-panel] .drawio-editor-overlay__heading strong,
+[data-drawio-editor-host="true"] .drawio-editor-overlay__heading strong,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .drawio-editor-overlay__heading strong {
+  flex: 0 0 auto;
+}
+
+[data-qingagent-doc-panel] .drawio-editor-overlay__heading span,
+[data-drawio-editor-host="true"] .drawio-editor-overlay__heading span,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .drawio-editor-overlay__heading span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-qingagent-doc-panel] .drawio-editor-overlay__heading span.is-error,
+[data-drawio-editor-host="true"] .drawio-editor-overlay__heading span.is-error,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .drawio-editor-overlay__heading span.is-error {
+  color: var(--mark);
+}
+
+[data-qingagent-doc-panel] .drawio-editor-overlay__stage,
+[data-drawio-editor-host="true"] .drawio-editor-overlay__stage,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .drawio-editor-overlay__stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--line-2);
+  background: var(--bg-paper-deep);
+}
+
+[data-qingagent-doc-panel] .drawio-editor-overlay__frame,
+[data-drawio-editor-host="true"] .drawio-editor-overlay__frame,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .drawio-editor-overlay__frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--bg-canvas);
+}
+
+[data-qingagent-doc-panel] .drawio-editor-overlay__frame.is-saving,
+[data-drawio-editor-host="true"] .drawio-editor-overlay__frame.is-saving,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .drawio-editor-overlay__frame.is-saving {
+  pointer-events: none;
+}
+
+[data-qingagent-doc-panel] .drawio-editor-overlay__boot,
+[data-drawio-editor-host="true"] .drawio-editor-overlay__boot,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .drawio-editor-overlay__boot {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--bg-paper-deep);
+  color: var(--ink-3);
+  font-size: 13px;
+  pointer-events: auto;
+}
+
+[data-qingagent-doc-panel] .drawio-editor-overlay__spinner,
+[data-drawio-editor-host="true"] .drawio-editor-overlay__spinner,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .drawio-editor-overlay__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--line-2);
+  border-top-color: var(--mark);
+  border-radius: 50%;
+  animation: drawio-editor-overlay-spin 0.8s linear infinite;
+}
+
+@keyframes drawio-editor-overlay-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 640px) {
+  [data-qingagent-doc-panel] .drawio-editor-overlay__topbar,
+[data-drawio-editor-host="true"] .drawio-editor-overlay__topbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .drawio-editor-overlay__topbar {
+    gap: 8px;
+  }
+
+  [data-qingagent-doc-panel] .drawio-editor-overlay,
+[data-drawio-editor-host="true"] .drawio-editor-overlay,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .drawio-editor-overlay {
+    padding: 10px;
+  }
+
+  [data-qingagent-doc-panel] .drawio-editor-overlay__heading,
+[data-drawio-editor-host="true"] .drawio-editor-overlay__heading,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .drawio-editor-overlay__heading {
+    display: grid;
+    gap: 1px;
+  }
+}
+
+/* source: apps/web/src/pages/workspace/components/diagramEditorChrome.css:1-96 */
+[data-qingagent-doc-panel] .diagram-editor-chrome,
+[data-drawio-editor-host="true"] .diagram-editor-chrome,
+body:has([data-qingagent-doc-panel]) > .diagram-editor-chrome {
+  background: var(--bg-paper-deep, #f6f1e7);
+  color: var(--ink-1);
+  font-family: var(--font-zh-serif);
+}
+
+[data-qingagent-doc-panel] .diagram-editor-chrome__topbar,
+[data-drawio-editor-host="true"] .diagram-editor-chrome__topbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .diagram-editor-chrome__topbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+  background: var(--bg-paper-deep, #f6f1e7);
+}
+
+[data-qingagent-doc-panel] .diagram-editor-chrome__title,
+[data-drawio-editor-host="true"] .diagram-editor-chrome__title,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .diagram-editor-chrome__title {
+  color: var(--ink-1);
+  font-family: var(--font-zh-serif);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+[data-qingagent-doc-panel] .diagram-editor-chrome__close,
+[data-drawio-editor-host="true"] .diagram-editor-chrome__close,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .diagram-editor-chrome__close {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--line-2);
+  border-radius: 0;
+  background: var(--bg-canvas);
+  color: var(--ink-2);
+  font: 400 18px/1 var(--font-zh-serif);
+  cursor: pointer;
+  transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
+}
+
+[data-qingagent-doc-panel] .diagram-editor-chrome__close:hover,
+[data-drawio-editor-host="true"] .diagram-editor-chrome__close:hover,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .diagram-editor-chrome__close:hover {
+  border-color: var(--line-3);
+  background: var(--bg-hover);
+  color: var(--ink-1);
+}
+
+[data-qingagent-doc-panel] .diagram-editor-chrome__close:focus-visible,
+[data-drawio-editor-host="true"] .diagram-editor-chrome__close:focus-visible,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .diagram-editor-chrome__close:focus-visible {
+  outline: 1px solid var(--mark);
+  outline-offset: 2px;
+}
+
+[data-qingagent-doc-panel] .diagram-editor-chrome__toolbar,
+[data-drawio-editor-host="true"] .diagram-editor-chrome__toolbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .diagram-editor-chrome__toolbar {
+  position: absolute;
+  z-index: 12;
+  bottom: 24px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid var(--line-2);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--bg-canvas) 94%, transparent);
+  box-shadow: 0 10px 28px rgba(47, 42, 34, 0.16);
+  transform: translateX(-50%);
+}
+
+[data-qingagent-doc-panel] .diagram-editor-chrome__toolbar .pm-diagram-tool,
+[data-drawio-editor-host="true"] .diagram-editor-chrome__toolbar .pm-diagram-tool,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .diagram-editor-chrome__toolbar .pm-diagram-tool {
+  width: auto;
+  min-width: 34px;
+  height: 30px;
+  padding: 0 10px;
+  gap: 6px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--font-zh-serif);
+}
+
+[data-qingagent-doc-panel] .diagram-editor-chrome__toolbar .pm-diagram-tool:hover:not(:disabled),
+[data-drawio-editor-host="true"] .diagram-editor-chrome__toolbar .pm-diagram-tool:hover:not(:disabled),
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .diagram-editor-chrome__toolbar .pm-diagram-tool:hover:not(:disabled) {
+  border-color: var(--line-2);
+  background: var(--mark-soft);
+  color: var(--ink-1);
+}
+
+[data-qingagent-doc-panel] .diagram-editor-chrome__toolbar .pm-diagram-tool.is-active,
+[data-drawio-editor-host="true"] .diagram-editor-chrome__toolbar .pm-diagram-tool.is-active,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .diagram-editor-chrome__toolbar .pm-diagram-tool.is-active {
+  border-color: var(--mark);
+  background: var(--mark-soft);
+  color: var(--mark);
+}
+
+@media (max-width: 640px) {
+  [data-qingagent-doc-panel] .diagram-editor-chrome__toolbar,
+[data-drawio-editor-host="true"] .diagram-editor-chrome__toolbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .diagram-editor-chrome__toolbar {
+    bottom: 16px;
+    max-width: calc(100vw - 32px);
+  }
+}
+
+/* source: apps/web/src/pages/workspace/components/diagram/graphDiagram.css:1-1441 */
+[data-qingagent-doc-panel] .graph-diagram,
+[data-drawio-editor-host="true"] .graph-diagram,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram,
+[data-qingagent-doc-panel] .graph-diagram-editor,
+[data-drawio-editor-host="true"] .graph-diagram-editor,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor,
+[data-qingagent-doc-panel] .graph-diagram-viewer,
+[data-drawio-editor-host="true"] .graph-diagram-viewer,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-viewer {
+  --graph-node-fill: #efe3cc;
+  --graph-node-stroke: #b08a3e;
+  --graph-line-color: #8d7447;
+  --graph-node-text: #2f2a22;
+  --graph-edge-text: #5c5346;
+  --graph-canvas-background: #fbf7ee;
+  --graph-edge-label-background: rgba(255, 250, 240, 0.88);
+  --graph-cluster-fill: #f3ecdd;
+  --graph-cluster-stroke: #cdbfa3;
+  /* 连线圆点与其命中盒统一悬在元素外侧的距离:不骑边框,也不与四角 resize 方块重叠。 */
+  --graph-handle-offset: 11px;
+  /* 命中盒边长必须 ≥ offset*2:命中盒以锚点为中心,只有铺满 offset 这段距离才能紧贴
+     节点边框。留空档的话鼠标从节点走向圆点途中会同时脱离两者,hover 当场丢失。 */
+  --graph-handle-hit: 22px;
+  /* 选中包围盒(以及挂在同一圈上的 resize 四角把手)相对元素边框外移的距离。 */
+  --graph-select-inset: 3px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram,
+[data-drawio-editor-host="true"] .graph-diagram,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram {
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  min-height: 260px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas,
+[data-drawio-editor-host="true"] .graph-diagram-canvas,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas {
+  position: relative;
+  /* 定高链从 .pm-diagram / .pm-diagram-view 一路都是 min-height 撑出来的 auto 高度,没有一层是定值 height,
+     故内层 .react-flow 用 height:100% 会解析成 0 → 节点被 overflow:hidden 裁掉、画布空白。
+     这里改用 flex 列容器,让 .react-flow 以 flex:1 填满画布当前高度(既覆盖只读 260px 场景,
+     也跟随编辑态用户拖拽出的动态高度),不再依赖不存在的定值高度链。 */
+  display: flex;
+  flex-direction: column;
+  min-height: 260px;
+  overflow: hidden;
+  border: 1px solid rgba(176, 138, 62, 0.26);
+  border-radius:0;
+  background: var(--graph-canvas-background);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas .react-flow,
+[data-drawio-editor-host="true"] .graph-diagram-canvas .react-flow,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas .react-flow {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--preview,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--preview,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--preview {
+  z-index: 0;
+  /* 高度交给外层 .pm-diagram-view(默认 min(56vh,520px),用户拖拽时被内联高度覆盖):
+     画布 100% 跟随,拖高不再卡在 520px 留出空白带。 */
+  height: 100%;
+  border: 0;
+}
+
+/* 内联图表块里:.graph-diagram 撑满 .pm-diagram-view,让 --preview 画布有可填满的高度链。 */
+[data-qingagent-doc-panel] .pm-diagram-view .graph-diagram,
+[data-drawio-editor-host="true"] .pm-diagram-view .graph-diagram,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram-view .graph-diagram {
+  height: 100%;
+}
+
+/* 外部工具栏结构/视觉复用图片块，只在图表作用域补显隐。 */
+[data-qingagent-doc-panel] .graph-diagram-viewbar.pm-image-toolbar,
+[data-drawio-editor-host="true"] .graph-diagram-viewbar.pm-image-toolbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-viewbar.pm-image-toolbar {
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas-tool-icon,
+[data-drawio-editor-host="true"] .graph-diagram-canvas-tool-icon,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas-tool-icon {
+  display: block;
+  width: 17px;
+  height: 17px;
+  color: currentColor;
+}
+[data-qingagent-doc-panel] .pm-diagram:hover .graph-diagram-viewbar.pm-image-toolbar,
+[data-drawio-editor-host="true"] .pm-diagram:hover .graph-diagram-viewbar.pm-image-toolbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram:hover .graph-diagram-viewbar.pm-image-toolbar,
+[data-qingagent-doc-panel] .pm-diagram.is-selected .graph-diagram-viewbar.pm-image-toolbar,
+[data-drawio-editor-host="true"] .pm-diagram.is-selected .graph-diagram-viewbar.pm-image-toolbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .pm-diagram.is-selected .graph-diagram-viewbar.pm-image-toolbar,
+[data-qingagent-doc-panel] .graph-diagram-canvas--preview:hover .graph-diagram-viewbar.pm-image-toolbar,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--preview:hover .graph-diagram-viewbar.pm-image-toolbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--preview:hover .graph-diagram-viewbar.pm-image-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 连线 hover 态:鼠标移到箭头/连线上时加深加粗,给出可交互反馈(用户反馈"箭头没有 hover 态")。
+   预览态连线默认 pointer-events:none(不可选),这里只为 hover 反馈放开命中,不影响点击空白选块。 */
+[data-qingagent-doc-panel] .graph-diagram-canvas--preview .react-flow__edge,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--preview .react-flow__edge,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--preview .react-flow__edge {
+  pointer-events: visiblestroke;
+}
+[data-qingagent-doc-panel] .graph-diagram .react-flow__edge:hover .react-flow__edge-path,
+[data-drawio-editor-host="true"] .graph-diagram .react-flow__edge:hover .react-flow__edge-path,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram .react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 2.4;
+  filter: brightness(0.82);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--preview .react-flow,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--preview .react-flow,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--preview .react-flow,
+[data-qingagent-doc-panel] .graph-diagram-canvas--preview .react-flow__renderer,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--preview .react-flow__renderer,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--preview .react-flow__renderer,
+[data-qingagent-doc-panel] .graph-diagram-canvas--preview .react-flow__pane,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--preview .react-flow__pane,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--preview .react-flow__pane {
+  z-index: 0;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--preview .react-flow__attribution,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--preview .react-flow__attribution,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--preview .react-flow__attribution {
+  display: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor {
+  flex: 1;
+  min-height: 0;
+  border-radius:0;
+  border-color: var(--line-2);
+  background: var(--graph-canvas-background);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor.is-drawing-subgraph,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor.is-drawing-subgraph,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor.is-drawing-subgraph,
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor.is-drawing-subgraph .react-flow__pane,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor.is-drawing-subgraph .react-flow__pane,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor.is-drawing-subgraph .react-flow__pane {
+  cursor: crosshair;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-subgraph-draft,
+[data-drawio-editor-host="true"] .graph-diagram-subgraph-draft,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-subgraph-draft {
+  position: absolute;
+  z-index: 20;
+  box-sizing: border-box;
+  min-width: 1px;
+  min-height: 1px;
+  border: 1.5px dashed var(--mark);
+  background: color-mix(in srgb, var(--mark) 7%, transparent);
+  pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(255, 250, 240, 0.64) inset;
+}
+
+[data-qingagent-doc-panel] .graph-diagram[data-diagram-type] .react-flow__node,
+[data-drawio-editor-host="true"] .graph-diagram[data-diagram-type] .react-flow__node,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram[data-diagram-type] .react-flow__node,
+[data-qingagent-doc-panel] .graph-diagram-editor .react-flow__node,
+[data-drawio-editor-host="true"] .graph-diagram-editor .react-flow__node,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .react-flow__node {
+  white-space: pre-line;
+  box-shadow: none;
+  transition: filter 0.14s ease;
+}
+
+[data-qingagent-doc-panel] .graph-diagram[data-diagram-type] .react-flow__node-graphNode,
+[data-drawio-editor-host="true"] .graph-diagram[data-diagram-type] .react-flow__node-graphNode,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram[data-diagram-type] .react-flow__node-graphNode,
+[data-qingagent-doc-panel] .graph-diagram-editor .react-flow__node-graphNode,
+[data-drawio-editor-host="true"] .graph-diagram-editor .react-flow__node-graphNode,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .react-flow__node-graphNode {
+  line-height: 1.45;
+}
+
+[data-qingagent-doc-panel] .graph-diagram[data-diagram-type] .react-flow__node-graphCluster,
+[data-drawio-editor-host="true"] .graph-diagram[data-diagram-type] .react-flow__node-graphCluster,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram[data-diagram-type] .react-flow__node-graphCluster,
+[data-qingagent-doc-panel] .graph-diagram-editor .react-flow__node-graphCluster,
+[data-drawio-editor-host="true"] .graph-diagram-editor .react-flow__node-graphCluster,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .react-flow__node-graphCluster {
+  pointer-events: none;
+  z-index: -1;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-editor .react-flow__node-graphCluster,
+[data-drawio-editor-host="true"] .graph-diagram-editor .react-flow__node-graphCluster,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .react-flow__node-graphCluster {
+  pointer-events: auto;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-cluster,
+[data-drawio-editor-host="true"] .graph-diagram-cluster,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-cluster {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  border: var(--graph-cluster-stroke-width, 1.5px) solid var(--graph-cluster-stroke);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--graph-cluster-fill) 72%, transparent);
+  color: var(--graph-cluster-text, var(--graph-node-text));
+  font-family: var(--font-zh-serif);
+  transition: border-color 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-cluster.is-empty,
+[data-drawio-editor-host="true"] .graph-diagram-cluster.is-empty,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-cluster.is-empty {
+  border-style: dashed;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-cluster__title,
+[data-drawio-editor-host="true"] .graph-diagram-cluster__title,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-cluster__title {
+  position: absolute;
+  top: 9px;
+  right: 13px;
+  left: 13px;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-cluster__empty-hint,
+[data-drawio-editor-host="true"] .graph-diagram-cluster__empty-hint,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-cluster__empty-hint {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  left: 12px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  pointer-events: none;
+  transform: translateY(-20%);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-editor .graph-diagram-cluster__title,
+[data-drawio-editor-host="true"] .graph-diagram-editor .graph-diagram-cluster__title,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .graph-diagram-cluster__title {
+  pointer-events: auto;
+  cursor: grab;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-editor .graph-diagram-cluster,
+[data-drawio-editor-host="true"] .graph-diagram-editor .graph-diagram-cluster,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .graph-diagram-cluster {
+  cursor: grab;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-editor .react-flow__node.dragging .graph-diagram-cluster__title,
+[data-drawio-editor-host="true"] .graph-diagram-editor .react-flow__node.dragging .graph-diagram-cluster__title,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .react-flow__node.dragging .graph-diagram-cluster__title {
+  cursor: grabbing;
+}
+
+/* 拖拽中"松手能进"的分区:边框点亮(黄棕强调色),与松手收编判定同源。 */
+[data-qingagent-doc-panel] .graph-diagram-cluster.is-drop-target,
+[data-drawio-editor-host="true"] .graph-diagram-cluster.is-drop-target,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-cluster.is-drop-target {
+  border-color: var(--mark);
+  border-style: solid;
+  background: color-mix(in srgb, var(--mark) 9%, var(--graph-cluster-fill));
+  box-shadow: 0 0 0 2px var(--mark-soft);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-cluster.is-selected,
+[data-drawio-editor-host="true"] .graph-diagram-cluster.is-selected,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-cluster.is-selected {
+  border-color: var(--mark);
+  background: color-mix(in srgb, var(--graph-cluster-fill) 82%, transparent);
+  box-shadow: 0 0 0 2px var(--mark-soft);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-cluster__title-input,
+[data-drawio-editor-host="true"] .graph-diagram-cluster__title-input,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-cluster__title-input {
+  box-sizing: border-box;
+  width: min(240px, 100%);
+  height: 26px;
+  padding: 2px 7px;
+  border: 1px solid var(--line-3);
+  border-radius: 0;
+  outline: none;
+  background: #fffaf0;
+  color: var(--graph-node-text);
+  font: 600 14px/1.4 var(--font-zh-serif);
+  text-align: center;
+  box-shadow: 0 0 0 3px var(--mark-soft);
+  pointer-events: auto;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-node-shell,
+[data-drawio-editor-host="true"] .graph-diagram-node-shell,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-node-shell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--graph-node-text);
+}
+
+/* 形状层必须显式 100%:svg 是替换元素,只写 inset:0 时浏览器按 viewBox 的固有宽高比定尺寸
+   (忽略 bottom/right 约束)——节点被非等比拉伸后,填充与边框只占外壳的一部分,文字掉在图形外。
+   写死 100% 才能让 preserveAspectRatio="none" 真正自由形变、与外壳始终重合。 */
+[data-qingagent-doc-panel] .graph-diagram-node-shape-svg,
+[data-drawio-editor-host="true"] .graph-diagram-node-shape-svg,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-node-shape-svg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-node-shape-fill,
+[data-drawio-editor-host="true"] .graph-diagram-node-shape-fill,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-node-shape-fill,
+[data-qingagent-doc-panel] .graph-diagram-node-shape-detail,
+[data-drawio-editor-host="true"] .graph-diagram-node-shape-detail,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-node-shape-detail {
+  transition: filter 0.14s ease, stroke 0.14s ease, stroke-width 0.14s ease;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-node-shape-fill,
+[data-drawio-editor-host="true"] .graph-diagram-node-shape-fill,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-node-shape-fill {
+  filter: drop-shadow(0 3px 10px rgba(77, 55, 26, 0.1));
+}
+
+[data-qingagent-doc-panel] .graph-diagram[data-diagram-type] .react-flow__node:hover .graph-diagram-node-shape-fill,
+[data-drawio-editor-host="true"] .graph-diagram[data-diagram-type] .react-flow__node:hover .graph-diagram-node-shape-fill,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram[data-diagram-type] .react-flow__node:hover .graph-diagram-node-shape-fill,
+[data-qingagent-doc-panel] .graph-diagram-editor .react-flow__node:hover .graph-diagram-node-shape-fill,
+[data-drawio-editor-host="true"] .graph-diagram-editor .react-flow__node:hover .graph-diagram-node-shape-fill,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .react-flow__node:hover .graph-diagram-node-shape-fill {
+  /* 阴影色必须写成显式 rgba:filter 过渡按 oklab 插值,若端点是 color-mix(..., transparent),
+     中间帧会算出越出 sRGB 色域的值(实测 oklab(1 3.82 1.89)),渲染成粉红外发光——
+     拖拽 resize 时最明显,松手即消失。金墨皮肤不允许出现红色。 */
+  filter: drop-shadow(0 8px 16px rgba(168, 130, 63, 0.2));
+}
+
+[data-qingagent-doc-panel] .graph-diagram[data-diagram-type] .react-flow__node.selected,
+[data-drawio-editor-host="true"] .graph-diagram[data-diagram-type] .react-flow__node.selected,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram[data-diagram-type] .react-flow__node.selected,
+[data-qingagent-doc-panel] .graph-diagram-editor .react-flow__node.selected,
+[data-drawio-editor-host="true"] .graph-diagram-editor .react-flow__node.selected,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .react-flow__node.selected {
+  outline: none;
+  box-shadow: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-node-label,
+[data-drawio-editor-host="true"] .graph-diagram-node-label,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-node-label {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 10px 16px;
+  color: inherit;
+  line-height: 1.35;
+  text-align: center;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  font-size: var(--graph-node-font-size, 13px);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-node-label.is-editing,
+[data-drawio-editor-host="true"] .graph-diagram-node-label.is-editing,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-node-label.is-editing {
+  z-index: 6;
+  outline: none;
+  cursor: text;
+  /* React Flow 给 .react-flow__node 设了 -webkit-user-select: none;只写不带前缀的一条,
+     WebKit 系仍按继承的 none 处理 contenteditable 后代,点击落不下光标。三条一起写死。 */
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+  caret-color: var(--mark);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-node-label.is-editing:focus,
+[data-drawio-editor-host="true"] .graph-diagram-node-label.is-editing:focus,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-node-label.is-editing:focus {
+  text-shadow: 0 0 0 currentColor;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-node--diamond .graph-diagram-node-label,
+[data-drawio-editor-host="true"] .graph-diagram-node--diamond .graph-diagram-node-label,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-node--diamond .graph-diagram-node-label,
+[data-qingagent-doc-panel] .graph-diagram-node--circle .graph-diagram-node-label,
+[data-drawio-editor-host="true"] .graph-diagram-node--circle .graph-diagram-node-label,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-node--circle .graph-diagram-node-label,
+[data-qingagent-doc-panel] .graph-diagram-node--doublecircle .graph-diagram-node-label,
+[data-drawio-editor-host="true"] .graph-diagram-node--doublecircle .graph-diagram-node-label,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-node--doublecircle .graph-diagram-node-label,
+[data-qingagent-doc-panel] .graph-diagram-node--hexagon .graph-diagram-node-label,
+[data-drawio-editor-host="true"] .graph-diagram-node--hexagon .graph-diagram-node-label,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-node--hexagon .graph-diagram-node-label {
+  padding: 10px 36px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-node--parallelogram .graph-diagram-node-label,
+[data-drawio-editor-host="true"] .graph-diagram-node--parallelogram .graph-diagram-node-label,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-node--parallelogram .graph-diagram-node-label {
+  padding: 10px 28px;
+}
+
+/* 命中盒与可见圆点同心:清掉 React Flow 默认的贴边定位,改用与圆点同一套外侧偏移,
+   再以 translate(-50%,-50%) 让 16px 命中盒以自身中心对齐锚点(旧的 transform:none 会整体偏 8px)。 */
+[data-qingagent-doc-panel] .graph-diagram .react-flow__handle,
+[data-drawio-editor-host="true"] .graph-diagram .react-flow__handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram .react-flow__handle,
+[data-qingagent-doc-panel] .graph-diagram-editor .react-flow__handle,
+[data-drawio-editor-host="true"] .graph-diagram-editor .react-flow__handle,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .react-flow__handle {
+  z-index: 7;
+  width: var(--graph-handle-hit);
+  height: var(--graph-handle-hit);
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  pointer-events: none;
+  cursor: crosshair;
+  inset: auto;
+  transform: translate(-50%, -50%);
+}
+
+[data-qingagent-doc-panel] .graph-diagram .graph-diagram-handle--t,
+[data-drawio-editor-host="true"] .graph-diagram .graph-diagram-handle--t,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram .graph-diagram-handle--t,
+[data-qingagent-doc-panel] .graph-diagram-editor .graph-diagram-handle--t,
+[data-drawio-editor-host="true"] .graph-diagram-editor .graph-diagram-handle--t,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .graph-diagram-handle--t {
+  top: calc(var(--graph-handle-offset) * -1);
+  left: 50%;
+}
+
+[data-qingagent-doc-panel] .graph-diagram .graph-diagram-handle--r,
+[data-drawio-editor-host="true"] .graph-diagram .graph-diagram-handle--r,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram .graph-diagram-handle--r,
+[data-qingagent-doc-panel] .graph-diagram-editor .graph-diagram-handle--r,
+[data-drawio-editor-host="true"] .graph-diagram-editor .graph-diagram-handle--r,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .graph-diagram-handle--r {
+  top: 50%;
+  left: calc(100% + var(--graph-handle-offset));
+}
+
+[data-qingagent-doc-panel] .graph-diagram .graph-diagram-handle--b,
+[data-drawio-editor-host="true"] .graph-diagram .graph-diagram-handle--b,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram .graph-diagram-handle--b,
+[data-qingagent-doc-panel] .graph-diagram-editor .graph-diagram-handle--b,
+[data-drawio-editor-host="true"] .graph-diagram-editor .graph-diagram-handle--b,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .graph-diagram-handle--b {
+  top: calc(100% + var(--graph-handle-offset));
+  left: 50%;
+}
+
+[data-qingagent-doc-panel] .graph-diagram .graph-diagram-handle--l,
+[data-drawio-editor-host="true"] .graph-diagram .graph-diagram-handle--l,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram .graph-diagram-handle--l,
+[data-qingagent-doc-panel] .graph-diagram-editor .graph-diagram-handle--l,
+[data-drawio-editor-host="true"] .graph-diagram-editor .graph-diagram-handle--l,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .graph-diagram-handle--l {
+  top: 50%;
+  left: calc(var(--graph-handle-offset) * -1);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__handle,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__handle {
+  display: block;
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--preview .react-flow__handle,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--preview .react-flow__handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--preview .react-flow__handle {
+  display: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-slot,
+[data-drawio-editor-host="true"] .graph-diagram-handle-slot,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-slot {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-slot .react-flow__handle,
+[data-drawio-editor-host="true"] .graph-diagram-handle-slot .react-flow__handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-slot .react-flow__handle {
+  pointer-events: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-dot,
+[data-drawio-editor-host="true"] .graph-diagram-handle-dot,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-dot {
+  position: absolute;
+  z-index: 5;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid #fffaf0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mark) 82%, var(--ink-1));
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0.84);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-dot--t,
+[data-drawio-editor-host="true"] .graph-diagram-handle-dot--t,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-dot--t {
+  top: calc(var(--graph-handle-offset) * -1);
+  left: 50%;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-dot--r,
+[data-drawio-editor-host="true"] .graph-diagram-handle-dot--r,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-dot--r {
+  top: 50%;
+  left: calc(100% + var(--graph-handle-offset));
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-dot--b,
+[data-drawio-editor-host="true"] .graph-diagram-handle-dot--b,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-dot--b {
+  top: calc(100% + var(--graph-handle-offset));
+  left: 50%;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-dot--l,
+[data-drawio-editor-host="true"] .graph-diagram-handle-dot--l,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-dot--l {
+  top: 50%;
+  left: calc(var(--graph-handle-offset) * -1);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-node-shell.is-renaming .graph-diagram-handle-slot,
+[data-drawio-editor-host="true"] .graph-diagram-node-shell.is-renaming .graph-diagram-handle-slot,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-node-shell.is-renaming .graph-diagram-handle-slot {
+  display: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__node:hover .react-flow__handle,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__node:hover .react-flow__handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__node:hover .react-flow__handle,
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__node.is-selected .react-flow__handle,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__node.is-selected .react-flow__handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__node.is-selected .react-flow__handle,
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__node.selected .react-flow__handle,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__node.selected .react-flow__handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__node.selected .react-flow__handle,
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__handle.connectingfrom,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__handle.connectingfrom,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__handle.connectingfrom,
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__handle.connectingto,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__handle.connectingto,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__handle.connectingto,
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor.is-connecting .react-flow__handle.connectionindicator,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor.is-connecting .react-flow__handle.connectionindicator,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor.is-connecting .react-flow__handle.connectionindicator {
+  pointer-events: auto;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__node:hover .graph-diagram-handle-dot,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__node:hover .graph-diagram-handle-dot,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__node:hover .graph-diagram-handle-dot,
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__node.is-selected .graph-diagram-handle-dot,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__node.is-selected .graph-diagram-handle-dot,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__node.is-selected .graph-diagram-handle-dot,
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__node.selected .graph-diagram-handle-dot,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__node.selected .graph-diagram-handle-dot,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__node.selected .graph-diagram-handle-dot,
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .graph-diagram-node-shell[data-handle-zone="active"] .graph-diagram-handle-dot,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .graph-diagram-node-shell[data-handle-zone="active"] .graph-diagram-handle-dot,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .graph-diagram-node-shell[data-handle-zone="active"] .graph-diagram-handle-dot {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* 带宽限期的悬停区(节点 + 四个外挂把手)激活时,把手一直可点:纯 :hover 判定在
+   指针离开节点包围盒的那一刻就会收走命中能力,导致圆点永远按不下去。 */
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .graph-diagram-node-shell[data-handle-zone="active"] .react-flow__handle,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .graph-diagram-node-shell[data-handle-zone="active"] .react-flow__handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .graph-diagram-node-shell[data-handle-zone="active"] .react-flow__handle {
+  pointer-events: auto;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-slot[data-handle-state="plus"] .graph-diagram-handle-dot,
+[data-drawio-editor-host="true"] .graph-diagram-handle-slot[data-handle-state="plus"] .graph-diagram-handle-dot,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-slot[data-handle-state="plus"] .graph-diagram-handle-dot,
+[data-qingagent-doc-panel] .graph-diagram-handle-slot[data-handle-state="preview"] .graph-diagram-handle-dot,
+[data-drawio-editor-host="true"] .graph-diagram-handle-slot[data-handle-state="preview"] .graph-diagram-handle-dot,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-slot[data-handle-state="preview"] .graph-diagram-handle-dot {
+  opacity: 0 !important;
+}
+
+/* resize 只保留四角方块把手:四条边线既不显示也不可抓取(选中框由外壳包围盒承担),
+   边中点整块让给连线圆点,两者命中盒不再重叠。 */
+[data-qingagent-doc-panel] .graph-diagram-resize-line,
+[data-drawio-editor-host="true"] .graph-diagram-resize-line,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-resize-line {
+  border-color: transparent !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 四角方块把手外移到与选中包围盒同一圈上,和圆点(11px 外)彼此错开。 */
+[data-qingagent-doc-panel] .graph-diagram-resize-handle,
+[data-drawio-editor-host="true"] .graph-diagram-resize-handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-resize-handle {
+  width: 8px !important;
+  height: 8px !important;
+  border: 1px solid var(--mark) !important;
+  border-radius: 0 !important;
+  background: #fffaf0 !important;
+  opacity: 0;
+  transition: opacity 0.12s ease, transform 0.12s ease, background 0.12s ease;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-resize-handle.top,
+[data-drawio-editor-host="true"] .graph-diagram-resize-handle.top,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-resize-handle.top {
+  margin-top: calc(var(--graph-select-inset) * -1);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-resize-handle.bottom,
+[data-drawio-editor-host="true"] .graph-diagram-resize-handle.bottom,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-resize-handle.bottom {
+  margin-top: var(--graph-select-inset);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-resize-handle.left,
+[data-drawio-editor-host="true"] .graph-diagram-resize-handle.left,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-resize-handle.left {
+  margin-left: calc(var(--graph-select-inset) * -1);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-resize-handle.right,
+[data-drawio-editor-host="true"] .graph-diagram-resize-handle.right,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-resize-handle.right {
+  margin-left: var(--graph-select-inset);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__node:hover .graph-diagram-resize-handle,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__node:hover .graph-diagram-resize-handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__node:hover .graph-diagram-resize-handle,
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__node.is-selected .graph-diagram-resize-handle,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__node.is-selected .graph-diagram-resize-handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__node.is-selected .graph-diagram-resize-handle,
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__node.selected .graph-diagram-resize-handle,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__node.selected .graph-diagram-resize-handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__node.selected .graph-diagram-resize-handle,
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__node.resizing .graph-diagram-resize-handle,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__node.resizing .graph-diagram-resize-handle,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__node.resizing .graph-diagram-resize-handle {
+  opacity: 1;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .graph-diagram-resize-handle:hover,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .graph-diagram-resize-handle:hover,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .graph-diagram-resize-handle:hover {
+  background: color-mix(in srgb, var(--mark) 18%, var(--bg-canvas)) !important;
+  transform: scale(1.2);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-add,
+[data-drawio-editor-host="true"] .graph-diagram-handle-add,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-add {
+  position: absolute;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: #fffaf0;
+  color: color-mix(in srgb, var(--mark) 78%, var(--ink-1));
+  font: 700 13px/1 var(--font-zh-serif);
+  opacity: 1;
+  cursor: copy;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(1);
+  transition: opacity 0.12s ease, transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-add .graph-diagram-canvas-tool-icon,
+[data-drawio-editor-host="true"] .graph-diagram-handle-add .graph-diagram-canvas-tool-icon,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-add .graph-diagram-canvas-tool-icon {
+  width: 11px;
+  height: 11px;
+  stroke-width: 1.8;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-add--t,
+[data-drawio-editor-host="true"] .graph-diagram-handle-add--t,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-add--t {
+  top: calc(var(--graph-handle-offset) * -1);
+  left: 50%;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-add--r,
+[data-drawio-editor-host="true"] .graph-diagram-handle-add--r,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-add--r {
+  top: 50%;
+  left: calc(100% + var(--graph-handle-offset));
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-add--b,
+[data-drawio-editor-host="true"] .graph-diagram-handle-add--b,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-add--b {
+  top: calc(100% + var(--graph-handle-offset));
+  left: 50%;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-add--l,
+[data-drawio-editor-host="true"] .graph-diagram-handle-add--l,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-add--l {
+  top: 50%;
+  left: calc(var(--graph-handle-offset) * -1);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-add.is-preview,
+[data-drawio-editor-host="true"] .graph-diagram-handle-add.is-preview,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-add.is-preview {
+  border-color: color-mix(in srgb, var(--mark) 62%, transparent);
+  background: var(--bg-canvas);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-direction-icon,
+[data-drawio-editor-host="true"] .graph-diagram-handle-direction-icon,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-direction-icon {
+  width: 12px;
+  height: 12px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-direction-icon--t,
+[data-drawio-editor-host="true"] .graph-diagram-handle-direction-icon--t,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-direction-icon--t {
+  transform: rotate(-90deg);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-direction-icon--b,
+[data-drawio-editor-host="true"] .graph-diagram-handle-direction-icon--b,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-direction-icon--b {
+  transform: rotate(90deg);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-direction-icon--l,
+[data-drawio-editor-host="true"] .graph-diagram-handle-direction-icon--l,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-direction-icon--l {
+  transform: rotate(180deg);
+}
+
+/* 幽灵预览:容器只是定位原点,落点/尺寸/连接段长度全部由 JS 的同一套几何给出(与创建共用),
+   这里只管观感(虚化、不吃指针)。 */
+[data-qingagent-doc-panel] .graph-diagram-handle-ghost,
+[data-drawio-editor-host="true"] .graph-diagram-handle-ghost,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-ghost {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  color: color-mix(in srgb, var(--mark) 72%, transparent);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-ghost__line,
+[data-drawio-editor-host="true"] .graph-diagram-handle-ghost__line,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-ghost__line {
+  position: absolute;
+  overflow: visible;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-ghost__node,
+[data-drawio-editor-host="true"] .graph-diagram-handle-ghost__node,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-ghost__node {
+  position: absolute;
+  color: var(--graph-node-text);
+  filter: saturate(0.72);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-ghost__node svg,
+[data-drawio-editor-host="true"] .graph-diagram-handle-ghost__node svg,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-ghost__node svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-ghost .graph-diagram-node-shell::before,
+[data-drawio-editor-host="true"] .graph-diagram-handle-ghost .graph-diagram-node-shell::before,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-ghost .graph-diagram-node-shell::before {
+  display: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--preview .graph-diagram-handle-add,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--preview .graph-diagram-handle-add,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--preview .graph-diagram-handle-add {
+  display: none;
+}
+
+/* 空白拖拽的框选选区:黄棕细线 + 低透明填充(强调色统一走 --mark 体系)。 */
+[data-qingagent-doc-panel] .graph-diagram-editor .react-flow__selection,
+[data-drawio-editor-host="true"] .graph-diagram-editor .react-flow__selection,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .react-flow__selection,
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__selection,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__selection,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__selection {
+  border: 1px solid color-mix(in srgb, var(--mark) 72%, transparent);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--mark) 12%, transparent);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__nodesselection-rect,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__nodesselection-rect,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__nodesselection-rect {
+  border: 1px solid color-mix(in srgb, var(--mark) 62%, transparent);
+  background: transparent;
+}
+
+[data-qingagent-doc-panel] .graph-diagram[data-diagram-type] .react-flow__node.is-selected,
+[data-drawio-editor-host="true"] .graph-diagram[data-diagram-type] .react-flow__node.is-selected,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram[data-diagram-type] .react-flow__node.is-selected,
+[data-qingagent-doc-panel] .graph-diagram-editor .react-flow__node.is-selected,
+[data-drawio-editor-host="true"] .graph-diagram-editor .react-flow__node.is-selected,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .react-flow__node.is-selected {
+  outline: none;
+  box-shadow: none;
+}
+
+/* 选中指示 = 元素外侧一圈细包围盒(不跟随形状轮廓,不压在元素自己的边框上),
+   与 resize 四角把手同处一圈;悬停给一层更淡的同款框。 */
+[data-qingagent-doc-panel] .graph-diagram-node-shell::before,
+[data-drawio-editor-host="true"] .graph-diagram-node-shell::before,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-node-shell::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: calc(var(--graph-select-inset) * -1);
+  border: 1.5px solid var(--mark);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__node:hover .graph-diagram-node-shell::before,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__node:hover .graph-diagram-node-shell::before,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__node:hover .graph-diagram-node-shell::before {
+  opacity: 0.4;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__node.is-selected .graph-diagram-node-shell::before,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__node.is-selected .graph-diagram-node-shell::before,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__node.is-selected .graph-diagram-node-shell::before,
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .react-flow__node.selected .graph-diagram-node-shell::before,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .react-flow__node.selected .graph-diagram-node-shell::before,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .react-flow__node.selected .graph-diagram-node-shell::before,
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor .graph-diagram-node-shell.is-renaming::before,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor .graph-diagram-node-shell.is-renaming::before,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor .graph-diagram-node-shell.is-renaming::before {
+  opacity: 1;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-handle-ghost .graph-diagram-node-shell::before,
+[data-drawio-editor-host="true"] .graph-diagram-handle-ghost .graph-diagram-node-shell::before,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-handle-ghost .graph-diagram-node-shell::before {
+  display: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram[data-diagram-type] .react-flow__node.is-parent-target,
+[data-drawio-editor-host="true"] .graph-diagram[data-diagram-type] .react-flow__node.is-parent-target,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram[data-diagram-type] .react-flow__node.is-parent-target,
+[data-qingagent-doc-panel] .graph-diagram-editor .react-flow__node.is-parent-target,
+[data-drawio-editor-host="true"] .graph-diagram-editor .react-flow__node.is-parent-target,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .react-flow__node.is-parent-target {
+  outline: 2px dashed var(--mark);
+  outline-offset: 5px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram[data-diagram-type] .react-flow__edge-path,
+[data-drawio-editor-host="true"] .graph-diagram[data-diagram-type] .react-flow__edge-path,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram[data-diagram-type] .react-flow__edge-path,
+[data-qingagent-doc-panel] .graph-diagram-editor .react-flow__edge-path,
+[data-drawio-editor-host="true"] .graph-diagram-editor .react-flow__edge-path,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .react-flow__edge-path {
+  stroke-linecap: round;
+  transition: stroke 0.14s ease, stroke-width 0.14s ease, filter 0.14s ease;
+}
+
+[data-qingagent-doc-panel] .graph-diagram[data-diagram-type] .react-flow__edge.is-selected .react-flow__edge-path,
+[data-drawio-editor-host="true"] .graph-diagram[data-diagram-type] .react-flow__edge.is-selected .react-flow__edge-path,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram[data-diagram-type] .react-flow__edge.is-selected .react-flow__edge-path,
+[data-qingagent-doc-panel] .graph-diagram-editor .react-flow__edge.is-selected .react-flow__edge-path,
+[data-drawio-editor-host="true"] .graph-diagram-editor .react-flow__edge.is-selected .react-flow__edge-path,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .react-flow__edge.is-selected .react-flow__edge-path {
+  filter: drop-shadow(0 3px 4px rgba(168, 130, 63, 0.28));
+}
+
+[data-qingagent-doc-panel] .graph-diagram[data-diagram-type] .react-flow__edge:hover .react-flow__edge-path,
+[data-drawio-editor-host="true"] .graph-diagram[data-diagram-type] .react-flow__edge:hover .react-flow__edge-path,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram[data-diagram-type] .react-flow__edge:hover .react-flow__edge-path,
+[data-qingagent-doc-panel] .graph-diagram-editor .react-flow__edge:hover .react-flow__edge-path,
+[data-drawio-editor-host="true"] .graph-diagram-editor .react-flow__edge:hover .react-flow__edge-path,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--mark) !important;
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 3px 5px rgba(168, 130, 63, 0.24));
+}
+
+[data-qingagent-doc-panel] .graph-diagram-edge-label,
+[data-drawio-editor-host="true"] .graph-diagram-edge-label,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-edge-label {
+  position: absolute;
+  z-index: 8;
+  min-width: 16px;
+  max-width: 220px;
+  padding: 2px 7px;
+  border-radius:0;
+  background: var(--graph-edge-label-background);
+  color: var(--ink-2);
+  font: 12px/1.35 var(--font-zh-serif);
+  text-align: center;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  pointer-events: all;
+  box-shadow: 0 2px 8px rgba(47, 42, 34, 0.08);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-edge-label.is-empty,
+[data-drawio-editor-host="true"] .graph-diagram-edge-label.is-empty,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-edge-label.is-empty {
+  width: 22px;
+  min-height: 18px;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-edge-label.is-editing,
+[data-drawio-editor-host="true"] .graph-diagram-edge-label.is-editing,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-edge-label.is-editing {
+  min-width: 76px;
+  outline: none;
+  border: 1px solid var(--line-3);
+  background: rgba(255, 250, 240, 0.98);
+  box-shadow: 0 0 0 3px var(--mark-soft), 0 10px 24px rgba(47, 42, 34, 0.14);
+  cursor: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+  caret-color: var(--mark);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-editor,
+[data-drawio-editor-host="true"] .graph-diagram-editor,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-paper-deep, #f6f1e7);
+  pointer-events: auto;
+  overscroll-behavior: contain;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-viewer,
+[data-drawio-editor-host="true"] .graph-diagram-viewer,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-paper-deep, #f6f1e7);
+  pointer-events: auto;
+  overscroll-behavior: contain;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-editor__topbar,
+[data-drawio-editor-host="true"] .graph-diagram-editor__topbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-editor__topbar,
+[data-qingagent-doc-panel] .graph-diagram-viewer__topbar,
+[data-drawio-editor-host="true"] .graph-diagram-viewer__topbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-viewer__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-editor__title,
+[data-drawio-editor-host="true"] .graph-diagram-editor__title,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-editor__title,
+[data-qingagent-doc-panel] .graph-diagram-viewer__title,
+[data-drawio-editor-host="true"] .graph-diagram-viewer__title,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-viewer__title {
+  color: #211f1b;
+  font-family: var(--font-zh-serif);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--fullscreen,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--fullscreen,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--fullscreen {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  border: 1px solid var(--line-2);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-context button,
+[data-drawio-editor-host="true"] .graph-diagram-context button,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context button,
+[data-qingagent-doc-panel] .graph-diagram-viewer .graph-diagram-editor__close,
+[data-drawio-editor-host="true"] .graph-diagram-viewer .graph-diagram-editor__close,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-viewer .graph-diagram-editor__close {
+  height: 30px;
+  border: 1px solid rgba(47, 42, 34, 0.18);
+  border-radius:0;
+  background: #fffaf0;
+  color: var(--ink-1);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-viewer .graph-diagram-editor__close,
+[data-drawio-editor-host="true"] .graph-diagram-viewer .graph-diagram-editor__close,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-viewer .graph-diagram-editor__close {
+  padding: 0 14px;
+  background: var(--bg-canvas, #fffaf0);
+  color: var(--ink-1);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-context button,
+[data-drawio-editor-host="true"] .graph-diagram-context button,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context button {
+  padding: 0 10px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-context button:hover:not(:disabled),
+[data-drawio-editor-host="true"] .graph-diagram-context button:hover:not(:disabled),
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context button:hover:not(:disabled),
+[data-qingagent-doc-panel] .graph-diagram-context button:hover:not(:disabled),
+[data-drawio-editor-host="true"] .graph-diagram-context button:hover:not(:disabled),
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context button:hover:not(:disabled) {
+  border-color: var(--line-3);
+  color: var(--ink-1);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-viewer .graph-diagram-editor__close:hover,
+[data-drawio-editor-host="true"] .graph-diagram-viewer .graph-diagram-editor__close:hover,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-viewer .graph-diagram-editor__close:hover {
+  background: var(--bg-hover);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-viewport-controls,
+[data-drawio-editor-host="true"] .graph-diagram-viewport-controls,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-viewport-controls {
+  position: absolute;
+  z-index: 30;
+  bottom: 18px;
+  left: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+  user-select: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-viewport-controls__group,
+[data-drawio-editor-host="true"] .graph-diagram-viewport-controls__group,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-viewport-controls__group {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-canvas, #fffaf0) 96%, transparent);
+  box-shadow: 0 8px 24px rgba(47, 42, 34, 0.14);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-viewport-controls button,
+[data-drawio-editor-host="true"] .graph-diagram-viewport-controls button,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-viewport-controls button {
+  display: inline-grid;
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--font-zh-serif);
+  cursor: pointer;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-viewport-controls button + button,
+[data-drawio-editor-host="true"] .graph-diagram-viewport-controls button + button,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-viewport-controls button + button {
+  border-left-color: var(--line-1);
+}
+
+/* 手型按钮悬浮提示:黑底提示条 + 键帽。控件组为了圆角药丸带 overflow:hidden,提示条只能挂在
+   body 上用定位浮层,否则必被裁掉(真机不可见);层级压过全屏编辑层,不吃指针、不占布局。 */
+[data-qingagent-doc-panel] .graph-diagram-pan-tip,
+[data-drawio-editor-host="true"] .graph-diagram-pan-tip,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-pan-tip {
+  position: fixed;
+  z-index: 2147483020;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 0;
+  background: var(--ink-1);
+  color: var(--ink-on-dark);
+  font: 12px/1 var(--font-zh-serif);
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+  box-shadow: 0 10px 28px rgba(20, 18, 16, 0.28);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-pan-tip kbd,
+[data-drawio-editor-host="true"] .graph-diagram-pan-tip kbd,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-pan-tip kbd {
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 250, 240, 0.86);
+  font: 11px/1.3 var(--font-mono);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-pan-tip__sep,
+[data-drawio-editor-host="true"] .graph-diagram-pan-tip__sep,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-pan-tip__sep,
+[data-qingagent-doc-panel] .graph-diagram-pan-tip__plus,
+[data-drawio-editor-host="true"] .graph-diagram-pan-tip__plus,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-pan-tip__plus {
+  color: rgba(255, 250, 240, 0.5);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-viewport-controls button:hover:not(:disabled),
+[data-drawio-editor-host="true"] .graph-diagram-viewport-controls button:hover:not(:disabled),
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-viewport-controls button:hover:not(:disabled),
+[data-qingagent-doc-panel] .graph-diagram-viewport-controls button.is-active,
+[data-drawio-editor-host="true"] .graph-diagram-viewport-controls button.is-active,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-viewport-controls button.is-active {
+  background: var(--mark-soft);
+  color: var(--mark);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-viewport-controls button:disabled,
+[data-drawio-editor-host="true"] .graph-diagram-viewport-controls button:disabled,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-viewport-controls button:disabled {
+  color: var(--ink-3);
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-viewport-controls button:focus-visible,
+[data-drawio-editor-host="true"] .graph-diagram-viewport-controls button:focus-visible,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-viewport-controls button:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 1px solid var(--mark);
+  outline-offset: -2px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-viewport-controls .graph-diagram-viewport-controls__zoom,
+[data-drawio-editor-host="true"] .graph-diagram-viewport-controls .graph-diagram-viewport-controls__zoom,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-viewport-controls .graph-diagram-viewport-controls__zoom {
+  width: 54px;
+  font: 12px/1 var(--font-mono);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor.is-pan-enabled .react-flow__pane,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor.is-pan-enabled .react-flow__pane,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor.is-pan-enabled .react-flow__pane {
+  cursor: grab;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-canvas--editor.is-pan-enabled .react-flow__pane:active,
+[data-drawio-editor-host="true"] .graph-diagram-canvas--editor.is-pan-enabled .react-flow__pane:active,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-canvas--editor.is-pan-enabled .react-flow__pane:active {
+  cursor: grabbing;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-context button:disabled,
+[data-drawio-editor-host="true"] .graph-diagram-context button:disabled,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-context,
+[data-drawio-editor-host="true"] .graph-diagram-context,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context {
+  position: fixed;
+  z-index: 2147483010;
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 2px;
+  width: max-content;
+  max-width: min(92vw, 560px);
+  padding: 5px 6px;
+  border: 1px solid var(--ink-1);
+  border-radius: 0;
+  background: var(--ink-1);
+  color: var(--ink-on-dark);
+  overflow: visible;
+  pointer-events: auto;
+  box-shadow: 0 10px 28px rgba(20, 18, 16, 0.28), 0 2px 6px rgba(20, 18, 16, 0.12);
+  font: 13px/1 var(--font-zh-serif);
+  user-select: none;
+  white-space: nowrap;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-context::after,
+[data-drawio-editor-host="true"] .graph-diagram-context::after,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 12px;
+  height: 6px;
+  background: var(--ink-1);
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+  transform: translateX(-50%);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-context.is-below::after,
+[data-drawio-editor-host="true"] .graph-diagram-context.is-below::after,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context.is-below::after {
+  top: auto;
+  bottom: 100%;
+  clip-path: polygon(50% 0, 0 100%, 100% 100%);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-context--above,
+[data-drawio-editor-host="true"] .graph-diagram-context--above,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context--above {
+  transform: translate(-50%, -100%);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-context--below,
+[data-drawio-editor-host="true"] .graph-diagram-context--below,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context--below {
+  transform: translateX(-50%);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-context__hint,
+[data-drawio-editor-host="true"] .graph-diagram-context__hint,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context__hint {
+  color: var(--ink-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-toolbar__row,
+[data-drawio-editor-host="true"] .graph-diagram-toolbar__row,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-toolbar__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: min(92vw, 560px);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-toolbar__button,
+[data-drawio-editor-host="true"] .graph-diagram-toolbar__button,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-toolbar__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 32px;
+  min-width: 32px;
+  max-width: 120px;
+  height: 26px;
+  padding: 0 6px !important;
+  border: 0;
+  border-radius:0;
+  background: transparent;
+  white-space: nowrap;
+  box-shadow: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-context .dt-btn,
+[data-drawio-editor-host="true"] .graph-diagram-context .dt-btn,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context .dt-btn,
+[data-qingagent-doc-panel] .graph-diagram-context .dt-mi,
+[data-drawio-editor-host="true"] .graph-diagram-context .dt-mi,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context .dt-mi {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-on-dark);
+  font-family: var(--font-zh-serif);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-context .dt-btn:hover:not(:disabled),
+[data-drawio-editor-host="true"] .graph-diagram-context .dt-btn:hover:not(:disabled),
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context .dt-btn:hover:not(:disabled),
+[data-qingagent-doc-panel] .graph-diagram-context .dt-mi:hover:not(:disabled),
+[data-drawio-editor-host="true"] .graph-diagram-context .dt-mi:hover:not(:disabled),
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context .dt-mi:hover:not(:disabled) {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--ink-on-dark);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-toolbar__button:has(.graph-diagram-toolbar__value),
+[data-drawio-editor-host="true"] .graph-diagram-toolbar__button:has(.graph-diagram-toolbar__value),
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-toolbar__button:has(.graph-diagram-toolbar__value) {
+  width: auto;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-icon,
+[data-drawio-editor-host="true"] .graph-diagram-icon,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+/* 填充/边框触发钮的色样圆点放大到与 dt-swatch 色块同一档视觉直径(约 18px)。 */
+[data-qingagent-doc-panel] .graph-diagram-toolbar__button .graph-diagram-icon:has(.graph-diagram-icon__color-sample),
+[data-drawio-editor-host="true"] .graph-diagram-toolbar__button .graph-diagram-icon:has(.graph-diagram-icon__color-sample),
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-toolbar__button .graph-diagram-icon:has(.graph-diagram-icon__color-sample) {
+  width: 20px;
+  height: 20px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-icon__color-sample--fill,
+[data-drawio-editor-host="true"] .graph-diagram-icon__color-sample--fill,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-icon__color-sample--fill {
+  r: 9;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-icon__color-sample--border,
+[data-drawio-editor-host="true"] .graph-diagram-icon__color-sample--border,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-icon__color-sample--border {
+  r: 8;
+  stroke-width: 3;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-toolbar__button.is-active,
+[data-drawio-editor-host="true"] .graph-diagram-toolbar__button.is-active,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-toolbar__button.is-active,
+[data-qingagent-doc-panel] .graph-diagram-toolbar__button:hover:not(:disabled),
+[data-drawio-editor-host="true"] .graph-diagram-toolbar__button:hover:not(:disabled),
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-toolbar__button:hover:not(:disabled) {
+  border-color: var(--line-3);
+  background: var(--mark-soft);
+  color: var(--mark);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-toolbar__value,
+[data-drawio-editor-host="true"] .graph-diagram-toolbar__value,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-toolbar__value {
+  max-width: 76px;
+  overflow: hidden;
+  color: var(--ink-on-dark);
+  text-overflow: ellipsis;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-toolbar__caret,
+[data-drawio-editor-host="true"] .graph-diagram-toolbar__caret,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-toolbar__caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 250, 240, 0.62);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-popover,
+[data-drawio-editor-host="true"] .graph-diagram-popover,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-popover {
+  position: absolute;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: max-content;
+  min-width: 230px;
+  max-width: min(92vw, 360px);
+  max-height: min(56vh, 420px);
+  padding: 10px;
+  border: 1px solid #3a3328;
+  border-radius:0;
+  background: var(--ink-1);
+  color: var(--ink-on-dark);
+  overflow: auto;
+  transform: translateX(-50%);
+  box-shadow: 0 18px 42px rgba(47, 42, 34, 0.18);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-context--above .graph-diagram-popover,
+[data-drawio-editor-host="true"] .graph-diagram-context--above .graph-diagram-popover,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context--above .graph-diagram-popover {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-context--below .graph-diagram-popover,
+[data-drawio-editor-host="true"] .graph-diagram-context--below .graph-diagram-popover,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context--below .graph-diagram-popover {
+  top: calc(100% + 8px);
+  bottom: auto;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-popover--menu,
+[data-drawio-editor-host="true"] .graph-diagram-popover--menu,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-popover--menu {
+  min-width: 210px;
+  padding: 6px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-menu-item,
+[data-drawio-editor-host="true"] .graph-diagram-menu-item,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px !important;
+  border-color: transparent !important;
+  background: transparent;
+  text-align: left;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-menu-item:hover:not(:disabled),
+[data-drawio-editor-host="true"] .graph-diagram-menu-item:hover:not(:disabled),
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-menu-item:hover:not(:disabled) {
+  background: var(--mark-soft);
+}
+
+/* 破坏性菜单项(解散分区/删除节点/删除连线)按惯例用红字提示后果;
+   这条只管菜单项文字,报错呈现仍守"不出红"的铁律。 */
+[data-qingagent-doc-panel] .graph-diagram-context .graph-diagram-menu-item.is-danger,
+[data-drawio-editor-host="true"] .graph-diagram-context .graph-diagram-menu-item.is-danger,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context .graph-diagram-menu-item.is-danger {
+  color: #e2705d;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-context .graph-diagram-menu-item.is-danger:hover:not(:disabled),
+[data-drawio-editor-host="true"] .graph-diagram-context .graph-diagram-menu-item.is-danger:hover:not(:disabled),
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context .graph-diagram-menu-item.is-danger:hover:not(:disabled) {
+  background: rgba(226, 112, 93, 0.16);
+  color: #f0897a;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-menu-item kbd,
+[data-drawio-editor-host="true"] .graph-diagram-menu-item kbd,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-menu-item kbd {
+  min-width: 34px;
+  padding: 1px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius:0;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 250, 240, 0.58);
+  font: 11px/1.4 var(--font-mono);
+  text-align: center;
+}
+
+/* 弹层小标题与分隔线(边框/形状弹层照分组排布)。 */
+[data-qingagent-doc-panel] .graph-diagram-popover__title,
+[data-drawio-editor-host="true"] .graph-diagram-popover__title,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-popover__title {
+  color: rgba(255, 250, 240, 0.66);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-popover__divider,
+[data-drawio-editor-host="true"] .graph-diagram-popover__divider,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-popover__divider {
+  height: 1px;
+  margin: 2px 0;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* 线型/线宽这类等宽小钮成行排布。 */
+[data-qingagent-doc-panel] .graph-diagram-option-row,
+[data-drawio-editor-host="true"] .graph-diagram-option-row,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-option-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-option-btn,
+[data-drawio-editor-host="true"] .graph-diagram-option-btn,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-option-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 250, 240, 0.82);
+  cursor: pointer;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-option-btn svg,
+[data-drawio-editor-host="true"] .graph-diagram-option-btn svg,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-option-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-option-btn:hover:not(:disabled),
+[data-drawio-editor-host="true"] .graph-diagram-option-btn:hover:not(:disabled),
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-option-btn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-option-btn.is-active,
+[data-drawio-editor-host="true"] .graph-diagram-option-btn.is-active,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-option-btn.is-active {
+  border-color: var(--mark);
+  background: color-mix(in srgb, var(--mark) 32%, transparent);
+  color: #fffaf0;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-option-btn:disabled,
+[data-drawio-editor-host="true"] .graph-diagram-option-btn:disabled,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-option-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-width-dot,
+[data-drawio-editor-host="true"] .graph-diagram-width-dot,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-width-dot {
+  display: block;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+/* 色板两行:格子/色块/无色/hover 全部走正文工具栏的 dt-swatch 体系(workspace.css 单一定义),
+   这里只补图表侧特有的"当前选中"描边与「+」自定义格。 */
+[data-qingagent-doc-panel] .graph-diagram-swatch-panel,
+[data-drawio-editor-host="true"] .graph-diagram-swatch-panel,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-swatch-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-editor .dt-swatch.is-active .dt-swatch-chip,
+[data-drawio-editor-host="true"] .graph-diagram-editor .dt-swatch.is-active .dt-swatch-chip,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .dt-swatch.is-active .dt-swatch-chip,
+[data-qingagent-doc-panel] .graph-diagram-editor .dt-swatch.is-active .dt-color-none,
+[data-drawio-editor-host="true"] .graph-diagram-editor .dt-swatch.is-active .dt-color-none,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .dt-swatch.is-active .dt-color-none {
+  box-shadow: 0 0 0 2px var(--ink-1), 0 0 0 3.5px var(--mark);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-swatch-custom,
+[data-drawio-editor-host="true"] .graph-diagram-swatch-custom,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-swatch-custom {
+  position: relative;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-editor .graph-diagram-swatch-custom .dt-swatch-chip,
+[data-drawio-editor-host="true"] .graph-diagram-editor .graph-diagram-swatch-custom .dt-swatch-chip,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor .graph-diagram-swatch-custom .dt-swatch-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 250, 240, 0.86);
+  font: 600 12px/1 var(--font-zh-serif);
+  box-shadow: none;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-swatch-custom input[type="color"],
+[data-drawio-editor-host="true"] .graph-diagram-swatch-custom input[type="color"],
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-swatch-custom input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-shape-grid,
+[data-drawio-editor-host="true"] .graph-diagram-shape-grid,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-shape-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-popover--shape,
+[data-drawio-editor-host="true"] .graph-diagram-popover--shape,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-popover--shape {
+  min-width: 236px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-shape-btn,
+[data-drawio-editor-host="true"] .graph-diagram-shape-btn,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-shape-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 34px;
+  min-width: 0;
+  padding: 0 !important;
+  border: 1px solid transparent;
+}
+
+/* 迷你形状预览换一套适配深色浮层的描边填充(几何仍与画布同源)。 */
+[data-qingagent-doc-panel] .graph-diagram-shape-glyph,
+[data-drawio-editor-host="true"] .graph-diagram-shape-glyph,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-shape-glyph {
+  --graph-node-fill: rgba(255, 250, 240, 0.14);
+  --graph-node-stroke: rgba(255, 250, 240, 0.76);
+  --graph-node-stroke-width: 3px;
+  display: block;
+  width: 26px;
+  height: 18px;
+  overflow: visible;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-shape-btn.is-active,
+[data-drawio-editor-host="true"] .graph-diagram-shape-btn.is-active,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-shape-btn.is-active {
+  border-color: var(--mark);
+  background: color-mix(in srgb, var(--mark) 32%, transparent);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-shape-btn.is-active .graph-diagram-shape-glyph,
+[data-drawio-editor-host="true"] .graph-diagram-shape-btn.is-active .graph-diagram-shape-glyph,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-shape-btn.is-active .graph-diagram-shape-glyph {
+  --graph-node-stroke: #fffaf0;
+}
+
+/* 形状触发钮:图形在按钮盒里居中,背景高亮块与其他钮同规格(此前图形偏出高亮块)。 */
+[data-qingagent-doc-panel] .graph-diagram-toolbar__button .graph-diagram-shape-glyph,
+[data-drawio-editor-host="true"] .graph-diagram-toolbar__button .graph-diagram-shape-glyph,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-toolbar__button .graph-diagram-shape-glyph {
+  width: 20px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0 auto;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-toolbar__button:has(.graph-diagram-shape-glyph),
+[data-drawio-editor-host="true"] .graph-diagram-toolbar__button:has(.graph-diagram-shape-glyph),
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-toolbar__button:has(.graph-diagram-shape-glyph) {
+  /* 图标 + 尖角比默认 32px 宽,固定宽会让高亮块包不住内容(常态/hover/选中三态都错位);
+     改为按内容自适应,盒与内容始终同心。 */
+  width: auto;
+  min-width: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 7px !important;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-icon-options,
+[data-drawio-editor-host="true"] .graph-diagram-icon-options,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-icon-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-icon-options__label,
+[data-drawio-editor-host="true"] .graph-diagram-icon-options__label,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-icon-options__label {
+  color: rgba(255, 250, 240, 0.66);
+  font-size: 12px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-icon-options__row,
+[data-drawio-editor-host="true"] .graph-diagram-icon-options__row,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-icon-options__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-icon-option,
+[data-drawio-editor-host="true"] .graph-diagram-icon-option,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-icon-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 30px;
+  padding: 0 !important;
+  border-radius:0;
+  background: #fffaf0;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-icon-option.is-active,
+[data-drawio-editor-host="true"] .graph-diagram-icon-option.is-active,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-icon-option.is-active {
+  border-color: var(--mark);
+  background: var(--mark-soft);
+  color: var(--mark);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-color-control,
+[data-drawio-editor-host="true"] .graph-diagram-color-control,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-color-control {
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-color-control__row,
+[data-drawio-editor-host="true"] .graph-diagram-color-control__row,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-color-control__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-color-control__custom,
+[data-drawio-editor-host="true"] .graph-diagram-color-control__custom,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-color-control__custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 250, 240, 0.66);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-color-control input[type="color"],
+[data-drawio-editor-host="true"] .graph-diagram-color-control input[type="color"],
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-color-control input[type="color"] {
+  width: 30px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid rgba(47, 42, 34, 0.18);
+  border-radius:0;
+  background: #fffaf0;
+  cursor: pointer;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-color-control input[type="color"]:disabled,
+[data-drawio-editor-host="true"] .graph-diagram-color-control input[type="color"]:disabled,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-color-control input[type="color"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+
+[data-qingagent-doc-panel] .graph-diagram-range-control,
+[data-drawio-editor-host="true"] .graph-diagram-range-control,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-range-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-range-control__header,
+[data-drawio-editor-host="true"] .graph-diagram-range-control__header,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-range-control__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: rgba(255, 250, 240, 0.66);
+  font-size: 12px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-range-control__header label,
+[data-drawio-editor-host="true"] .graph-diagram-range-control__header label,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-range-control__header label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-range-control input[type="number"],
+[data-drawio-editor-host="true"] .graph-diagram-range-control input[type="number"],
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-range-control input[type="number"] {
+  width: 58px;
+  height: 26px;
+  box-sizing: border-box;
+  border: 1px solid rgba(47, 42, 34, 0.16);
+  border-radius:0;
+  background: #fffaf0;
+  color: var(--ink-1);
+  font: inherit;
+  text-align: center;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-range-control input[type="range"],
+[data-drawio-editor-host="true"] .graph-diagram-range-control input[type="range"],
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-range-control input[type="range"] {
+  width: 100%;
+  accent-color: var(--mark);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-error,
+[data-drawio-editor-host="true"] .graph-diagram-error,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-error {
+  padding: 6px 10px;
+  border: 1px solid var(--line-2);
+  background: var(--bg-hover);
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+[data-qingagent-doc-panel] .graph-diagram-error--floating,
+[data-drawio-editor-host="true"] .graph-diagram-error--floating,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-error--floating {
+  position: absolute;
+  z-index: 10;
+  top: 70px;
+  left: 50%;
+  max-width: min(520px, calc(100% - 32px));
+  border-radius:0;
+  transform: translateX(-50%);
+  box-shadow: 0 10px 24px rgba(47, 42, 34, 0.12);
+}
+
+[data-qingagent-doc-panel] .graph-diagram-export,
+[data-drawio-editor-host="true"] .graph-diagram-export,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-export {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  [data-qingagent-doc-panel] .graph-diagram-editor,
+[data-drawio-editor-host="true"] .graph-diagram-editor,
+body:has([data-qingagent-doc-panel]) > .graph-diagram-editor {
+    padding: 10px;
+  }
+
+  [data-qingagent-doc-panel] .graph-diagram-editor__topbar,
+[data-drawio-editor-host="true"] .graph-diagram-editor__topbar,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-editor__topbar {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  [data-qingagent-doc-panel] .graph-diagram-context,
+[data-drawio-editor-host="true"] .graph-diagram-context,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-context {
+    max-width: calc(100vw - 20px);
+  }
+
+  [data-qingagent-doc-panel] .graph-diagram-toolbar__row,
+[data-drawio-editor-host="true"] .graph-diagram-toolbar__row,
+body:has([data-qingagent-doc-panel]) > :is(.media-zoom-fullscreen, .graph-diagram-editor, .graph-diagram-viewer) .graph-diagram-toolbar__row {
+    flex-wrap: wrap;
+    max-width: calc(100vw - 20px);
+  }
+}
 /* 纸内功能区几何换算:产品 top 64 = 纸上留白 52 + 纸内缩 12,right 18 以
    「滚动容器宽=纸宽」为前提;插件纸上留白为 0 且容器弹性全宽,尾部宿主适配
    逐件居中纸面以对半分配富余,换算为:顶=纸内缩 12,右=纸右缘往内 18。 */

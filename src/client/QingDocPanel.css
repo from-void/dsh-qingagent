@@ -1,3 +1,42 @@
+/* P84:把 800px 上限放在滚动容器上。滚动条随容器一起居中，纸面只铺满
+   容器内容区；stable both-edges gutter 会在纸右缘与滚动容器右缘之间留下
+   恰好一条滚动槽，不再出现纸右侧 34px 的悬空距离。 */
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-right {
+  flex: 1 1 800px !important;
+  width: 100% !important;
+  max-width: 800px !important;
+  margin-inline: auto;
+}
+
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .wf-doc,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-paper-shell,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-paper-surface {
+  max-width: 100% !important;
+  right: auto;
+  margin-inline: 0;
+}
+
+/* P85:青简生成 CSS 中块手柄/正文浮层的最高层级当前为 100070。
+   顶栏必须高于该上限；vendor 若抬高手柄层级，契约测试会提示同步抬高这里。 */
+[data-qingagent-doc-panel] .qingdoc-stage-controls {
+  position: relative;
+  z-index: 100080;
+}
+
+/* P88:空稿写作中的 QingLoading 与常态纸壳共用同一矩形。客户端原生
+   .doc-empty 使用 inset:0 + top:52px 且自带外投影，在限宽面板里会比纸壳
+   左右各伸出一截，并在错开的纸顶露出两块桌面色。 */
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .qing-empty {
+  inset: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: var(--ws-paper-min-height);
+  margin-inline: 0;
+  border-radius: 0;
+  background: #efe7d6 !important;
+  box-shadow: none !important;
+}
+
 [data-qingagent-doc-panel][data-content="docMissing"] .ws-right {
   display: block;
   padding: 32px 40px;
