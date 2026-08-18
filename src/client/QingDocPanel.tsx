@@ -7,6 +7,7 @@ import type { Editor } from '@tiptap/react'
 import type {
   BridgeDocument,
   ExternalPmDocReadResponse,
+  ExternalReviewOutcome,
 } from '../contracts.js'
 import {
   DocumentSnapshotView,
@@ -743,8 +744,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
       .filter((suggestion) => suggestion.status === 'reviewing' || suggestion.status === 'accepted' || suggestion.status === 'rejected')
     const settledSuggestionIds = new Set(settledSuggestions.map((suggestion) => suggestion.id))
     let retried = false
-    const pushOutcomeToConversation = () => {
-      if (!props.qingSendMessage || settledSuggestions.length === 0) return
+    const fallbackOutcome = (): ExternalReviewOutcome => {
       const hunks = settledSuggestions.map((suggestion) => ({
         verdict: (action === 'reject_all'
           ? 'rejected'
@@ -755,18 +755,23 @@ export function QingDocPanel(props: QingDocPanelProps) {
         beforeText: suggestion.preview?.deleteText ?? '',
         afterText: suggestion.preview?.insertText ?? '',
       }))
+      const rejectedCount = hunks.filter((hunk) => hunk.verdict === 'rejected').length
+      return { acceptedCount: hunks.length - rejectedCount, rejectedCount, hunks }
+    }
+    const pushOutcomeToConversation = (authoritativeOutcome?: ExternalReviewOutcome) => {
+      if (!props.qingSendMessage) return
+      const fallback = fallbackOutcome()
+      const outcome = authoritativeOutcome ?? fallback
+      const hasAuthoritativeRejectedDetail = outcome.hunks.some((hunk) => hunk.verdict === 'rejected')
+      const hunks = !authoritativeOutcome || outcome.rejectedCount === 0 || hasAuthoritativeRejectedDetail
+        ? outcome.hunks
+        : fallback.hunks
       const rejected = hunks.filter((hunk) => hunk.verdict === 'rejected')
-      // 全部采纳时不回流:落盘对模型透明(下次工具返回自带【文稿状态】权威态),
-      // 对话流不值得为「照单全收」加一条气泡(用户拍板 2026-08-16)。
-      if (rejected.length === 0) return
-      const clip = (text: string) => {
-        const plain = text.replace(/\s+/g, ' ').trim()
-        return plain.length > 40 ? `${plain.slice(0, 39)}…` : plain || '(空)'
-      }
+      const plain = (text: string) => text.replace(/\s+/g, ' ').trim() || '(空)'
       const message = [
-        `【审核结果】本轮审阅我已处理:采纳 ${hunks.length - rejected.length} 处,拒绝 ${rejected.length} 处。被拒绝的修改已还原为原文:`,
+        `【审核结果】本轮审阅我已处理:采纳 ${outcome.acceptedCount} 处,拒绝 ${outcome.rejectedCount} 处。${outcome.rejectedCount === 0 ? '全部改动均已采纳。' : '被拒绝的修改已还原为原文:'}`,
         ...rejected.map((hunk, index) =>
-          `${index + 1}. ${hunk.blockSummary ? `${clip(hunk.blockSummary)}:` : ''}拒绝「${clip(hunk.afterText)}」,保留原文「${clip(hunk.beforeText)}」`),
+          `${index + 1}. ${hunk.blockSummary ? `${plain(hunk.blockSummary)}:` : ''}拒绝「${plain(hunk.afterText)}」,保留原文「${plain(hunk.beforeText)}」`),
       ].join('\n')
       void props.qingSendMessage(sessionId, message).then(() => {
         // 消息已 durable 入队;有未裁决问答卡时对话流暂不显示,说明去向以免误判丢失。
@@ -776,7 +781,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
         setToast('审阅结果回流对话失败')
       })
     }
-    const settleAsSuccess = async (docVersion: number, refreshDoc: boolean) => {
+    const settleAsSuccess = async (
+      docVersion: number,
+      refreshDoc: boolean,
+      outcome?: ExternalReviewOutcome,
+    ) => {
       qingClientStore.applyReviewCommit(sessionId, activeEngineSessionId, docVersion)
       reviewSettlementRetryPendingRef.current = false
       setReviewSettlementRetryPending(false)
@@ -788,7 +797,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
           retried,
         })
       }
-      pushOutcomeToConversation()
+      pushOutcomeToConversation(outcome)
       const refreshPanel = async () => {
         await qingClientStore.refreshPanel(sessionId, activeEngineSessionId)
         const refreshed = qingClientStore.getSnapshot(sessionId)
@@ -815,7 +824,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
         expectedDocVersion: commitSnapshot.panelDoc.docVersion,
         action,
       })
-      await settleAsSuccess(response.docVersion, true)
+      await settleAsSuccess(response.docVersion, true, response.outcome)
     } catch (error) {
       let failure = error
       if (error instanceof BridgeHttpError && error.status === 409) {
@@ -848,7 +857,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
                 expectedDocVersion: authoritative.panelDoc.docVersion,
                 action,
               })
-              await settleAsSuccess(response.docVersion, true)
+              await settleAsSuccess(response.docVersion, true, response.outcome)
               return
             } catch (retryError) {
               failure = retryError

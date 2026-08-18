@@ -8,6 +8,7 @@ import type {
   BridgeEvent,
   DocSuggestion,
   ExternalPmDocReadResponse,
+  ExternalReviewOutcome,
   ExternalReviewRenderModelResponse,
   PmDoc,
 } from '../src/contracts.js'
@@ -477,6 +478,52 @@ describe('QingDocPanel 保存生命周期', () => {
     await new Promise((resolve) => setTimeout(resolve, 60))
     expect(reviewCommitCalls(fetchMock)).toBe(1)
     expect(authoritativeDocReadCalls(fetchMock)).toBe(0)
+  })
+
+  it('全采纳结算也把权威计数回流到当前 DSH 对话', async () => {
+    const qingSendMessage = vi.fn(async (_dshSessionId: string, _text: string) => undefined)
+    installBridgeFetch('dsh-review-accepted-outcome', ['qing-review'], {
+      pendingReview: true,
+      reviewSuggestionStatus: 'accepted',
+      reviewOutcome: { acceptedCount: 1, rejectedCount: 0, hunks: [] },
+    })
+    renderPanel('dsh-review-accepted-outcome', qingSendMessage)
+
+    await vi.waitFor(() => expect(qingSendMessage).toHaveBeenCalledOnce())
+    expect(qingSendMessage).toHaveBeenCalledWith(
+      'dsh-review-accepted-outcome',
+      '【审核结果】本轮审阅我已处理:采纳 1 处,拒绝 0 处。全部改动均已采纳。',
+    )
+  })
+
+  it('拒绝结算回流服务端给出的完整具体内容，不用本地预览也不截断', async () => {
+    const qingSendMessage = vi.fn(async (_dshSessionId: string, _text: string) => undefined)
+    const beforeText = '这是服务端确认应当保留的完整原文，长度明显超过四十个字符，用于证明结算回流不会再截断具体内容。'
+    const afterText = '这是服务端确认已被拒绝的完整改文，长度同样超过四十个字符，用于证明载荷来自权威结算结果。'
+    installBridgeFetch('dsh-review-rejected-outcome', ['qing-review'], {
+      pendingReview: true,
+      reviewSuggestionStatus: 'rejected',
+      reviewBeforeText: '本地预览旧文',
+      reviewAfterText: '本地预览改文',
+      reviewOutcome: {
+        acceptedCount: 0,
+        rejectedCount: 1,
+        hunks: [{
+          verdict: 'rejected',
+          blockSummary: '第二节的结论段',
+          beforeText,
+          afterText,
+        }],
+      },
+    })
+    renderPanel('dsh-review-rejected-outcome', qingSendMessage)
+
+    await vi.waitFor(() => expect(qingSendMessage).toHaveBeenCalledOnce())
+    const message = qingSendMessage.mock.calls[0]?.[1] ?? ''
+    expect(message).toContain('采纳 0 处,拒绝 1 处')
+    expect(message).toContain(`拒绝「${afterText}」,保留原文「${beforeText}」`)
+    expect(message).not.toContain('本地预览')
+    expect(message).not.toContain('…')
   })
 
   it('首次 409 且仍待审、批次同一时用权威版本重试一次并成功', async () => {
@@ -1000,13 +1047,17 @@ describe('QingDocPanel 顶栏状态', () => {
   })
 })
 
-function renderPanel(sessionId: string): void {
+function renderPanel(
+  sessionId: string,
+  qingSendMessage?: (dshSessionId: string, text: string) => Promise<void>,
+): void {
   host = document.createElement('div')
   document.body.append(host)
   root = createRoot(host)
   const props = {
     useSession: (selector: (session: { sessionId: string }) => unknown) => selector({ sessionId }),
     qingLayout: { openDetails: vi.fn(), closeDetails: vi.fn() },
+    ...(qingSendMessage ? { qingSendMessage } : {}),
   } as unknown as QingDocPanelProps
   act(() => root?.render(<QingDocPanel {...props} />))
 }
@@ -1144,6 +1195,7 @@ function installBridgeFetch(
     reviewEditedPm?: PmDoc
     reviewBeforeText?: string
     reviewAfterText?: string
+    reviewOutcome?: ExternalReviewOutcome
   } = {},
 ) {
   vi.stubGlobal('EventSource', FakeEventSource)
@@ -1251,10 +1303,12 @@ function installBridgeFetch(
       serverPendingReview = false
       reviewCommitted = true
       serverDocVersion += 1
+      const outcome = options.reviewOutcome ?? { acceptedCount: 1, rejectedCount: 0, hunks: [] }
       return Response.json({
-        status: 'reviewed', docVersion: serverDocVersion, acceptedCount: 1, rejectedCount: 0,
+        status: 'reviewed', docVersion: serverDocVersion,
+        acceptedCount: outcome.acceptedCount, rejectedCount: outcome.rejectedCount,
         remainingCount: 0, outcomeQueued: false,
-        outcome: { acceptedCount: 1, rejectedCount: 0, hunks: [] }, seq: null,
+        outcome, seq: null,
       })
     }
     if (url.startsWith('/qingagent-bridge/review-verdicts?') && init?.method === 'POST') {

@@ -199,7 +199,10 @@ describe('qing_write_draft', () => {
 
     const result = await fixture.tools.get('qing_write_draft')!.execute({ brief: '写一篇测试稿' }, exec())
 
-    expect(result).toMatchObject({ status: 'committed', engineSessionId: 'qing-1', title: '测试稿', blocks: 2 })
+    expect(result).toMatchObject({
+      status: 'committed', engineSessionId: 'qing-1', title: '测试稿', blocks: 2,
+      structure: '一个标题加 1 段正文',
+    })
     expect(fixture.stream).toHaveBeenCalledOnce()
     expect(fixture.events.at(-1)?.event.type).toBe('doc-committed')
     expect(fixture.telemetry.capture).toHaveBeenCalledWith('draft_created', {
@@ -230,6 +233,52 @@ describe('qing_write_draft', () => {
     expect(result).toMatchObject({ words: 6, docVersion: 1 })
     const rendered = fixture.tools.get('qing_write_draft')!.output?.render({}, result as never)
     expect(JSON.stringify(rendered)).not.toMatch(/v\d+/)
+  })
+
+  it('写稿结果渲染纸面结构事实，不向用户裸报块数', async () => {
+    const paragraphs = Array.from({ length: 6 }, (_, index) => `<p>第 ${index + 1} 段。</p>`).join('')
+    const qingml = `<title>结构稿</title><h1>结构稿</h1>${paragraphs}<ul><li>事项</li></ul><table><tr><th>列</th></tr><tr><td>值</td></tr></table>`
+    let proposed = false
+    const fixture = harness([qingml], async (path) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return proposed ? doc({ docVersion: 1, state: 'editing', qingml, title: '结构稿' }) : doc()
+      }
+      if (path.endsWith('/proposals')) {
+        proposed = true
+        return { status: 'committed', docVersion: 1 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    const result = await fixture.tools.get('qing_write_draft')!.execute({ brief: '写结构稿' }, exec())
+    const rendered = fixture.tools.get('qing_write_draft')!.output?.render({}, result as never)
+
+    expect(result).toMatchObject({ structure: '一个标题、6 段正文、1 个清单和 1 张表格' })
+    expect(JSON.stringify(rendered)).toContain('内容构成：一个标题、6 段正文、1 个清单和 1 张表格')
+    expect(JSON.stringify(rendered)).not.toMatch(/\d+\s*块/)
+  })
+
+  it('显式 outline 通过独立通道原样进入侧模型请求', async () => {
+    let proposed = false
+    const fixture = harness([DRAFT_ONE], async (path) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return proposed ? doc({ docVersion: 1, state: 'editing', qingml: DRAFT_ONE, title: '测试稿' }) : doc()
+      }
+      if (path.endsWith('/proposals')) {
+        proposed = true
+        return { status: 'committed', docVersion: 1 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    await fixture.tools.get('qing_write_draft')!.execute({
+      brief: '按指定章节写作',
+      outline: ['现状', '方案', '风险'],
+    }, exec())
+
+    const request = JSON.stringify(fixture.requests[0])
+    expect(request).toContain('指定提纲（严格按此顺序和标题写作，不得增删、改名或调序）')
+    expect(request).toContain('- 现状\\n- 方案\\n- 风险')
   })
 
   it('首次只有标题时换 generation 纠正一次,并用第二次 generation 发送终态', async () => {
@@ -343,7 +392,8 @@ describe('qing_write_draft', () => {
     expect(fixture.engine.fetchJson).toHaveBeenCalledWith(expect.stringContaining('/proposals'), expect.anything())
     const result = await fixture.tools.get('qing_write_draft')!.output?.render({}, {
       title: '测试稿', blocks: 3, words: 10, status: 'committed', engineSessionId: 'qing-1', docVersion: 1,
-      wholeDocReview: false, outline: ['开篇'], footnotes: 1, formulas: 2, automaticConversions: 3,
+      structure: '一个标题加 1 段正文', wholeDocReview: false, outline: ['开篇'],
+      footnotes: 1, formulas: 2, automaticConversions: 3,
     } as never)
     expect(JSON.stringify(result)).toContain('本稿含 1 处脚注、2 个公式，其中 3 处已自动整理为正确格式')
   })
@@ -449,7 +499,7 @@ describe('qing_write_draft', () => {
     expect(new Set(generationEvents.map(({ event }) => 'generation' in event ? event.generation : undefined)).size).toBe(1)
     expect(fixture.tools.get('qing_write_draft')!.output?.render({}, result as never)).toEqual([{
       type: 'text',
-      text: '【文稿状态】审阅中·1 处待用户裁决。\n本稿含 0 处脚注、0 个公式，其中 0 处已自动整理为正确格式。\n改动已提交审阅，右侧面板等待用户裁决。本次工具调用结束——不要重写、不要读稿复核、不要自动裁决；收尾说明由工具卡向用户展示，本回合不再产生任何输出。',
+      text: '【文稿状态】审阅中·1 处待用户裁决。\n内容构成：一个标题加 1 段正文。\n本稿含 0 处脚注、0 个公式，其中 0 处已自动整理为正确格式。\n改动已提交审阅，右侧面板等待用户裁决。本次工具调用结束——不要重写、不要读稿复核、不要自动裁决；收尾说明由工具卡向用户展示，本回合不再产生任何输出。',
     }])
     const rendered = fixture.tools.get('qing_write_draft')!.output?.render({}, result as never)
     expectReviewEndMessage((rendered?.[0] as { text: string }).text)
@@ -664,10 +714,115 @@ describe('qing_edit_draft', () => {
   it('描述要求改标题时同批同步稿名和纸面大标题', () => {
     const fixture = harness([], async () => { throw new Error('不应访问引擎') })
     const tool = fixture.tools.get('qing_edit_draft')!
-    expect(tool.description).toContain('正文首个大标题块用 strReplace 改')
+    expect(tool.description).toContain('若正文有与旧稿名相同的大标题块')
     expect(tool.description).toContain('两者必须在同一次 ops 里一起提交,文字保持一致')
-    expect(tool.description).toContain('正文没有大标题块时,用 insertAfterLine 在文首补一个与稿名一致的「# 标题」一级标题')
-    expect(JSON.stringify(tool.parameters)).toContain('改标题时必须在同一次 ops 里一起提交正文标题同步操作')
+    expect(tool.description).toContain('正文没有与旧稿名相同的大标题块时,允许只用 setTitle')
+    expect(JSON.stringify(tool.parameters)).toContain('不存在时允许只改稿名')
+  })
+
+  it('纸面开头标题与旧稿名一致时，setTitle 缺少正文同步修改会在提交前拒绝', async () => {
+    let proposals = 0
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '# 旧标题\n\n正文', title: '旧标题',
+        }
+      }
+      if (path.endsWith('/proposals')) proposals += 1
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, candidateDoc('旧标题', '正文'))
+
+    await expect(fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'setTitle', title: '新标题' }],
+    }, exec(undefined, 'edit-title-gate', 'qing_edit_draft'))).rejects.toThrow(
+      '稿名和纸面开头的标题需要一起修改。请在同一批修改中，把正文开头的「旧标题」也改成「新标题」。',
+    )
+    expect(proposals).toBe(0)
+  })
+
+  it('同名文字出现多处时，只有确实指向标题的替换才算完成联动', async () => {
+    let proposals = 0
+    const pmDoc = candidateDoc('旧标题', '正文也提到旧标题')
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '# 旧标题\n\n正文也提到旧标题', title: '旧标题',
+        }
+      }
+      if (path.endsWith('/proposals')) proposals += 1
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, pmDoc)
+
+    await expect(fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [
+        { kind: 'setTitle', title: '新标题' },
+        { kind: 'strReplace', old: '旧标题', new: '新标题', nth: 2 },
+      ],
+    }, exec(undefined, 'edit-title-wrong-match', 'qing_edit_draft'))).rejects.toThrow(
+      '稿名和纸面开头的标题需要一起修改',
+    )
+    expect(proposals).toBe(0)
+  })
+
+  it('正文没有标题时允许单独修改稿名', async () => {
+    let proposed = false
+    const body = paragraphDoc('正文')
+    const fixture = harness([], async (path, init) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '正文', title: '旧标题',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposed = true
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          expectedDocVersion: 2,
+          ops: [{ kind: 'setTitle', title: '新标题' }],
+        })
+        return { status: 'committed', docVersion: 3 }
+      }
+      if (path.endsWith('/doc?format=qingml') && proposed) {
+        return doc({ docVersion: 3, state: 'editing', qingml: '<p>正文</p>', title: '新标题' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, body)
+
+    await expect(fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'setTitle', title: '新标题' }],
+    }, exec(undefined, 'edit-title-no-heading', 'qing_edit_draft'))).resolves.toMatchObject({
+      status: 'committed', title: '新标题', structure: '1 段正文',
+    })
+  })
+
+  it('稿名与纸面标题在同批同步修改时通过确定性闸门', async () => {
+    let proposed = false
+    const ops = [
+      { kind: 'setTitle' as const, title: '新标题' },
+      { kind: 'strReplace' as const, old: '旧标题', new: '新标题', nth: 1 },
+    ]
+    const fixture = harness([], async (path, init) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '# 旧标题\n\n正文', title: '旧标题',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposed = true
+        expect(JSON.parse(String(init?.body))).toMatchObject({ expectedDocVersion: 2, ops })
+        return { status: 'committed', docVersion: 3 }
+      }
+      if (path.endsWith('/doc?format=qingml') && proposed) {
+        return doc({ docVersion: 3, state: 'editing', qingml: '<h1>新标题</h1><p>正文</p>', title: '新标题' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, candidateDoc('旧标题', '正文'))
+
+    await expect(fixture.tools.get('qing_edit_draft')!.execute({ ops }, exec(undefined, 'edit-title-sync', 'qing_edit_draft')))
+      .resolves.toMatchObject({ status: 'committed', title: '新标题' })
   })
 
   it('描述明确同批行号逐 op 推进、多行块与块级锚点约束', () => {
@@ -990,11 +1145,11 @@ describe('qing_edit_draft', () => {
       ops: [{ kind: 'insertAfterLine', line: 1, markdown: '不应提交' }],
     }, exec(undefined, 'edit-inside-multiline', 'qing_edit_draft'))
 
-    await expect(promise).rejects.toThrow('第 1 行位于一段多行内容的中间')
+    await expect(promise).rejects.toThrow('所选位置位于一段多行内容的中间')
     await promise.catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error)
-      expect(message).not.toMatch(/paragraph|insertAfter|块 ID|400/i)
-      expect(message).toContain('请改在这段内容的末行之后')
+      expect(message).not.toMatch(/paragraph|insertAfter|块 ID|400|第\s*\d+\s*行/i)
+      expect(message).toContain('请改在这段内容的末尾之后')
     })
     expect(proposalCalls).toBe(0)
   })
@@ -1016,9 +1171,9 @@ describe('qing_edit_draft', () => {
     const promise = tool.execute({
       ops: [{ kind: 'markText', find: '正文', mark: { type: 'bold' }, op: 'add' }],
     }, exec(undefined, 'edit-sanitize-engine-error', 'qing_edit_draft'))
-    await expect(promise).rejects.toThrow('第 14 行位于一段多行内容的中间')
+    await expect(promise).rejects.toThrow('所选位置位于一段多行内容的中间')
     await promise.catch((error: unknown) => {
-      expect(error instanceof Error ? error.message : String(error)).not.toMatch(/paragraph|insertAfter|块 ID|400/i)
+      expect(error instanceof Error ? error.message : String(error)).not.toMatch(/paragraph|insertAfter|块 ID|400|第\s*\d+\s*行/i)
     })
 
     const presentation = tool.presentResult?.({
@@ -1031,6 +1186,14 @@ describe('qing_edit_draft', () => {
     expect(presentation).toMatchObject({
       content: [{ type: 'text', text: '未完成 · 修改位置需要重新确认，请重新读取文稿后再试' }],
     })
+    const finalized = tool.finalizeContent?.(exec(undefined, 'edit-finalize', 'qing_edit_draft'), {
+      isError: true,
+      content: [{ type: 'text', text: `Error: ${raw}` }],
+    } as never)
+    expect(JSON.stringify(finalized)).toBe(JSON.stringify([
+      { type: 'text', text: 'Error: 修改位置需要重新确认，请重新读取文稿后再试。' },
+    ]))
+    expect(JSON.stringify(finalized)).not.toMatch(/paragraph|insertAfter|block-9|HTTP|400|第\s*\d+\s*行/i)
   })
 
   it('schema 接受全部合法 markText 标记与受控色板，拒绝任意 CSS 色值', () => {
