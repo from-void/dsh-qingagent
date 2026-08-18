@@ -8,6 +8,7 @@ import { DRAFT_MARK_COLORS, type BridgeEvent, type EngineStatusSnapshot, type Ex
 import { EngineHttpError, type EngineService } from '../src/engine.js'
 import { QINGJIAN_DOWNLOAD_URL } from '../src/onboarding.js'
 import { registerTools } from '../src/tools.js'
+import type { TelemetryCapture } from '../src/telemetry.js'
 
 const DRAFT_ONE = '<title>测试稿</title><h1>开篇</h1><p>第一版正文。</p>'
 const DRAFT_TWO = '<title>测试稿</title><h1>开篇</h1><p>修正后的正文。</p>'
@@ -107,8 +108,9 @@ function harness(
     emit: vi.fn((sessionId: string, event: BridgeEvent) => events.push({ sessionId, event })),
     clearSelection: vi.fn(),
   } as unknown as BridgeHub
-  registerTools({ ctx, engine, bindings, bridge })
-  return { tools, listeners, requests, events, stream, bindings, engine, bridge }
+  const telemetry = { capture: vi.fn(async () => undefined) } as unknown as TelemetryCapture
+  registerTools({ ctx, engine, bindings, bridge, telemetry })
+  return { tools, listeners, requests, events, stream, bindings, engine, bridge, telemetry }
 }
 
 describe('qing_* 未连接结构化报错', () => {
@@ -200,6 +202,9 @@ describe('qing_write_draft', () => {
     expect(result).toMatchObject({ status: 'committed', engineSessionId: 'qing-1', title: '测试稿', blocks: 2 })
     expect(fixture.stream).toHaveBeenCalledOnce()
     expect(fixture.events.at(-1)?.event.type).toBe('doc-committed')
+    expect(fixture.telemetry.capture).toHaveBeenCalledWith('draft_created', {
+      words_bucket: '1-200', blocks_bucket: '1-5', retried: false,
+    })
   })
 
   it('committed 返回按 PmDoc 统计含标点的可见字符数', async () => {
@@ -260,6 +265,10 @@ describe('qing_write_draft', () => {
       .toEqual(['draft-started', 'draft-started', 'doc-committed'])
     expect(fixture.events.find(({ event }) => event.type === 'doc-committed')?.event)
       .toMatchObject({ generation: draftStarts[1] })
+    expect(fixture.telemetry.capture).toHaveBeenCalledWith(
+      'draft_created',
+      expect.objectContaining({ retried: true }),
+    )
   })
 
   it('连续两次只有标题时报错且绝不提案落库', async () => {
@@ -507,6 +516,9 @@ describe('qing_review_commit', () => {
     expect(fixture.events.at(-1)).toMatchObject({
       sessionId: 'dsh-1',
       event: { type: 'doc-committed', engineSessionId: 'qing-1', doc: official },
+    })
+    expect(fixture.telemetry.capture).toHaveBeenCalledWith('review_settled', {
+      action: 'commit', patches_bucket: '2-5', retried: false,
     })
   })
 
@@ -1208,6 +1220,7 @@ describe('qing_edit_draft', () => {
       exec(undefined, 'edit-no-match', 'qing_edit_draft'),
     )).rejects.toThrow('命中 0 处')
     expect(proposals).toBe(0)
+    expect(fixture.telemetry.capture).toHaveBeenCalledWith('edit_rejected', { reason: 'zero_hit' })
   })
 
   it('直接映射三类局部 op，review 后结束回合并清选段', async () => {
@@ -1258,6 +1271,11 @@ describe('qing_edit_draft', () => {
     expect(context.concludeTurn).toHaveBeenCalledOnce()
     expect(fixture.bridge.clearSelection).toHaveBeenCalledWith('dsh-1')
     expect(fixture.events.at(-1)?.event).toMatchObject({ type: 'doc-review-pending', count: 3, blocks: 2 })
+    expect(fixture.telemetry.capture).toHaveBeenCalledWith('draft_edited', {
+      ops_bucket: '2-5',
+      op_kinds: ['strReplace', 'insertAfterLine', 'appendSection'],
+      outcome: 'review',
+    })
     expect(vi.mocked(fixture.engine.fetchJson).mock.calls.map(([path]) => path)).toEqual([
       '/sessions/qing-1/doc?lines=1',
       '/sessions/qing-1/doc?format=pm',

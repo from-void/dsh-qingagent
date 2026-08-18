@@ -4,6 +4,7 @@ import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
 import { currentReviewStateFor, qingClientStore, type QingClientSnapshot } from './store.js'
+import { markPanelOpenSource } from './telemetry.js'
 import styles from './QingWriteToolCard.module.css'
 
 /** 工具卡的具名文案与摘要装配;meta 来自各工具的 presentationMeta(#23)。 */
@@ -100,6 +101,7 @@ export function openToolCardDocument(
   openDetails: () => void,
 ): void {
   qingClientStore.reopenPanel(sessionId)
+  markPanelOpenSource(sessionId, 'tool_card')
   openDetails()
   // docMissing 是集合语义(P68-b):已判定删除的稿一律不跳转,面板自己会显示「该文档已删除」。
   if (!engineSessionId || snapshot.docMissing?.engineSessionIds.includes(engineSessionId)) return
