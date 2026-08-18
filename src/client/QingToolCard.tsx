@@ -32,6 +32,7 @@ export interface ToolCardMeta {
   count?: number
   scope?: string
   mode?: string
+  wholeDocReview?: boolean
 }
 
 interface InjectedProps {
@@ -91,7 +92,9 @@ export const QingEditToolCard = createQingToolCard({
   summary: (meta) => [
     titled(meta),
     meta.status === 'review' && meta.reviewCount ? `${meta.reviewCount} 处待裁决` : '',
-    meta.status === 'review' ? '请在右侧逐处确认' : '',
+    meta.status === 'review'
+      ? meta.wholeDocReview ? '请在右侧确认是否应用新版' : '请在右侧逐处确认'
+      : '',
   ].filter(Boolean).join(' · '),
 })
 

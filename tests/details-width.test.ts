@@ -13,6 +13,7 @@ import {
 afterEach(() => {
   window.localStorage.clear()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('青简 details 列宽', () => {
@@ -32,6 +33,58 @@ describe('青简 details 列宽', () => {
     expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('640px')
     dispose()
     expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('')
+    fixture.frame.remove()
+  })
+
+  it('无存储偏好时由 ResizeObserver 驱动侧栏与默认面板宽度联动，且不写 localStorage', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1_600 })
+    const resizeObserver = installResizeObserverStub()
+    const fixture = detailsFixture(640, 400)
+    const dispose = installDetailsColumnWidth(fixture.root)
+    const storageWrite = vi.spyOn(Storage.prototype, 'setItem')
+
+    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('400px')
+    expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('560px')
+    expect(fixture.handle.getAttribute('aria-valuemax')).toBe('840')
+
+    fixture.setSidebarWidth(100)
+    resizeObserver.trigger()
+    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('100px')
+    expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('690px')
+    expect(fixture.handle.getAttribute('aria-valuenow')).toBe('690')
+    expect(fixture.handle.getAttribute('aria-valuemax')).toBe('1050')
+
+    fixture.setSidebarWidth(400)
+    resizeObserver.trigger()
+    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('400px')
+    expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('560px')
+    expect(window.localStorage.getItem(QING_DETAILS_WIDTH_STORAGE_KEY)).toBeNull()
+    expect(storageWrite).not.toHaveBeenCalled()
+    dispose()
+    fixture.frame.remove()
+  })
+
+  it('有存储偏好时 ResizeObserver 只按可用宽度 clamp，折叠展开不改写 localStorage', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1_600 })
+    window.localStorage.setItem(QING_DETAILS_WIDTH_STORAGE_KEY, '800')
+    const resizeObserver = installResizeObserverStub()
+    const fixture = detailsFixture(800, 400)
+    const dispose = installDetailsColumnWidth(fixture.root)
+    const storageWrite = vi.spyOn(Storage.prototype, 'setItem')
+
+    expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('800px')
+    fixture.setSidebarWidth(600)
+    resizeObserver.trigger()
+    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('600px')
+    expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('700px')
+
+    fixture.setSidebarWidth(400)
+    resizeObserver.trigger()
+    expect(fixture.frame.style.getPropertyValue('--qing-sidebar-width')).toBe('400px')
+    expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('800px')
+    expect(window.localStorage.getItem(QING_DETAILS_WIDTH_STORAGE_KEY)).toBe('800')
+    expect(storageWrite).not.toHaveBeenCalled()
+    dispose()
     fixture.frame.remove()
   })
 
@@ -59,7 +112,7 @@ describe('青简 details 列宽', () => {
     const dispose = installDetailsColumnWidth(fixture.root)
 
     expect(fixture.handle.getAttribute('aria-valuenow')).toBe('640')
-    expect(fixture.handle.getAttribute('aria-valuemax')).toBe('840')
+    expect(fixture.handle.getAttribute('aria-valuemax')).toBe('773')
     fixture.handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
     expect(fixture.frame.style.getPropertyValue('--qing-details-width')).toBe('650px')
     expect(fixture.handle.getAttribute('aria-valuenow')).toBe('650')
@@ -86,12 +139,13 @@ describe('青简 details 列宽', () => {
   })
 })
 
-function detailsFixture(detailsWidth = 640) {
+function detailsFixture(detailsWidth = 640, initialSidebarWidth = 96) {
     const frame = document.createElement('div')
     frame.className = 'fixture_frame'
     const sidebar = document.createElement('div')
     sidebar.className = 'fixture_sidebarCol'
-    sidebar.getBoundingClientRect = () => ({ width: 96 } as DOMRect)
+    let sidebarWidth = initialSidebarWidth
+    sidebar.getBoundingClientRect = () => ({ width: sidebarWidth } as DOMRect)
     const center = document.createElement('div')
     center.className = 'fixture_centerCol'
     const details = document.createElement('div')
@@ -105,7 +159,30 @@ function detailsFixture(detailsWidth = 640) {
     details.append(root)
     frame.append(sidebar, center, details)
     document.body.append(frame)
-    return { frame, root, handle }
+    return {
+      frame,
+      root,
+      handle,
+      setSidebarWidth: (width: number) => { sidebarWidth = width },
+    }
+}
+
+function installResizeObserverStub() {
+  const callbacks: ResizeObserverCallback[] = []
+  class ResizeObserverStub {
+    constructor(callback: ResizeObserverCallback) {
+      callbacks.push(callback)
+    }
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+  return {
+    trigger: () => {
+      for (const callback of callbacks) callback([], {} as ResizeObserver)
+    },
+  }
 }
 
 function pointerEvent(

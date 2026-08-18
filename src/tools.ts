@@ -26,6 +26,7 @@ import {
   makeDraftPrompt,
   outlineOf,
 } from './qingml.js'
+import { isWholeDocReview } from './reviewMode.js'
 
 interface ToolServices {
   ctx: Context
@@ -37,7 +38,7 @@ interface ToolServices {
 
 const textBlock = (text: string) => [{ type: 'text' as const, text }]
 
-const REVIEW_END_MESSAGE = '改动已提交审阅，右侧面板等待用户逐处裁决。本次工具调用结束——不要重写、不要读稿复核、不要自动裁决；仍要用一句话告诉用户本轮做了什么、下一步做什么（提交审阅时由结果卡直接说明）'
+const REVIEW_END_MESSAGE = '改动已提交审阅，右侧面板等待用户裁决。本次工具调用结束——不要重写、不要读稿复核、不要自动裁决；仍要用一句话告诉用户本轮做了什么、下一步做什么（提交审阅时由结果卡直接说明）'
 const REVIEW_REPEAT_ERROR = '本回合已裁决过一次，禁止连环裁决；等待用户指示'
 const REVIEW_PENDING_ERROR = '文稿正在审阅中。待审内容可能是你此前轮次提交的,也可能来自其他会话——不要断言归属。先用 ask_user 向用户说明存在待审稿,经用户明确授权后才可处置;不得代为提交或放弃。'
 const STR_REPLACE_PLAIN_TEXT_ERROR = 'old 必须是纯文本内容,不要带 ## 等 markdown 标记'
@@ -149,6 +150,7 @@ function writeDraftTool(services: ToolServices) {
           engineSessionId: { type: 'string', required: true },
           docVersion: { type: 'integer', required: true },
           patchCount: { type: 'integer', description: 'review 态的待裁决处数。' },
+          wholeDocReview: { type: 'boolean', required: true },
           outline: { ...outlineSchema, required: true },
           warning: { type: 'string', description: '落库块数与提交块数不符时的缺损警告。' },
         },
@@ -171,6 +173,7 @@ function writeDraftTool(services: ToolServices) {
         words: value.words,
         status: value.status,
         patchCount: value.patchCount ?? 0,
+        wholeDocReview: value.wholeDocReview,
         engineSessionId: value.engineSessionId,
       }),
     },
@@ -247,9 +250,13 @@ function writeDraftTool(services: ToolServices) {
 
         try {
           const official = await readDoc(services.engine, bound.engineSessionId)
-          const renderedQingml = proposal.status === 'review'
-            ? await readReviewCandidateQingml(services.engine, bound.engineSessionId)
-            : official.qingml ?? qingml
+          const reviewCandidate = proposal.status === 'review'
+            ? await readReviewCandidate(services.engine, bound.engineSessionId)
+            : null
+          const renderedQingml = reviewCandidate?.qingml ?? official.qingml ?? qingml
+          const wholeDocReview = reviewCandidate
+            ? isWholeDocReview(official, reviewCandidate.renderModel, true)
+            : false
           const title = official.title?.trim() || extractTitle(renderedQingml, args.title?.trim() || bound.title)
           await services.bindings.updateTitle(dshSessionId, bound.engineSessionId, title)
           // committed 用权威落库稿，review 用 render-model 候选稿；两者都避开本地生成文本与
@@ -289,6 +296,7 @@ function writeDraftTool(services: ToolServices) {
             status: proposal.status,
             engineSessionId: bound.engineSessionId,
             docVersion: official.docVersion,
+            wholeDocReview,
             ...(proposal.status === 'review' ? { patchCount: proposal.count } : {}),
             outline: outline.headings.map((heading) => `${'  '.repeat(Math.max(0, heading.level - 1))}${heading.text}`),
           }
@@ -463,6 +471,7 @@ function editDraftTool(services: ToolServices) {
           blocks: { type: 'integer', required: true },
           words: { type: 'integer', required: true },
           reviewCount: { type: 'integer', required: true },
+          wholeDocReview: { type: 'boolean', required: true },
         },
       },
       render: (_args, value) => textBlock(value.message),
@@ -473,6 +482,7 @@ function editDraftTool(services: ToolServices) {
         blocks: value.blocks,
         words: value.words,
         reviewCount: value.reviewCount,
+        wholeDocReview: value.wholeDocReview,
       }),
     },
     presentCall: () => ({ card: 'generic', title: '正在局部修改青简文稿', kind: 'edit' }),
@@ -498,9 +508,13 @@ function editDraftTool(services: ToolServices) {
           ops,
         )
         const official = await readDoc(services.engine, engineSessionId)
-        const renderedQingml = proposal.status === 'review'
-          ? await readReviewCandidateQingml(services.engine, engineSessionId)
-          : official.qingml
+        const reviewCandidate = proposal.status === 'review'
+          ? await readReviewCandidate(services.engine, engineSessionId)
+          : null
+        const renderedQingml = reviewCandidate?.qingml ?? official.qingml
+        const wholeDocReview = reviewCandidate
+          ? isWholeDocReview(official, reviewCandidate.renderModel, true)
+          : false
         const outline = outlineOf(renderedQingml, official.title)
         await services.bindings.updateTitle(dshSessionId, engineSessionId, outline.title)
         if (proposal.status === 'committed') {
@@ -532,6 +546,7 @@ function editDraftTool(services: ToolServices) {
           blocks: outline.blocks,
           words: outline.words,
           reviewCount: proposal.status === 'review' ? proposal.count : 0,
+          wholeDocReview,
         }
       } finally {
         services.bridge.clearSelection(dshSessionId)
@@ -1056,13 +1071,20 @@ function readDocWithLines(engine: EngineService, engineSessionId: string): Promi
   return engine.fetchJson<ExternalDocReadResponse>(`/sessions/${encodeURIComponent(engineSessionId)}/doc?lines=1`)
 }
 
-async function readReviewCandidateQingml(engine: EngineService, engineSessionId: string): Promise<string> {
-  const review = await engine.fetchJson<ExternalReviewRenderModelResponse>(
+async function readReviewCandidate(
+  engine: EngineService,
+  engineSessionId: string,
+): Promise<{ qingml: string; renderModel: ExternalReviewRenderModelResponse }> {
+  const renderModel = await engine.fetchJson<ExternalReviewRenderModelResponse>(
     `/sessions/${encodeURIComponent(engineSessionId)}/review?format=render-model`,
   )
-  const candidate = review.editedDoc ?? review.previewDoc
+  const candidate = renderModel.editedDoc ?? renderModel.previewDoc
   if (!candidate) throw new Error('青简待审候选缺少可读取的完整文档。请在右侧面板裁决当前变更。')
-  return serializePmQingml(candidate)
+  return { qingml: serializePmQingml(candidate), renderModel }
+}
+
+async function readReviewCandidateQingml(engine: EngineService, engineSessionId: string): Promise<string> {
+  return (await readReviewCandidate(engine, engineSessionId)).qingml
 }
 
 function serializePmQingml(doc: PmDoc): string {

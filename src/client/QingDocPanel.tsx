@@ -7,7 +7,6 @@ import type { Editor } from '@tiptap/react'
 import type {
   BridgeDocument,
   ExternalPmDocReadResponse,
-  ExternalReviewRenderModelResponse,
 } from '../contracts.js'
 import {
   DocumentSnapshotView,
@@ -29,16 +28,9 @@ import {
 } from '@qingweb/pages/workspace/data/docWriteBaseline'
 import { pmDocHasSubstantiveContent } from '@qingweb/pages/workspace/data/pageExitSave'
 import { pmDocToViewDocumentSnapshot } from '@qingweb/pages/workspace/data/protocol'
-import {
-  canUseDocumentEditing,
-  deriveReviewRenderMode,
-} from '@qingweb/pages/workspace/data/reviewActions'
+import { canUseDocumentEditing } from '@qingweb/pages/workspace/data/reviewActions'
 import { useWorkspaceFind } from '@qingweb/pages/workspace/hooks/useWorkspaceFind'
-import {
-  countDocVisibleChars,
-  countVisibleChars,
-  type PmDoc,
-} from '@qingagent/pm-schema'
+import type { PmDoc } from '@qingagent/pm-schema'
 import type { StyleTemplateItem } from '@qingagent/contract-ts'
 import {
   encodeAssetBridgeContext,
@@ -58,6 +50,8 @@ import { ensureQingdocRuntimeCss } from './runtimeCss.js'
 import { BridgeHttpError, qingClientStore } from './store.js'
 import type { QingLibraryDoc } from './store.js'
 import { WholeDocReviewNav } from './WholeDocReviewNav.js'
+import { isWholeDocReview } from '../reviewMode.js'
+export { computeExternalReviewChangeRatio } from '../reviewMode.js'
 import {
   assembleDshReviewQuery,
   DSH_DEAI_STYLE_TEMPLATES,
@@ -77,8 +71,6 @@ export type QingDocPanelProps = PropsRuntime<'details'> & InjectedProps
 
 const EMPTY_PATCH_IDS = new Set<string>()
 const EMPTY_ANNOTATIONS: never[] = []
-const WHOLE_DOC_REVIEW_THRESHOLD = 0.7
-
 export function QingDocPanel(props: QingDocPanelProps) {
   ensureQingdocRuntimeCss()
   const sessionId = String(props.useSession((session) => session.sessionId))
@@ -458,27 +450,12 @@ export function QingDocPanel(props: QingDocPanelProps) {
       : null,
     [panelDoc?.ts, snapshot.reviewModel],
   )
-  const derivedReviewChangeRatio = useMemo(
-    () => panelDoc && snapshot.reviewModel
-      ? computeExternalReviewChangeRatio(panelDoc, snapshot.reviewModel)
-      : 0,
-    [panelDoc, snapshot.reviewModel],
-  )
-  const engineChangeRatio = snapshot.reviewModel?.changeRatio
-  const changeRatio = typeof engineChangeRatio === 'number' && Number.isFinite(engineChangeRatio)
-    ? engineChangeRatio
-    : derivedReviewChangeRatio
   const effectiveReview = pendingReview && Boolean(snapshot.reviewModel?.suggestions.some((suggestion) =>
     suggestion.kind !== 'annotation' &&
     (suggestion.status === 'reviewing' || suggestion.status === 'accepted' || suggestion.status === 'rejected')))
-  const reviewRenderMode = deriveReviewRenderMode({
-    effectiveReview,
-    editedNewDoc,
-    changeRatio,
-    wholeDocReviewThreshold: WHOLE_DOC_REVIEW_THRESHOLD,
-    wholeDocument: snapshot.reviewModel?.wholeDocument,
-  })
-  const wholeDocReview = reviewRenderMode.wholeDocReview
+  const wholeDocReview = panelDoc && snapshot.reviewModel
+    ? isWholeDocReview(panelDoc, snapshot.reviewModel, effectiveReview)
+    : false
   const wholeDocReviewBatchKey = [
     activeEngineSessionId ?? '',
     snapshot.reviewModel?.baseVersion ?? -1,
@@ -1375,31 +1352,6 @@ function ExportIcon() {
       <path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5" />
     </svg>
   )
-}
-
-/**
- * 青简产品源 apps/web/src/pages/workspace/data/reviewActions.ts:9-33 与
- * useWorkspacePageController.tsx:1194-1201 的 external render-model 等价输入层。
- */
-export function computeExternalReviewChangeRatio(
-  panelDoc: ExternalPmDocReadResponse,
-  renderModel: ExternalReviewRenderModelResponse,
-): number {
-  const changed = renderModel.suggestions.reduce((sum, suggestion) => {
-    if (suggestion.kind === 'annotation') return sum
-    if (
-      suggestion.status !== 'reviewing' &&
-      suggestion.status !== 'accepted' &&
-      suggestion.status !== 'rejected'
-    ) return sum
-    const before = suggestion.diffHunk?.beforeText ?? suggestion.preview.deleteText
-    const after = suggestion.diffHunk?.afterText ?? suggestion.preview.insertText
-    return sum + countVisibleChars(before ?? '') + countVisibleChars(after ?? '')
-  }, 0)
-  const baseDoc = renderModel.previewDoc ?? panelDoc.pmDoc
-  const total = (baseDoc ? countDocVisibleChars(baseDoc) : 0) +
-    (renderModel.editedDoc ? countDocVisibleChars(renderModel.editedDoc) : 0)
-  return total > 0 ? changed / total : 0
 }
 
 export function panelStatus(input: {
