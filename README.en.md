@@ -100,7 +100,7 @@ The implementation also includes macOS client detection (`mdfind` with an Applic
 
 | Tool | Parameters | Purpose |
 |---|---|---|
-| `qing_write_draft` | `brief` required; `title?` `style?` `docRef?` | Generate a whole QingML document. Without `docRef` it creates a new draft; with a `docRef` bound to this session it rewrites the whole piece (requires explicit user authorisation) |
+| `qing_write_draft` | `brief` required; `title?` `outline?` `style?` `docRef?` | Generate a whole QingML document from the brief and optional explicit outline. Without `docRef` it creates a new draft; with a `docRef` bound to this session it rewrites the whole piece (requires explicit user authorisation) |
 | `qing_edit_draft` | `docRef?`; `ops[]` required | Atomically submit a batch of structured local edits; refused while a review is in progress |
 | `qing_read_draft` | `docRef?`; `mode` defaults to `outline` | Tiered reads: `outline` / `full` / `base` (committed baseline) / `lines` (numbered Markdown) / `blocks` (block ids) |
 | `qing_review_commit` | `docRef?`; `action: accept_all \| reject_all` | Accept or reject the pending review wholesale; hard-limited to one call per turn |

@@ -100,7 +100,7 @@ npx @deepseek-ai/dsh plugin --profile web add dsh-qingagent@latest
 
 | 工具 | 参数 | 作用 |
 |---|---|---|
-| `qing_write_draft` | `brief` 必填；`title?` `style?` `docRef?` | 按简报生成整篇 QingML。省略 `docRef` 为新建；给了本会话 `docRef` 即整篇重构（须用户明确授权） |
+| `qing_write_draft` | `brief` 必填；`title?` `outline?` `style?` `docRef?` | 按简报和可选的显式提纲生成整篇 QingML。省略 `docRef` 为新建；给了本会话 `docRef` 即整篇重构（须用户明确授权） |
 | `qing_edit_draft` | `docRef?`；`ops[]` 必填 | 对已有文稿原子提交一组结构化局部编辑；审阅进行中拒绝再次编辑 |
 | `qing_read_draft` | `docRef?`；`mode` 默认 `outline` | 分级读取：`outline` 概要 / `full` 全文 / `base` 已提交基线 / `lines` 带行号 Markdown / `blocks` 块 ID 清单 |
 | `qing_review_commit` | `docRef?`；`action: accept_all \| reject_all` | 全量接受或拒绝待审稿；代码硬性限制每回合最多一次 |

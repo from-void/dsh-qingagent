@@ -705,10 +705,13 @@ export function outlineOf(qingml: string, title?: string | null): DraftOutline {
   }
 }
 
-export function makeDraftPrompt(input: { brief: string; title?: string; style?: string; correction?: string }): string {
+export function makeDraftPrompt(input: { brief: string; title?: string; outline?: string[]; style?: string; correction?: string }): string {
   return [
     `写作简报：\n${input.brief.trim()}`,
     input.title?.trim() ? `指定标题：${input.title.trim()}` : '',
+    input.outline?.length
+      ? `指定提纲（严格按此顺序和标题写作，不得增删、改名或调序）：\n${input.outline.map((heading) => `- ${heading.trim()}`).join('\n')}`
+      : '',
     input.style?.trim() ? `文风要求：${input.style.trim()}` : '',
     input.correction ?? '',
   ].filter(Boolean).join('\n\n')

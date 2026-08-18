@@ -16,7 +16,7 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【叙述一致性红线】')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【结构摘要自检纪律】')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('字数等你确认后再核对')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('这是纸面的自动落款,随字数和保存时间自动更新,是固定装饰,改不了,也没有开关能关')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('这是文末自动落款，会随字数和保存时间自动更新，属于固定装饰，无法编辑或关闭；正文本身不包含它')
   })
 
   it('目标不唯一时先澄清且只在用户明确全局词时批量执行', () => {
@@ -48,6 +48,7 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('qing 工具返回里的 vN 版本号、块 ID、【文稿状态】行、REVIEW_PENDING 等,是给你判断用的内部状态,不是给用户看的措辞')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('✗「已直接落库生效(v1)」→✓「已经写好了,右侧就能看到」')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('工具失败时只说用户能做什么,不转述原始错误')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('ask_user 的选项若指代修改前内容,生成时一律写「改动前的原文」,禁止写「v1 原文」或任何 vN')
     expect(QINGAGENT_SYSTEM_PROMPT.indexOf('【用户语言纪律】'))
       .toBeLessThan(QINGAGENT_SYSTEM_PROMPT.indexOf('【局部修改纪律】'))
   })
@@ -58,9 +59,14 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
   })
 
   it('改标题时同步稿名和纸面大标题并覆盖无大标题分支', () => {
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('用 strReplace 改正文首个大标题块')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('两者必须在同一次 ops 里一起提交且文字保持一致')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('正文没有大标题块时,用 insertAfterLine 在文首补一个与稿名一致的「# 标题」一级标题')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('正文是否有与旧稿名相同的大标题块')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('两者必须在同一次 ops 里提交且文字保持一致')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('没有则允许只用 setTitle 改稿名')
+  })
+
+  it('明确提纲走独立 outline 通道', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('必须把各级标题逐项放进独立的 outline 参数,保持原顺序和标题文字')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不能只把提纲埋在 brief 里')
   })
 
   it('现状提问会刷新旧审阅态且免读仅限刚提交编辑的本回合', () => {
@@ -120,7 +126,7 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
   })
 
   it('不编造落款开关或其他不存在的界面入口', () => {
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('对这种请求,固定回答:「这是纸面的自动落款,随字数和保存时间自动更新,是固定装饰,改不了,也没有开关能关。」')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('固定回答:「这是文末自动落款，会随字数和保存时间自动更新，属于固定装饰，无法编辑或关闭；正文本身不包含它。」')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('不要即兴发挥别的说法,尤其不要编造设置入口')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('不得向用户指路不存在的按钮、菜单或设置项')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('不确定界面上有没有某个入口时,只说这件事做不到,不要猜路径')

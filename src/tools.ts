@@ -131,6 +131,36 @@ function assertNoRawTags(ops: ExternalEditProposalOp[]): void {
   }
 }
 
+function assertSynchronizedTitleChange(
+  currentTitle: string | null | undefined,
+  pmDoc: PmDoc,
+  ops: ExternalEditProposalOp[],
+): void {
+  const titleOp = ops.find((op): op is Extract<ExternalEditProposalOp, { kind: 'setTitle' }> => op.kind === 'setTitle')
+  const oldTitle = currentTitle?.trim() ?? ''
+  const newTitle = titleOp?.title.trim() ?? ''
+  if (!titleOp || !oldTitle || !newTitle || oldTitle === newTitle) return
+  let matchOrdinal = 0
+  const headingMatchOrdinals = new Set<number>()
+  for (const block of pmTextBlockEntries(pmDoc)) {
+    let index = block.text.indexOf(oldTitle)
+    while (index >= 0) {
+      matchOrdinal += 1
+      if (block.type === 'heading' && block.text.trim() === oldTitle) headingMatchOrdinals.add(matchOrdinal)
+      index = block.text.indexOf(oldTitle, index + oldTitle.length)
+    }
+  }
+  if (headingMatchOrdinals.size === 0) return
+  const bodyTitleIsSynchronized = ops.some((op) =>
+    op.kind === 'strReplace' &&
+    op.old.trim() === oldTitle &&
+    op.new.trim() === newTitle &&
+    (op.all === true || (op.nth === undefined ? matchOrdinal === 1 : headingMatchOrdinals.has(op.nth))))
+  if (!bodyTitleIsSynchronized) {
+    throw new Error(`稿名和纸面开头的标题需要一起修改。请在同一批修改中，把正文开头的「${oldTitle}」也改成「${newTitle}」。`)
+  }
+}
+
 const outlineSchema = {
   type: 'array' as const,
   items: { type: 'string' as const },
@@ -155,6 +185,7 @@ function writeDraftTool(services: ToolServices) {
     parameters: {
       brief: { type: 'string', required: true, description: '完整写作简报：目标、受众、要点、素材和约束。' },
       title: { type: 'string', description: '可选标题；未给出时由侧模型拟定。' },
+      outline: { ...outlineSchema, description: '可选的明确提纲；每项是一条必须按原顺序保留的章节标题。' },
       style: { type: 'string', description: '可选文风、篇幅与排版要求。' },
       docRef: { type: 'string', description: '要整稿改写的青简会话 ID；省略即新建。' },
     },
@@ -165,6 +196,7 @@ function writeDraftTool(services: ToolServices) {
         properties: {
           title: { type: 'string', required: true },
           blocks: { type: 'integer', required: true },
+          structure: { type: 'string', required: true, description: '按纸面形态汇总的标题、正文、清单、表格等结构。' },
           words: { type: 'integer', required: true },
           status: { type: 'string', enum: ['committed', 'review'], required: true },
           engineSessionId: { type: 'string', required: true },
@@ -184,7 +216,7 @@ function writeDraftTool(services: ToolServices) {
         },
       },
       render: (_args, value) => value.status === 'review'
-        ? textBlock(`${docStateLine('pendingReview', value.patchCount)}\n本稿含 ${value.footnotes} 处脚注、${value.formulas} 个公式，其中 ${value.automaticConversions} 处已自动整理为正确格式。\n${REVIEW_END_MESSAGE}`)
+        ? textBlock(`${docStateLine('pendingReview', value.patchCount)}\n内容构成：${value.structure}。\n本稿含 ${value.footnotes} 处脚注、${value.formulas} 个公式，其中 ${value.automaticConversions} 处已自动整理为正确格式。\n${REVIEW_END_MESSAGE}`)
         : textBlock([
           docStateLine('editing'),
           `青简文稿《${value.title}》已提交。`,
@@ -192,6 +224,7 @@ function writeDraftTool(services: ToolServices) {
           `文稿已直接落库生效,当前不在审阅态,没有任何待审稿,可以立即继续修改。`,
           `文稿引用：${value.engineSessionId}`,
           `全文约 ${value.words} 字。`,
+          `内容构成：${value.structure}。`,
           `本稿含 ${value.footnotes} 处脚注、${value.formulas} 个公式，其中 ${value.automaticConversions} 处已自动整理为正确格式。`,
           ...(typeof value.warning === 'string' ? [`⚠ ${value.warning}`] : []),
           value.outline.length ? `提纲：\n${value.outline.map((line) => `- ${line}`).join('\n')}` : '提纲：暂无标题层级。',
@@ -199,6 +232,7 @@ function writeDraftTool(services: ToolServices) {
       presentationMeta: (_args, value) => ({
         title: value.title,
         blocks: value.blocks,
+        structure: value.structure,
         words: value.words,
         status: value.status,
         patchCount: value.patchCount ?? 0,
@@ -212,7 +246,7 @@ function writeDraftTool(services: ToolServices) {
       card: 'generic',
       title: args.docRef ? '正在改写青简文稿' : '正在起草青简文稿',
       kind: 'edit',
-      rawInput: { brief: args.brief, ...(args.title ? { title: args.title } : {}), ...(args.style ? { style: args.style } : {}) },
+      rawInput: { brief: args.brief, ...(args.title ? { title: args.title } : {}), ...(args.outline ? { outline: args.outline } : {}), ...(args.style ? { style: args.style } : {}) },
     }),
     presentResult: (_args, result) => result.isError
       ? failedResultPresentation('青简写作未完成', result.content)
@@ -238,7 +272,7 @@ function writeDraftTool(services: ToolServices) {
         if (docBefore.state === 'pendingReview') {
           throw new Error(REVIEW_PENDING_ERROR)
         }
-        const initialPrompt = makeDraftPrompt({ brief: args.brief, title: args.title, style: args.style })
+        const initialPrompt = makeDraftPrompt({ brief: args.brief, title: args.title, outline: args.outline, style: args.style })
         let qingml: string
         let automaticConversions = 0
         let proposal: ExternalProposalResponse
@@ -249,6 +283,7 @@ function writeDraftTool(services: ToolServices) {
             const retryPrompt = makeDraftPrompt({
               brief: args.brief,
               title: args.title,
+              outline: args.outline,
               style: args.style,
               correction: `${EMPTY_DRAFT_CORRECTION}\n\n上一次输出:\n${qingml}`,
             })
@@ -267,6 +302,7 @@ function writeDraftTool(services: ToolServices) {
             const retryPrompt = makeDraftPrompt({
               brief: args.brief,
               title: args.title,
+              outline: args.outline,
               style: args.style,
               correction: correctionPrompt(qingml, error.body.diagnostic),
             })
@@ -345,9 +381,10 @@ function writeDraftTool(services: ToolServices) {
           return {
             title,
             blocks: outline.blocks,
+            structure: outline.structure,
             words,
             ...(lostBlocks > 0
-              ? { warning: `注意:提交了 ${submittedBlocks} 个块,落库仅 ${outline.blocks} 个——有 ${lostBlocks} 个块因 QingML 结构不合规被引擎剥除。请用 qing_read_draft 核对落库内容,缺失的部分需修正格式后重写。` }
+              ? { warning: `生成了 ${submittedBlocks} 项正文内容，文稿实际保留 ${outline.blocks} 项；有 ${lostBlocks} 项未通过格式检查。请重新查看文稿，补回缺失内容。` }
               : {}),
             status: proposal.status,
             engineSessionId: bound.engineSessionId,
@@ -383,7 +420,7 @@ function writeDraftTool(services: ToolServices) {
 function editDraftTool(services: ToolServices) {
   return defineTool({
     name: 'qing_edit_draft',
-    description: '对已有青简文稿做结构化局部修改。改标题要同时改两处:setTitle 改稿名(元数据),正文首个大标题块用 strReplace 改(纸面上看到的标题就是它);两者必须在同一次 ops 里一起提交,文字保持一致。正文没有大标题块时,用 insertAfterLine 在文首补一个与稿名一致的「# 标题」一级标题,同样与 setTitle 同批提交。删除整段/整节/清单项用 deleteBlock/deleteListItem(先 qing_read_draft mode:"blocks" 取块 ID,严禁用 strReplace 置空留残壳);改一句、插入一段或追加一节用相应操作;高亮、文字颜色、加粗一句话等行内标记用 markText,严禁为加标记用 qing_write_draft 整篇重写。markText add 会替换命中内容已有的同类型不同属性标记,同类型同属性则幂等提示;remove 仅移除属性全等的标记,调用前必须先用 qing_read_draft(mode:"blocks") 或读稿确认现有标记的确切 attrs;代码块内文本不支持行内标记;命中列表项时审阅卡会按顶层块呈现为整列表替换。strReplace 的 old/new 必须是纯文本内容，不含 ##、-、** 等 Markdown 语法标记。只有用户明确表达「所有/全部/凡是/都」等全局意图时,才用单个 strReplace + all:true 替换全部命中;all:true 不得与 nth 同时使用。all 缺省时,old 多处命中且未指定 nth 仍会拒绝并要求先向用户确认。多处修改必须放进同一次调用的 ops 数组一次提交；逐条调用会因首条进入审阅态而被 REVIEW_PENDING 拒绝。insertAfterLine 用的行号来自你读稿那一刻的稿子;同一批 ops 里一旦有插入或删除,其后所有行号都会整体偏移,不要再沿用读稿时的旧行号。需要在插入点之后继续改时,改用 insertAfterBlock 这类块级锚点(不受行号偏移影响),或留到下一回合重读后再改。命中待办清单、表格、嵌套列表这类多行块时,优先用 insertAfterBlock 等项级/块级 op;例外:指向多行块的最后一行是合法的,语义是插到整块之后(不是块内)——想在清单尾部追加子项时别用它,那会插到清单外面。拿不准结构时先 qing_read_draft(mode:"blocks") 看清再选。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
+    description: '对已有青简文稿做结构化局部修改。改标题时,若正文有与旧稿名相同的大标题块,要同时用 setTitle 改稿名(元数据)、用 strReplace 改纸面标题;两者必须在同一次 ops 里一起提交,文字保持一致。正文没有与旧稿名相同的大标题块时,允许只用 setTitle。删除整段/整节/清单项用 deleteBlock/deleteListItem(先 qing_read_draft mode:"blocks" 取块 ID,严禁用 strReplace 置空留残壳);改一句、插入一段或追加一节用相应操作;高亮、文字颜色、加粗一句话等行内标记用 markText,严禁为加标记用 qing_write_draft 整篇重写。markText add 会替换命中内容已有的同类型不同属性标记,同类型同属性则幂等提示;remove 仅移除属性全等的标记,调用前必须先用 qing_read_draft(mode:"blocks") 或读稿确认现有标记的确切 attrs;代码块内文本不支持行内标记;命中列表项时审阅卡会按顶层块呈现为整列表替换。strReplace 的 old/new 必须是纯文本内容，不含 ##、-、** 等 Markdown 语法标记。只有用户明确表达「所有/全部/凡是/都」等全局意图时,才用单个 strReplace + all:true 替换全部命中;all:true 不得与 nth 同时使用。all 缺省时,old 多处命中且未指定 nth 仍会拒绝并要求先向用户确认。多处修改必须放进同一次调用的 ops 数组一次提交；逐条调用会因首条进入审阅态而被 REVIEW_PENDING 拒绝。insertAfterLine 用的行号来自你读稿那一刻的稿子;同一批 ops 里一旦有插入或删除,其后所有行号都会整体偏移,不要再沿用读稿时的旧行号。需要在插入点之后继续改时,改用 insertAfterBlock 这类块级锚点(不受行号偏移影响),或留到下一回合重读后再改。命中待办清单、表格、嵌套列表这类多行块时,优先用 insertAfterBlock 等项级/块级 op;例外:指向多行块的最后一行是合法的,语义是插到整块之后(不是块内)——想在清单尾部追加子项时别用它,那会插到清单外面。拿不准结构时先 qing_read_draft(mode:"blocks") 看清再选。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
     parameters: {
       docRef: { type: 'string', description: '要局部修改的青简会话 ID；省略时使用当前激活文稿。' },
       ops: {
@@ -517,7 +554,7 @@ function editDraftTool(services: ToolServices) {
               additionalProperties: false,
               properties: {
                 kind: { type: 'string', const: 'setTitle', required: true },
-                title: { type: 'string', required: true, description: '新标题;引擎约束:去空白后 1-48 字,同一批最多一个 setTitle,不与整篇 draft 混用。改标题时必须在同一次 ops 里一起提交正文标题同步操作:已有大标题用 strReplace,没有大标题则用 insertAfterLine 在文首补「# 标题」。' },
+                title: { type: 'string', required: true, description: '新标题;引擎约束:去空白后 1-48 字,同一批最多一个 setTitle,不与整篇 draft 混用。正文存在与旧稿名相同的大标题时,必须在同一次 ops 里用 strReplace 同步修改;不存在时允许只改稿名。' },
               },
             },
           ],
@@ -534,6 +571,7 @@ function editDraftTool(services: ToolServices) {
           engineSessionId: { type: 'string', required: true },
           title: { type: 'string', required: true },
           blocks: { type: 'integer', required: true },
+          structure: { type: 'string', required: true, description: '按纸面形态汇总的标题、正文、清单、表格等结构。' },
           words: { type: 'integer', required: true },
           docVersion: { type: 'integer', required: true },
           reviewCount: { type: 'integer', required: true },
@@ -565,6 +603,7 @@ function editDraftTool(services: ToolServices) {
         engineSessionId: value.engineSessionId,
         title: value.title,
         blocks: value.blocks,
+        structure: value.structure,
         words: value.words,
         reviewCount: value.reviewCount,
         opResults: value.opResults,
@@ -577,6 +616,9 @@ function editDraftTool(services: ToolServices) {
     presentResult: (_args, result) => result.isError
       ? failedResultPresentation('青简局部修改未完成', result.content)
       : { card: 'generic', title: '青简局部修改已提交' },
+    finalizeContent: (_exec, result) => result.isError
+      ? sanitizeEditFailureContent(result.content)
+      : undefined,
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
       try {
@@ -589,7 +631,11 @@ function editDraftTool(services: ToolServices) {
         const titleOnly = ops.every((op) => op.kind === 'setTitle')
         if (before.state === 'empty' && !titleOnly) throw new Error('文稿尚无正文；请先用 qing_write_draft 起草完整文稿。改标题可单独用 setTitle。')
         assertNoRawTags(ops)
-        const prepared = await prepareEditOps(services.engine, engineSessionId, ops)
+        const basePmDoc = ops.some((op) => op.kind === 'setTitle')
+          ? await readPmDoc(services.engine, engineSessionId)
+          : undefined
+        if (basePmDoc) assertSynchronizedTitleChange(before.title, basePmDoc, ops)
+        const prepared = await prepareEditOps(services.engine, engineSessionId, ops, basePmDoc)
         const proposal = await proposeEditOpsWithPlainTextRetry(
           services.engine,
           engineSessionId,
@@ -642,11 +688,12 @@ function editDraftTool(services: ToolServices) {
         return {
           status: proposal.status,
           message: (proposal.status === 'review'
-            ? `${docStateLine('pendingReview', proposal.count)}${countLine}\n${REVIEW_END_MESSAGE}`
-            : `${docStateLine('editing')}\n局部修改已提交到《${outline.title}》。${countLine}`) + focusSuffix(services, dshSessionId),
+            ? `${docStateLine('pendingReview', proposal.count)}${countLine}\n内容构成：${outline.structure}。\n${REVIEW_END_MESSAGE}`
+            : `${docStateLine('editing')}\n局部修改已提交到《${outline.title}》。${countLine}\n内容构成：${outline.structure}。`) + focusSuffix(services, dshSessionId),
           engineSessionId,
           title: outline.title,
           blocks: outline.blocks,
+          structure: outline.structure,
           words,
           docVersion: official.docVersion,
           reviewCount: proposal.status === 'review' ? proposal.count : 0,
@@ -1147,6 +1194,7 @@ async function prepareEditOps(
   engine: EngineService,
   engineSessionId: string,
   ops: ExternalEditProposalOp[],
+  suppliedPmDoc?: PmDoc,
 ): Promise<PreparedEditOps> {
   const lineOps = ops.flatMap((op, index) => op.kind === 'insertAfterLine' ? [{ op, index }] : [])
   const strReplaceOps = ops.flatMap((op, index) => op.kind === 'strReplace' ? [{ op, index }] : [])
@@ -1160,7 +1208,7 @@ async function prepareEditOps(
     }
   }
 
-  const pmDoc = await readPmDoc(engine, engineSessionId)
+  const pmDoc = suppliedPmDoc ?? await readPmDoc(engine, engineSessionId)
   const matchCounts = inspectStrReplaceTargets(pmDoc, strReplaceOps)
   const opResults = strReplaceOps.map(({ op, index }) => ({
     opIndex: index + 1,
@@ -1177,10 +1225,10 @@ async function prepareEditOps(
   for (const { op } of lineOps) {
     const span = spans.find((item) => op.line >= item.startLine && op.line <= item.endLine)
     if (!span) {
-      throw new Error(`第 ${op.line} 行不在当前文稿范围内。请重新读取文稿后再选择插入位置。`)
+      throw new Error('所选位置不在当前文稿范围内。请重新读取文稿后再选择插入位置。')
     }
     if (span.contentEndLine > span.startLine && op.line < span.contentEndLine) {
-      throw new Error(`第 ${op.line} 行位于一段多行内容的中间，不能作为插入位置。请改在这段内容的末行之后，或重新读取文稿后按整段定位。`)
+      throw new Error('所选位置位于一段多行内容的中间，不能作为插入位置。请改在这段内容的末尾之后，或重新读取文稿后按整段定位。')
     }
   }
 
@@ -1197,21 +1245,33 @@ interface PmTextNodeLike {
   text?: string
 }
 
-/** 与引擎 findLiteralMatches 同口径：文本节点跨 mark 拼接，hardBreak 投影为换行，块之间不串接。 */
-function pmTextBlocks(doc: PmDoc): string[] {
-  const blocks: string[] = []
+interface PmTextBlockEntry {
+  type?: string
+  text: string
+}
+
+function pmTextBlockEntries(doc: PmDoc): PmTextBlockEntry[] {
+  const blocks: PmTextBlockEntry[] = []
   const visit = (node: PmTextNodeLike): void => {
     if (node.type === 'paragraph' || node.type === 'heading' || node.type === 'codeBlock' || node.type === 'penNote') {
-      blocks.push((node.content ?? []).map((child) => {
-        if (child.type === 'hardBreak') return '\n'
-        if (child.type === 'inlineMath' || child.type === 'footnoteReference') return PM_INLINE_ATOM_PLACEHOLDER
-        return child.type === 'text' && typeof child.text === 'string' ? child.text : ''
-      }).join(''))
+      blocks.push({
+        type: node.type,
+        text: (node.content ?? []).map((child) => {
+          if (child.type === 'hardBreak') return '\n'
+          if (child.type === 'inlineMath' || child.type === 'footnoteReference') return PM_INLINE_ATOM_PLACEHOLDER
+          return child.type === 'text' && typeof child.text === 'string' ? child.text : ''
+        }).join(''),
+      })
     }
     for (const child of node.content ?? []) visit(child)
   }
   for (const node of doc.content as PmTextNodeLike[]) visit(node)
   return blocks
+}
+
+/** 与引擎 findLiteralMatches 同口径：文本节点跨 mark 拼接，hardBreak 投影为换行，块之间不串接。 */
+function pmTextBlocks(doc: PmDoc): string[] {
+  return pmTextBlockEntries(doc).map((block) => block.text)
 }
 
 function countLiteralMatches(blocks: readonly string[], find: string): number {
@@ -1436,8 +1496,7 @@ function sanitizeToolBoundaryError(error: unknown): unknown {
   const raw = `${detail.error}\n${error.message}`
   if (error.message.includes(STR_REPLACE_PLAIN_TEXT_ERROR)) return new Error(STR_REPLACE_PLAIN_TEXT_ERROR)
   if (/位于多行|insertAfter(?:Line|Block)|paragraph\s*块/i.test(raw)) {
-    const line = /第\s*(\d+)\s*行/u.exec(raw)?.[1]
-    return new Error(`${line ? `第 ${line} 行` : '所选位置'}位于一段多行内容的中间，不能作为插入位置。请改在这段内容的末行之后，或重新读取文稿后按整段定位。`)
+    return new Error('所选位置位于一段多行内容的中间，不能作为插入位置。请改在这段内容的末尾之后，或重新读取文稿后按整段定位。')
   }
   if (/未命中|未唯一命中/u.test(raw)) {
     return new Error('没有找到唯一的目标文字。请重新读取文稿，缩小目标范围后再试。')
@@ -1455,10 +1514,21 @@ function sanitizeToolBoundaryError(error: unknown): unknown {
 }
 
 function sanitizeFailureSummary(text: string): string {
-  if (/paragraph|insertAfter(?:Line|Block)?|blockId|HTTP\s*\d{3}|\b400\b|块\s+[A-Za-z0-9_-]+/i.test(text)) {
+  if (/paragraph|insertAfter(?:Line|Block)?|blockId|HTTP\s*\d{3}|\b[45]\d{2}\b|第\s*\d+\s*行|块\s+[A-Za-z0-9_-]+/i.test(text)) {
     return '修改位置需要重新确认，请重新读取文稿后再试'
   }
   return text
+}
+
+function sanitizeEditFailureContent(content: readonly unknown[]) {
+  const raw = content.flatMap((block) => {
+    if (!block || typeof block !== 'object') return []
+    const value = block as { type?: unknown; text?: unknown }
+    return value.type === 'text' && typeof value.text === 'string' ? [value.text] : []
+  }).join('\n')
+  return sanitizeFailureSummary(raw) === raw
+    ? undefined
+    : textBlock('Error: 修改位置需要重新确认，请重新读取文稿后再试。')
 }
 
 function failedResultPresentation(title: string, content: readonly unknown[]) {

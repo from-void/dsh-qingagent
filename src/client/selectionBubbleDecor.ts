@@ -76,6 +76,15 @@ function decorateReviewOutcomeNode(node: Text): boolean {
 }
 
 function decorateTextNode(node: Text): void {
+  const option = node.parentElement?.closest('button, [role="option"], [role="radio"]')
+  if (option && /\bv\d+\b/i.test(node.data)) {
+    node.data = node.data
+      .replace(/\bv\d+\s*原文/giu, '改动前的原文')
+      .replace(/\bv\d+\s*版本/giu, '改动前的版本')
+      .replace(/\bv\d+\b/giu, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+  }
   if (decorateReviewOutcomeNode(node)) return
   const text = node.data
   SELECTION_RE.lastIndex = 0
@@ -109,7 +118,9 @@ function decorateWithin(root: Node): void {
         return NodeFilter.FILTER_REJECT
       }
       const data = (node as Text).data
-      return data.includes('[选段]') || data.startsWith('【审核结果】') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
+      return data.includes('[选段]') || data.startsWith('【审核结果】') || /\bv\d+\b/i.test(data)
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_SKIP
     },
   })
   const hits: Text[] = []
