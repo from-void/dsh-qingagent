@@ -66,7 +66,7 @@ describe('DocumentSaveCoordinator', () => {
     vi.useRealTimers()
   })
 
-  it('未知 actual 版本冲突如实 surface，且不会拿旧全文静默重发', async () => {
+  it('反向:真实用户编辑 + 外部未知 actual 版本仍 surface，且不拿旧全文静默重发', async () => {
     const states: string[] = []
     const send = vi.fn(async (_request: ExternalDocReplaceRequest) => {
       throw {
@@ -81,6 +81,7 @@ describe('DocumentSaveCoordinator', () => {
       send: (_engineSessionId, request) => send(request),
       onCommitted: vi.fn(),
       onStateChange: (state) => states.push(state.kind),
+      hasLocalDocumentChanges: () => true,
     })
 
     await expect(coordinator.enqueue('qing-1', pm('本地改动'), baseline(7))).rejects.toThrow('保存冲突')
@@ -125,6 +126,7 @@ describe('DocumentSaveCoordinator', () => {
       send,
       createMutationId: () => `m-${++mutation}`,
       onCommitted: vi.fn(),
+      hasLocalDocumentChanges: () => false,
     })
 
     const one = coordinator.enqueue('qing-a', pm('甲'), baseline(4))
@@ -159,6 +161,7 @@ describe('DocumentSaveCoordinator', () => {
       send,
       createMutationId: () => `m-${++mutation}`,
       onCommitted: vi.fn(),
+      hasLocalDocumentChanges: () => false,
     })
     coordinator.rememberKnownVersion('qing-a', baseline(9), 'streamApply')
     coordinator.rememberKnownVersion('qing-b', baseline(12), 'streamApply')
@@ -187,5 +190,74 @@ describe('DocumentSaveCoordinator', () => {
     await expect(isolated.enqueue('qing-a', pm('不得借乙账本重放'), baseline(7))).rejects.toThrow('保存冲突')
     expect(isolatedSend).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
+  })
+
+  it('defer 时登记但尚未 apply 的 actual 版本可在本地语义干净时静默重放', async () => {
+    vi.useFakeTimers()
+    const send = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false, clientMutationId: 'm-1', code: 'VERSION_CONFLICT',
+        conflict: { expected: 4, actual: 5 }, actualContentHash: 'hash-5',
+      })
+      .mockResolvedValueOnce({
+        ok: true, clientMutationId: 'm-2', docVersion: 6, contentHash: 'hash-6', ts: 't6', charCount: 1,
+      })
+    let mutation = 0
+    const coordinator = new DocumentSaveCoordinator({
+      send,
+      createMutationId: () => `m-${++mutation}`,
+      onCommitted: vi.fn(),
+      hasLocalDocumentChanges: () => false,
+    })
+    coordinator.rememberKnownVersion('qing-1', baseline(5), 'streamConflict')
+
+    const saving = coordinator.enqueue('qing-1', pm('脚手架回声'), baseline(4))
+    await vi.runAllTimersAsync()
+    await saving
+
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(send.mock.calls[1]?.[1]).toMatchObject({
+      expectedDocumentSnapshot: 5,
+      baseContentHash: 'hash-5',
+      clientMutationId: 'm-2',
+    })
+    expect(coordinator.getState()).toMatchObject({ kind: 'saved', version: 6 })
+    vi.useRealTimers()
+  })
+
+  it('即使 actual 已登记，真实用户语义分歧也必须 surface 冲突', async () => {
+    const send = vi.fn().mockResolvedValue({
+      ok: false, clientMutationId: 'm-1', code: 'VERSION_CONFLICT',
+      conflict: { expected: 7, actual: 9 }, actualContentHash: 'hash-9',
+    })
+    const coordinator = new DocumentSaveCoordinator({
+      send,
+      onCommitted: vi.fn(),
+      hasLocalDocumentChanges: () => true,
+    })
+    coordinator.rememberKnownVersion('qing-1', baseline(9), 'streamConflict')
+
+    await expect(coordinator.enqueue('qing-1', pm('用户正在输入'), baseline(7)))
+      .rejects.toThrow('保存冲突')
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(coordinator.getState()).toMatchObject({ kind: 'conflict', expected: 7, actual: 9 })
+  })
+
+  it('反向 2:语义比较器不可用或抛错时 fail closed，不得自动重载', async () => {
+    const send = vi.fn().mockResolvedValue({
+      ok: false, clientMutationId: 'm-1', code: 'VERSION_CONFLICT',
+      conflict: { expected: 2, actual: 3 }, actualContentHash: 'hash-3',
+    })
+    const coordinator = new DocumentSaveCoordinator({
+      send,
+      onCommitted: vi.fn(),
+      hasLocalDocumentChanges: () => { throw new Error('schema unavailable') },
+    })
+    coordinator.rememberKnownVersion('qing-1', baseline(3), 'streamConflict')
+
+    await expect(coordinator.enqueue('qing-1', pm('无法比较'), baseline(2)))
+      .rejects.toThrow('保存冲突')
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(coordinator.getState()).toMatchObject({ kind: 'conflict', expected: 2, actual: 3 })
   })
 })

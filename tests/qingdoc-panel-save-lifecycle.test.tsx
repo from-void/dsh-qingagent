@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DocWriteBaseline } from '@qingweb/pages/workspace/data/docWriteBaseline'
 import type {
+  BridgeEvent,
   DocSuggestion,
   ExternalPmDocReadResponse,
   ExternalReviewRenderModelResponse,
@@ -21,6 +22,8 @@ import {
 
 const viewHarness = vi.hoisted(() => ({
   props: null as Record<string, unknown> | null,
+  innerHtml: '',
+  semanticDirty: false,
   pending: null as { doc: PmDoc; baseline: {
     expectedDocumentSnapshot: number
     baseContentHash: string
@@ -42,11 +45,11 @@ vi.mock('@qingweb/pages/workspace/components/DocumentSnapshotView', async () => 
     ) {
       viewHarness.props = props as unknown as Record<string, unknown>
       React.useImperativeHandle(ref, () => ({
-        getInnerHtml: () => '',
+        getInnerHtml: () => viewHarness.innerHtml,
         getLastPresentationRun: () => null,
-        hasLocalDocumentChanges: () => viewHarness.pending !== null,
+        hasLocalDocumentChanges: () => viewHarness.semanticDirty,
         canSafelyApplyIncomingDocument: () => false,
-        compareIncomingDocument: () => viewHarness.pending ? 'different' : 'equivalent',
+        compareIncomingDocument: () => viewHarness.semanticDirty ? 'different' : 'equivalent',
         flushPendingDocSave: async () => {
           const pending = viewHarness.pending
           viewHarness.pending = null
@@ -99,8 +102,20 @@ vi.mock('@qingweb/pages/workspace/components/DocToolbar', async () => {
 })
 
 class FakeEventSource {
+  static instances: FakeEventSource[] = []
+  readonly listeners = new Map<string, Array<(event: MessageEvent) => void>>()
   onerror: (() => void) | null = null
-  addEventListener(): void {}
+  constructor(readonly url: string) { FakeEventSource.instances.push(this) }
+  addEventListener(name: string, listener: EventListenerOrEventListenerObject): void {
+    const callback = typeof listener === 'function' ? listener : (event: Event) => listener.handleEvent(event)
+    const current = this.listeners.get(name) ?? []
+    current.push(callback as (event: MessageEvent) => void)
+    this.listeners.set(name, current)
+  }
+  emit(event: BridgeEvent): void {
+    const message = new MessageEvent(event.type, { data: JSON.stringify(event) })
+    for (const listener of this.listeners.get(event.type) ?? []) listener(message)
+  }
   close(): void {}
 }
 
@@ -116,6 +131,14 @@ const WHOLE_BASE_PM = {
 const WHOLE_EDITED_PM = {
   type: 'doc', attrs: { schemaVersion: 1 },
   content: [{ type: 'paragraph', attrs: { blockId: 'whole-edited' }, content: [{ type: 'text', text: '新版全文' }] }],
+} as PmDoc
+const TOOL_FIRST_PM = {
+  type: 'doc', attrs: { schemaVersion: 1 },
+  content: [{ type: 'paragraph', attrs: { blockId: 'tool-first' }, content: [{ type: 'text', text: '工具第一稿' }] }],
+} as PmDoc
+const TOOL_SECOND_PM = {
+  type: 'doc', attrs: { schemaVersion: 1 },
+  content: [{ type: 'paragraph', attrs: { blockId: 'tool-second' }, content: [{ type: 'text', text: '工具第二稿' }] }],
 } as PmDoc
 
 function reviewSuggestion(
@@ -142,9 +165,12 @@ afterEach(() => {
   host?.remove()
   host = null
   viewHarness.pending = null
+  viewHarness.innerHtml = ''
+  viewHarness.semanticDirty = false
   viewHarness.props = null
   patchNavHarness.props = null
   toolbarHarness.props = null
+  FakeEventSource.instances = []
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -260,6 +286,7 @@ describe('QingDocPanel 保存生命周期', () => {
       doc: EDITED_PM,
       baseline: { expectedDocumentSnapshot: 0, baseContentHash: 'hash-0', baseHasSubstantiveContent: false },
     }
+    viewHarness.semanticDirty = true
     act(() => root?.unmount())
     root = null
 
@@ -281,6 +308,7 @@ describe('QingDocPanel 保存生命周期', () => {
       doc: EDITED_PM,
       baseline: { expectedDocumentSnapshot: 0, baseContentHash: 'hash-0', baseHasSubstantiveContent: false },
     }
+    viewHarness.semanticDirty = true
     await act(async () => {
       document.querySelector<HTMLButtonElement>('.qingdoc-doc-trigger')?.click()
     })
@@ -296,6 +324,84 @@ describe('QingDocPanel 保存生命周期', () => {
     expect(editedPuts).toHaveLength(1)
     expect(String(editedPuts[0]?.[0])).toContain('engineSessionId=qing-a')
     expect(String(editedPuts[0]?.[0])).not.toContain('engineSessionId=qing-b')
+  })
+
+  it('防抖保存已在途时收到 doc-committed，先登记 incoming 并把旧基线静默重放到新版本', async () => {
+    const bridge = installToolWriteBridgeFetch('dsh-p78-inflight', {
+      initialVersion: 1,
+      initialPm: WHOLE_BASE_PM,
+      conflictFirstPut: true,
+    })
+    viewHarness.innerHtml = '旧版全文'
+    renderPanel('dsh-p78-inflight')
+    const onEditorChange = await vi.waitFor(() => {
+      const callback = viewHarness.props?.onEditorChange
+      expect(callback).toBeTypeOf('function')
+      return callback as (doc: PmDoc, baseline: DocWriteBaseline) => Promise<void>
+    })
+
+    // 先让一笔旧基线保存进入网络；随后语义恢复干净，模拟 trailingNode 脚手架回声。
+    viewHarness.semanticDirty = true
+    const saving = onEditorChange(WHOLE_BASE_PM, {
+      expectedDocumentSnapshot: 1,
+      baseContentHash: 'hash-1',
+      baseHasSubstantiveContent: true,
+    })
+    await vi.waitFor(() => expect(bridge.putRequests()).toHaveLength(1))
+    viewHarness.semanticDirty = false
+
+    act(() => bridge.commitTool(TOOL_FIRST_PM, '工具第一稿'))
+    bridge.releaseFirstPutConflict()
+    await act(async () => { await saving })
+
+    await vi.waitFor(() => expect(bridge.putRequests()).toHaveLength(2))
+    expect(bridge.putRequests().map((request) => request.expectedDocumentSnapshot)).toEqual([1, 2])
+    await vi.waitFor(() => expect(
+      document.querySelector('[data-qingagent-doc-panel]')?.getAttribute('data-save-state'),
+    ).not.toBe('conflict'))
+    expect(document.querySelector('.qingdoc-conflict-reload')).toBeNull()
+  })
+
+  it('连续两次工具写稿且用户零输入，脚手架事务不发保存且顶栏始终非冲突', async () => {
+    const bridge = installToolWriteBridgeFetch('dsh-p78-two-tools')
+    renderPanel('dsh-p78-two-tools')
+    const onEditorChange = await vi.waitFor(() => {
+      const callback = viewHarness.props?.onEditorChange
+      expect(callback).toBeTypeOf('function')
+      return callback as (doc: PmDoc, baseline: DocWriteBaseline) => Promise<void>
+    })
+
+    viewHarness.semanticDirty = false
+    await act(async () => {
+      await onEditorChange(EMPTY_PM, {
+        expectedDocumentSnapshot: 0,
+        baseContentHash: 'hash-0',
+        baseHasSubstantiveContent: false,
+      })
+    })
+    act(() => bridge.commitTool(TOOL_FIRST_PM, '工具第一稿'))
+    await vi.waitFor(() => expect(
+      document.querySelector('[data-testid="mock-document-view"]')?.getAttribute('data-doc-json'),
+    ).toContain('工具第一稿'))
+
+    viewHarness.innerHtml = '工具第一稿'
+    await act(async () => {
+      await onEditorChange(TOOL_FIRST_PM, {
+        expectedDocumentSnapshot: 1,
+        baseContentHash: 'hash-1',
+        baseHasSubstantiveContent: true,
+      })
+    })
+    act(() => bridge.commitTool(TOOL_SECOND_PM, '工具第二稿'))
+
+    await vi.waitFor(() => expect(
+      document.querySelector('[data-testid="mock-document-view"]')?.getAttribute('data-doc-json'),
+    ).toContain('工具第二稿'))
+    expect(bridge.putRequests()).toHaveLength(0)
+    expect(document.querySelector('[data-qingagent-doc-panel]')?.getAttribute('data-save-state'))
+      .not.toBe('conflict')
+    expect(document.querySelector('.qingdoc-status')?.textContent).not.toContain('保存冲突')
+    expect(document.querySelector('.qingdoc-conflict-reload')).toBeNull()
   })
 
   it('文稿标题触发器恒显，并支持打开、Esc 与外点关闭', async () => {
@@ -858,6 +964,115 @@ function renderPanel(sessionId: string): void {
     qingLayout: { openDetails: vi.fn(), closeDetails: vi.fn() },
   } as unknown as QingDocPanelProps
   act(() => root?.render(<QingDocPanel {...props} />))
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise })
+  return { promise, resolve }
+}
+
+function installToolWriteBridgeFetch(
+  dshSessionId: string,
+  options: {
+    initialVersion?: number
+    initialPm?: PmDoc
+    conflictFirstPut?: boolean
+  } = {},
+) {
+  vi.stubGlobal('EventSource', FakeEventSource)
+  let serverVersion = options.initialVersion ?? 0
+  let serverPm = options.initialPm ?? EMPTY_PM
+  let serverText = serverVersion > 0 ? '旧版全文' : ''
+  const firstPutConflictGate = deferred<void>()
+  const requests: Array<{
+    expectedDocumentSnapshot: number
+    baseContentHash: string
+    clientMutationId: string
+    doc: PmDoc
+  }> = []
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url.startsWith('/qingagent-bridge/state?')) {
+      return Response.json({
+        dshSessionId,
+        binding: {
+          docs: [{ engineSessionId: 'qing-1', title: '测试稿', createdAt: '2026-08-15T00:00:00.000Z' }],
+          activeEngineSessionId: 'qing-1',
+        },
+        docs: [{
+          engineSessionId: 'qing-1', title: '测试稿', createdAt: '2026-08-15T00:00:00.000Z',
+          state: serverVersion > 0 ? 'editing' : 'empty', docVersion: serverVersion, agentBusy: false,
+        }],
+        activeDoc: {
+          sessionId: 'qing-1', docVersion: serverVersion,
+          state: serverVersion > 0 ? 'editing' : 'empty', agentBusy: false,
+          markdown: serverText, qingml: serverText ? `<p>${serverText}</p>` : '', title: '测试稿',
+        },
+        engine: { state: 'online', engineUrl: 'http://127.0.0.1:8080' },
+      })
+    }
+    if (url.startsWith('/qingagent-bridge/doc-pm?') && init?.method === 'PUT') {
+      const request = JSON.parse(String(init.body)) as typeof requests[number]
+      requests.push(request)
+      if (options.conflictFirstPut && requests.length === 1) {
+        await firstPutConflictGate.promise
+        return Response.json({
+          code: 'VERSION_CONFLICT',
+          error: 'doc version conflict',
+          conflict: { expected: request.expectedDocumentSnapshot, actual: serverVersion },
+          actualContentHash: `hash-${serverVersion}`,
+        }, { status: 409 })
+      }
+      serverVersion += 1
+      serverPm = request.doc
+      return Response.json({
+        ok: true,
+        clientMutationId: request.clientMutationId,
+        docVersion: serverVersion,
+        contentHash: `hash-${serverVersion}`,
+        ts: `t${serverVersion}`,
+        charCount: serverText.length,
+      })
+    }
+    if (url.startsWith('/qingagent-bridge/doc-pm?')) {
+      return Response.json({
+        sessionId: 'qing-1', docVersion: serverVersion, contentHash: `hash-${serverVersion}`,
+        state: serverVersion > 0 ? 'editing' : 'empty', agentBusy: false,
+        title: '测试稿', ts: `t${serverVersion}`, charCount: serverText.length, pmDoc: serverPm,
+      })
+    }
+    if (url.startsWith('/qingagent-bridge/review-render-model?')) {
+      return Response.json({
+        sessionId: 'qing-1', docVersion: serverVersion, state: 'editing', agentBusy: false,
+        baseVersion: serverVersion, suggestions: [],
+      })
+    }
+    throw new Error(`unexpected fetch ${url}`)
+  })
+  vi.stubGlobal('fetch', fetchMock)
+
+  return {
+    fetchMock,
+    putRequests: () => requests,
+    releaseFirstPutConflict: () => firstPutConflictGate.resolve(),
+    commitTool(pmDoc: PmDoc, text: string) {
+      serverVersion += 1
+      serverPm = pmDoc
+      serverText = text
+      const source = FakeEventSource.instances.at(-1)
+      if (!source) throw new Error('EventSource 尚未连接')
+      source.emit({
+        type: 'doc-committed', engineSessionId: 'qing-1',
+        doc: {
+          sessionId: 'qing-1', docVersion: serverVersion, state: 'editing', agentBusy: false,
+          markdown: text, qingml: `<p>${text}</p>`, title: '测试稿', pmDoc,
+          contentHash: `hash-${serverVersion}`, ts: `t${serverVersion}`,
+        },
+        blocks: 1, words: text.length,
+      })
+    },
+  }
 }
 
 function installBridgeFetch(

@@ -17,6 +17,8 @@ export async function decideIncomingPanelDocument(input: {
   activity: () => DocumentWriteActivity
   reviewActive: boolean
   reviewBaseVersion?: number | null
+  /** defer 必须先登记本会话来稿版本，再 drain 保存；否则 drain 中的 409 无法识别自产版本。 */
+  onDeferred?: (panelDoc: ExternalPmDocReadResponse) => void
   afterFlush?: () => Promise<void>
 }): Promise<DocumentFrameDecision> {
   const frame = panelDocGenerationFrame(input.panelDoc)
@@ -50,6 +52,7 @@ export async function decideIncomingPanelDocument(input: {
 
   let decision = decide(false)
   if (decision.kind !== 'defer') return decision
+  input.onDeferred?.(input.panelDoc)
   await input.handle.flushPendingDocSave()
   await input.afterFlush?.()
   decision = decide(true)

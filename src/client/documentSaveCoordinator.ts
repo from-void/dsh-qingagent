@@ -35,6 +35,8 @@ export interface DocumentSaveCoordinatorOptions {
     response: Extract<ExternalDocReplaceResponse, { ok: true }>,
   ) => void
   onStateChange?: (state: DocumentSaveState) => void
+  /** 只有能证明 live editor 与 canonical 语义一致时，已知版本 409 才允许静默重放。 */
+  hasLocalDocumentChanges?: (engineSessionId: string) => boolean
   createMutationId?: () => string
   schedule?: (callback: () => void, milliseconds: number) => ReturnType<typeof setTimeout>
   cancelSchedule?: (timer: ReturnType<typeof setTimeout>) => void
@@ -238,6 +240,14 @@ export class DocumentSaveCoordinator {
   }
 
   private handleConflict(write: PendingWrite, expected: number, actual: number): void {
+    // 账本只能证明 actual 是本会话产出，不能证明编辑器没有用户输入；两者同时成立
+    // 才能静默重基线。比较器缺失或抛错一律按 dirty 处理，fail closed 保留冲突横幅。
+    let hasLocalDocumentChanges = true
+    try {
+      hasLocalDocumentChanges = this.options.hasLocalDocumentChanges?.(write.engineSessionId) ?? true
+    } catch {
+      hasLocalDocumentChanges = true
+    }
     const resolution = resolveDocWriteConflict({
       conflict: {
         expectedDocumentSnapshot: expected,
@@ -245,7 +255,9 @@ export class DocumentSaveCoordinator {
       },
       isLatestOwnMutation: this.current === write,
       hasSubmittedDoc: true,
-      knownActualVersion: this.versionLedger(write.engineSessionId).get(actual),
+      knownActualVersion: hasLocalDocumentChanges
+        ? null
+        : this.versionLedger(write.engineSessionId).get(actual),
       replayedAgainstActual: write.replayedVersions.has(actual),
       replayDepth: write.replayDepth,
     })

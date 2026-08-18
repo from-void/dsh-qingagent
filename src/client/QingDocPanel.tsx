@@ -199,6 +199,12 @@ export function QingDocPanel(props: QingDocPanelProps) {
           void qingClientStore.refreshPanel(sessionId, engineSessionId).catch(() => undefined)
         }
       },
+      hasLocalDocumentChanges: (engineSessionId) => {
+        if (editorEngineSessionIdRef.current !== engineSessionId) return true
+        return hasLocalDocumentChangesFailClosed(
+          docViewRef.current ?? lastDocViewHandleRef.current,
+        )
+      },
     })
     saveCoordinatorRef.current = coordinator
     const retryOnline = () => coordinator.retryOnline()
@@ -242,6 +248,18 @@ export function QingDocPanel(props: QingDocPanelProps) {
           },
           reviewActive: currentSnapshot.panelDoc?.state === 'pendingReview',
           reviewBaseVersion: currentSnapshot.reviewModel?.baseVersion,
+          onDeferred: (panelDoc) => {
+            if (!panelDoc.pmDoc) return
+            saveCoordinatorRef.current?.rememberKnownVersion(
+              engineSessionId,
+              appliedDocWriteBaseline({
+                version: panelDoc.docVersion,
+                pmDoc: panelDoc.pmDoc,
+                contentHash: panelDoc.contentHash,
+              }),
+              'streamConflict',
+            )
+          },
           afterFlush: () => new Promise((resolve) => window.setTimeout(resolve, 0)),
         })
       } catch (error) {
@@ -509,6 +527,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
     // 注意:不按「基线落后于最新版本」丢弃——用户输入后卸载/切稿的合法 flush 也可能带旧
     // 基线,追尾由保存协调器的静默重放消化;自愈回声写入的根治在 qingweb 侧(自愈用新基线)。
     if (!interactiveEditableRef.current) return Promise.resolve()
+    // DocumentSnapshotView 会把 trailingNode 空段等未标 meta 的脚手架事务送到这里；真正
+    // 发起 PUT 前再按其 canonical 语义比较器判一次，等价事务不进入保存协调器。
+    if (!hasLocalDocumentChangesFailClosed(docViewRef.current ?? lastDocViewHandleRef.current)) {
+      return Promise.resolve()
+    }
     return saveCoordinatorRef.current.enqueue(engineSessionId, doc, baseline)
   }, [])
 
@@ -1405,6 +1428,17 @@ function reviewTargetSelector(targetId: string): string {
 
 function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds))
+}
+
+function hasLocalDocumentChangesFailClosed(
+  handle: DocumentSnapshotViewHandle | null,
+): boolean {
+  if (!handle) return true
+  try {
+    return handle.hasLocalDocumentChanges()
+  } catch {
+    return true
+  }
 }
 
 /** 青简 RightPane.tsx:521-530 原图标。 */
