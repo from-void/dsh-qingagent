@@ -17,6 +17,7 @@ import {
   QingDocPanel,
   type QingDocPanelProps,
 } from '../src/client/QingDocPanel.js'
+import { qingClientStore } from '../src/client/store.js'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -820,8 +821,9 @@ describe('QingDocPanel 整篇审阅', () => {
 })
 
 describe('QingDocPanel 文稿缺失状态', () => {
-  it('只显示删除提示与可用切换入口，抑制旧标题、内部词和全部活文稿 UI', async () => {
+  it('以钦定占位显示缺失稿，持久剔除多篇 missing，并在读回后恢复标题与入口', async () => {
     vi.stubGlobal('EventSource', FakeEventSource)
+    const missingIds = new Set(['qing-missing'])
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.startsWith('/qingagent-bridge/state?')) {
@@ -853,21 +855,24 @@ describe('QingDocPanel 文稿缺失状态', () => {
         })
       }
       if (url.startsWith('/qingagent-bridge/doc-pm?')) {
-        const engineSessionId = new URL(url, 'http://local').searchParams.get('engineSessionId')
-        if (engineSessionId === 'qing-missing') {
+        const engineSessionId = new URL(url, 'http://local').searchParams.get('engineSessionId')!
+        if (missingIds.has(engineSessionId)) {
           return Response.json(
             { error: '青简会话不存在', code: 'SESSION_NOT_FOUND', nextStep: '不要重试原引用' },
             { status: 404 },
           )
         }
         return Response.json({
-          sessionId: 'qing-live', docVersion: 2, contentHash: 'hash-2', state: 'editing',
-          agentBusy: false, title: '可用文稿', ts: 't2', pmDoc: EDITED_PM,
+          sessionId: engineSessionId, docVersion: engineSessionId === 'qing-missing' ? 4 : 2,
+          contentHash: 'hash-readable', state: 'editing', agentBusy: false,
+          title: engineSessionId === 'qing-missing' ? '恢复文稿' : '可用文稿', ts: 't2', pmDoc: EDITED_PM,
         })
       }
       if (url.startsWith('/qingagent-bridge/review-render-model?')) {
+        const engineSessionId = new URL(url, 'http://local').searchParams.get('engineSessionId')!
         return Response.json({
-          sessionId: 'qing-live', docVersion: 2, state: 'editing', agentBusy: false,
+          sessionId: engineSessionId, docVersion: engineSessionId === 'qing-missing' ? 4 : 2,
+          state: 'editing', agentBusy: false,
           baseVersion: 2, suggestions: [],
         })
       }
@@ -888,13 +893,14 @@ describe('QingDocPanel 文稿缺失状态', () => {
 
     const missing = await vi.waitFor(() => {
       const candidate = document.querySelector<HTMLElement>('.qingdoc-doc-missing')
-      expect(candidate?.textContent).toBe('当前文档已被删除')
+      expect(candidate?.textContent).toBe('该文档已删除')
       return candidate!
     })
     const panel = missing.closest<HTMLElement>('[data-qingagent-doc-panel]')!
     expect(panel.getAttribute('data-content')).toBe('docMissing')
     expect(panel.hasAttribute('data-save-state')).toBe(false)
-    expect(panel.querySelector('.qingdoc-stage-title')).toBeNull()
+    expect(panel.querySelector('.qingdoc-stage-title')?.textContent).toBe('该文档已删除')
+    expect(panel.querySelector('.qingdoc-doc-trigger')?.textContent).toContain('该文档已删除')
     expect(panel.querySelector('.qingdoc-status')).toBeNull()
     expect(panel.querySelector('.qingdoc-open')).toBeNull()
     expect(panel.querySelector('[data-wf="WorkspaceDocFunctions"]')).toBeNull()
@@ -921,6 +927,45 @@ describe('QingDocPanel 文稿缺失状态', () => {
       expect(panel.getAttribute('data-content')).toBe('editable')
       expect(panel.querySelector('[data-testid="mock-document-view"]')).not.toBeNull()
     })
+
+    await act(async () => {
+      panel.querySelector<HTMLButtonElement>('.qingdoc-doc-trigger')?.click()
+    })
+    await vi.waitFor(() => expect(panel.querySelector('.qingdoc-doc-menu')).not.toBeNull())
+    expect(panel.querySelector('.qingdoc-doc-menu')?.textContent).not.toContain('昨日旧稿')
+    await act(async () => {
+      panel.querySelector<HTMLButtonElement>('.qingdoc-doc-trigger')?.click()
+    })
+
+    missingIds.add('qing-live')
+    await act(async () => {
+      await qingClientStore.refreshPanel('dsh-doc-missing', 'qing-live').catch(() => undefined)
+    })
+    await vi.waitFor(() => expect(panel.getAttribute('data-content')).toBe('docMissing'))
+    await act(async () => {
+      panel.querySelector<HTMLButtonElement>('.qingdoc-doc-trigger')?.click()
+    })
+    await vi.waitFor(() => expect(panel.querySelector('.qingdoc-doc-menu')).not.toBeNull())
+    expect(panel.querySelector('.qingdoc-doc-menu')?.textContent).not.toContain('昨日旧稿')
+    expect(panel.querySelector('.qingdoc-doc-menu')?.textContent).not.toContain('可用文稿')
+    await act(async () => {
+      panel.querySelector<HTMLButtonElement>('.qingdoc-doc-trigger')?.click()
+    })
+
+    missingIds.delete('qing-missing')
+    await act(async () => {
+      await qingClientStore.refreshPanel('dsh-doc-missing', 'qing-missing')
+    })
+    await vi.waitFor(() => {
+      expect(panel.getAttribute('data-content')).toBe('editable')
+      expect(panel.querySelector('.qingdoc-stage-title')?.textContent).toBe('恢复文稿')
+    })
+    expect(panel.querySelector('.qingdoc-doc-trigger')?.textContent).toContain('恢复文稿')
+    await act(async () => {
+      panel.querySelector<HTMLButtonElement>('.qingdoc-doc-trigger')?.click()
+    })
+    await vi.waitFor(() => expect(panel.querySelector('.qingdoc-doc-menu')?.textContent).toContain('昨日旧稿'))
+    expect(panel.querySelector('.qingdoc-doc-menu')?.textContent).not.toContain('可用文稿')
   })
 })
 
