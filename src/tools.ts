@@ -367,13 +367,13 @@ function writeDraftTool(services: ToolServices) {
 function editDraftTool(services: ToolServices) {
   return defineTool({
     name: 'qing_edit_draft',
-    description: '对已有青简文稿做结构化局部修改。改标题要同时改两处:setTitle 改稿名(元数据),正文首个大标题块用 strReplace 改(纸面上看到的标题就是它);两者必须在同一次 ops 里一起提交,文字保持一致。正文没有大标题块时,用 insertAfterLine 在文首补一个与稿名一致的「# 标题」一级标题,同样与 setTitle 同批提交。删除整段/整节/清单项用 deleteBlock/deleteListItem(先 qing_read_draft mode:"blocks" 取块 ID,严禁用 strReplace 置空留残壳);改一句、插入一段或追加一节用相应操作;高亮、文字颜色、加粗一句话等行内标记用 markText,严禁为加标记用 qing_write_draft 整篇重写。markText add 会替换命中内容已有的同类型不同属性标记,同类型同属性则幂等提示;remove 仅移除属性全等的标记,调用前必须先用 qing_read_draft(mode:"blocks") 或读稿确认现有标记的确切 attrs;代码块内文本不支持行内标记;命中列表项时审阅卡会按顶层块呈现为整列表替换。strReplace 的 old/new 必须是纯文本内容，不含 ##、-、** 等 Markdown 语法标记。多处修改必须放进同一次调用的 ops 数组一次提交；逐条调用会因首条进入审阅态而被 REVIEW_PENDING 拒绝。insertAfterLine 用的行号来自你读稿那一刻的稿子;同一批 ops 里一旦有插入或删除,其后所有行号都会整体偏移,不要再沿用读稿时的旧行号。需要在插入点之后继续改时,改用 insertAfterBlock 这类块级锚点(不受行号偏移影响),或留到下一回合重读后再改。命中待办清单、表格、嵌套列表这类多行块时,优先用 insertAfterBlock 等项级/块级 op;例外:指向多行块的最后一行是合法的,语义是插到整块之后(不是块内)——想在清单尾部追加子项时别用它,那会插到清单外面。拿不准结构时先 qing_read_draft(mode:"blocks") 看清再选。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
+    description: '对已有青简文稿做结构化局部修改。改标题要同时改两处:setTitle 改稿名(元数据),正文首个大标题块用 strReplace 改(纸面上看到的标题就是它);两者必须在同一次 ops 里一起提交,文字保持一致。正文没有大标题块时,用 insertAfterLine 在文首补一个与稿名一致的「# 标题」一级标题,同样与 setTitle 同批提交。删除整段/整节/清单项用 deleteBlock/deleteListItem(先 qing_read_draft mode:"blocks" 取块 ID,严禁用 strReplace 置空留残壳);改一句、插入一段或追加一节用相应操作;高亮、文字颜色、加粗一句话等行内标记用 markText,严禁为加标记用 qing_write_draft 整篇重写。markText add 会替换命中内容已有的同类型不同属性标记,同类型同属性则幂等提示;remove 仅移除属性全等的标记,调用前必须先用 qing_read_draft(mode:"blocks") 或读稿确认现有标记的确切 attrs;代码块内文本不支持行内标记;命中列表项时审阅卡会按顶层块呈现为整列表替换。strReplace 的 old/new 必须是纯文本内容，不含 ##、-、** 等 Markdown 语法标记。只有用户明确表达「所有/全部/凡是/都」等全局意图时,才用单个 strReplace + all:true 替换全部命中;all:true 不得与 nth 同时使用。all 缺省时,old 多处命中且未指定 nth 仍会拒绝并要求先向用户确认。多处修改必须放进同一次调用的 ops 数组一次提交；逐条调用会因首条进入审阅态而被 REVIEW_PENDING 拒绝。insertAfterLine 用的行号来自你读稿那一刻的稿子;同一批 ops 里一旦有插入或删除,其后所有行号都会整体偏移,不要再沿用读稿时的旧行号。需要在插入点之后继续改时,改用 insertAfterBlock 这类块级锚点(不受行号偏移影响),或留到下一回合重读后再改。命中待办清单、表格、嵌套列表这类多行块时,优先用 insertAfterBlock 等项级/块级 op;例外:指向多行块的最后一行是合法的,语义是插到整块之后(不是块内)——想在清单尾部追加子项时别用它,那会插到清单外面。拿不准结构时先 qing_read_draft(mode:"blocks") 看清再选。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
     parameters: {
       docRef: { type: 'string', description: '要局部修改的青简会话 ID；省略时使用当前激活文稿。' },
       ops: {
         type: 'array',
         required: true,
-        description: '同一次调用中按顺序原子提交的局部操作（最多 50 条）；多处修改必须全部放在本数组中。strReplace 的 nth 为从 1 开始的命中序号。',
+        description: '同一次调用中按顺序原子提交的局部操作（最多 50 条）；多处修改必须全部放在本数组中。strReplace 的 nth 为从 1 开始的命中序号；用户明确要求全量替换时改用单个 strReplace + all:true。',
         items: {
           oneOf: [
             {
@@ -383,7 +383,8 @@ function editDraftTool(services: ToolServices) {
                 kind: { type: 'string', const: 'strReplace', required: true },
                 old: { type: 'string', required: true, description: '要匹配的纯文本内容，不含行首 ##、-、数字. 或包裹性 **/__ 等 Markdown 标记。' },
                 new: { type: 'string', required: true, description: '替换后的纯文本内容，不含行首 ##、-、数字. 或包裹性 **/__ 等 Markdown 标记。' },
-                nth: { type: 'integer' },
+                nth: { type: 'integer', description: '只替换从 1 开始计数的第几处命中；不得与 all:true 同时使用。' },
+                all: { type: 'boolean', description: '仅当用户明确说「所有/全部/凡是/都」等全局范围时设为 true；用单个操作替换全部命中，不得与 nth 同时使用。' },
               },
             },
             {
@@ -520,6 +521,20 @@ function editDraftTool(services: ToolServices) {
           words: { type: 'integer', required: true },
           docVersion: { type: 'integer', required: true },
           reviewCount: { type: 'integer', required: true },
+          opResults: {
+            type: 'array',
+            required: true,
+            description: '原始 ops 中每项文字替换实际涉及的处数；opIndex 从 1 开始。',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                opIndex: { type: 'integer', required: true },
+                affectedCount: { type: 'integer', required: true },
+              },
+            },
+          },
+          affectedCount: { type: 'integer', required: true, description: '本批文字替换共影响的处数。' },
           patchIds: {
             type: 'array',
             items: { type: 'string' },
@@ -536,6 +551,8 @@ function editDraftTool(services: ToolServices) {
         blocks: value.blocks,
         words: value.words,
         reviewCount: value.reviewCount,
+        opResults: value.opResults,
+        affectedCount: value.affectedCount,
         wholeDocReview: value.wholeDocReview,
         ...(value.status === 'review' ? { patchIds: value.patchIds } : {}),
       }),
@@ -556,12 +573,12 @@ function editDraftTool(services: ToolServices) {
         const titleOnly = ops.every((op) => op.kind === 'setTitle')
         if (before.state === 'empty' && !titleOnly) throw new Error('文稿尚无正文；请先用 qing_write_draft 起草完整文稿。改标题可单独用 setTitle。')
         assertNoRawTags(ops)
-        const preparedOps = await prepareEditOps(services.engine, engineSessionId, ops)
+        const prepared = await prepareEditOps(services.engine, engineSessionId, ops)
         const proposal = await proposeEditOpsWithPlainTextRetry(
           services.engine,
           engineSessionId,
           before.docVersion,
-          preparedOps,
+          prepared.ops,
         )
         const [official, reviewCandidate, officialPmDoc] = await Promise.all([
           readDoc(services.engine, engineSessionId),
@@ -600,17 +617,20 @@ function editDraftTool(services: ToolServices) {
           })
           exec.concludeTurn()
         }
+        const countLine = editCountLine(prepared.opResults, prepared.affectedCount)
         return {
           status: proposal.status,
           message: (proposal.status === 'review'
-            ? `${docStateLine('pendingReview', proposal.count)}\n${REVIEW_END_MESSAGE}`
-            : `${docStateLine('editing')}\n局部修改已提交到《${outline.title}》。`) + focusSuffix(services, dshSessionId),
+            ? `${docStateLine('pendingReview', proposal.count)}${countLine}\n${REVIEW_END_MESSAGE}`
+            : `${docStateLine('editing')}\n局部修改已提交到《${outline.title}》。${countLine}`) + focusSuffix(services, dshSessionId),
           engineSessionId,
           title: outline.title,
           blocks: outline.blocks,
           words,
           docVersion: official.docVersion,
           reviewCount: proposal.status === 'review' ? proposal.count : 0,
+          opResults: prepared.opResults,
+          affectedCount: prepared.affectedCount,
           ...(proposal.status === 'review' ? { patchIds: proposal.patchIds } : {}),
           wholeDocReview,
         }
@@ -1082,14 +1102,27 @@ const LINE_SHIFTING_BLOCK_OPS = new Set<ExternalEditProposalOp['kind']>([
   'insertAfterBlock',
 ])
 
+interface EditOpResult {
+  opIndex: number
+  affectedCount: number
+}
+
+interface PreparedEditOps {
+  ops: ExternalEditProposalOp[]
+  opResults: EditOpResult[]
+  affectedCount: number
+}
+
 async function prepareEditOps(
   engine: EngineService,
   engineSessionId: string,
   ops: ExternalEditProposalOp[],
-): Promise<ExternalEditProposalOp[]> {
+): Promise<PreparedEditOps> {
   const lineOps = ops.flatMap((op, index) => op.kind === 'insertAfterLine' ? [{ op, index }] : [])
   const strReplaceOps = ops.flatMap((op, index) => op.kind === 'strReplace' ? [{ op, index }] : [])
-  if (lineOps.length === 0 && strReplaceOps.length === 0) return ops
+  if (lineOps.length === 0 && strReplaceOps.length === 0) {
+    return { ops, opResults: [], affectedCount: 0 }
+  }
 
   for (const { index } of lineOps) {
     if (ops.slice(0, index).some((op) => LINE_SHIFTING_BLOCK_OPS.has(op.kind))) {
@@ -1098,8 +1131,17 @@ async function prepareEditOps(
   }
 
   const pmDoc = await readPmDoc(engine, engineSessionId)
-  assertStrReplaceTargets(pmDoc, strReplaceOps)
-  if (lineOps.length === 0) return ops
+  const matchCounts = inspectStrReplaceTargets(pmDoc, strReplaceOps)
+  const opResults = strReplaceOps.map(({ op, index }) => ({
+    opIndex: index + 1,
+    affectedCount: op.all === true ? matchCounts.get(index)! : 1,
+  }))
+  const affectedCount = opResults.reduce((total, result) => total + result.affectedCount, 0)
+  const expandAllReplacements = (preparedOps: ExternalEditProposalOp[]): ExternalEditProposalOp[] =>
+    preparedOps.flatMap((op, index) => expandStrReplaceForEngine(op, matchCounts.get(index)))
+  if (lineOps.length === 0) {
+    return { ops: expandAllReplacements(ops), opResults, affectedCount }
+  }
 
   const spans = pmToMarkdownWithLineMap(pmDoc).blocks
   for (const { op } of lineOps) {
@@ -1115,7 +1157,8 @@ async function prepareEditOps(
   const descending = [...lineOps].sort((left, right) =>
     right.op.line - left.op.line || right.index - left.index)
   let lineIndex = 0
-  return ops.map((op) => op.kind === 'insertAfterLine' ? descending[lineIndex++]!.op : op)
+  const reorderedOps = ops.map((op) => op.kind === 'insertAfterLine' ? descending[lineIndex++]!.op : op)
+  return { ops: expandAllReplacements(reorderedOps), opResults, affectedCount }
 }
 
 interface PmTextNodeLike {
@@ -1154,13 +1197,17 @@ function countLiteralMatches(blocks: readonly string[], find: string): number {
   return count
 }
 
-function assertStrReplaceTargets(
+function inspectStrReplaceTargets(
   doc: PmDoc,
   ops: Array<{ op: Extract<ExternalEditProposalOp, { kind: 'strReplace' }>; index: number }>,
-): void {
-  if (ops.length === 0) return
+): Map<number, number> {
+  const matchCounts = new Map<number, number>()
+  if (ops.length === 0) return matchCounts
   const blocks = pmTextBlocks(doc)
   for (const { op, index } of ops) {
+    if (op.all === true && op.nth !== undefined) {
+      throw new Error(`第 ${index + 1} 项不能同时选择全部替换和单处位置；请只保留一种范围。`)
+    }
     let matches = countLiteralMatches(blocks, op.old)
     if (matches === 0) {
       const normalizedOld = normalizeStrReplaceText(op.old)
@@ -1169,10 +1216,32 @@ function assertStrReplaceTargets(
     if (matches === 0) {
       throw new Error(`第 ${index + 1} 个 strReplace 的 old 命中 0 处；请重新读取文稿，并改用当前正文中的精确文字。`)
     }
-    if (matches >= 2 && op.nth === undefined) {
+    if (matches >= 2 && op.nth === undefined && op.all !== true) {
       throw new Error(`第 ${index + 1} 个 strReplace 的 old 命中 ${matches} 处，未指定 nth；目标不唯一时先用原生 ask_user 让用户选。`)
     }
+    matchCounts.set(index, matches)
   }
+  return matchCounts
+}
+
+function expandStrReplaceForEngine(op: ExternalEditProposalOp, matches?: number): ExternalEditProposalOp[] {
+  if (op.kind !== 'strReplace') return [op]
+  const { all, ...engineOp } = op
+  if (all !== true) return [all === undefined ? op : engineOp]
+
+  // 当前引擎契约只支持 nth；从后往前处理可保持原文位置稳定，且整批仍只提交一次。
+  return Array.from({ length: matches ?? 0 }, (_, index) => ({
+    ...engineOp,
+    nth: (matches ?? 0) - index,
+  }))
+}
+
+function editCountLine(opResults: readonly EditOpResult[], affectedCount: number): string {
+  if (opResults.length === 0) return ''
+  const perOp = opResults
+    .map((result) => `第 ${result.opIndex} 项修改 ${result.affectedCount} 处`)
+    .join('，')
+  return `\n${perOp}；本批共影响 ${affectedCount} 处。`
 }
 
 async function proposeEditOpsWithPlainTextRetry(

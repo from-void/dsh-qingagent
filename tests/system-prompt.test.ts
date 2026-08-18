@@ -24,6 +24,7 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('目标定位不唯一时(多处命中、指代含糊、「那段/那块」无法唯一确定)必须先用原生 ask_user 让用户选')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('严禁把模糊的单数指代自行提升为「按关键词全局处理」')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('只有用户明确说了「所有/凡是/都/全部」等全局词时才按批量执行')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('同一文字要全量替换时,只提交一个 strReplace 并设 all:true,不要逐处枚举')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('用户给出**完整替换文本**时(「把 X 换成 Y」且 Y 是完整句/段),替换范围就是**整个 X**;不要只替换其中一部分而保留原文残句。**提交前**按用户给的整句核对替换范围是否恰好覆盖 X;提交后以工具返回为准,不再读稿复核')
   })
 

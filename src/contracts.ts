@@ -236,7 +236,7 @@ export type DraftTextMark =
   | { type: 'link'; href: string; title?: string | null }
 
 export type ExternalEditProposalOp =
-  | { kind: 'strReplace'; old: string; new: string; nth?: number }
+  | { kind: 'strReplace'; old: string; new: string; nth?: number; all?: boolean }
   | {
       kind: 'markText'
       find: string

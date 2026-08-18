@@ -668,6 +668,129 @@ describe('qing_edit_draft', () => {
     expect(description).toContain('想在清单尾部追加子项时别用它,那会插到清单外面')
   })
 
+  it('描述与 schema 仅为用户明确的全局意图开放 all:true', () => {
+    const fixture = harness([], async () => { throw new Error('不应访问引擎') })
+    const tool = fixture.tools.get('qing_edit_draft')!
+    expect(tool.description).toContain('只有用户明确表达「所有/全部/凡是/都」等全局意图时,才用单个 strReplace + all:true')
+    expect(tool.description).toContain('all:true 不得与 nth 同时使用')
+    expect(JSON.stringify(tool.parameters)).toContain('用户明确说「所有/全部/凡是/都」等全局范围时设为 true')
+    expect(validateJsonSchemaValue(tool.parameters, {
+      ops: [{ kind: 'strReplace', old: '旧词', new: '新词', all: true }],
+    })).toEqual([])
+  })
+
+  it('strReplace all:true 将 5 处命中作为单项全量提交并返回计数事实', async () => {
+    const old = '旧词'
+    const newText = '新词'
+    let proposalCalls = 0
+    let proposalOps: unknown[] = []
+    const fixture = harness([], async (path, init) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: Array.from({ length: 5 }, () => old).join('\n\n'), title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposalCalls += 1
+        proposalOps = (JSON.parse(String(init?.body)) as { ops: unknown[] }).ops
+        return { status: 'committed', docVersion: 3 }
+      }
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({ docVersion: 3, state: 'editing', qingml: Array.from({ length: 5 }, () => `<p>${newText}</p>`).join(''), title: '测试稿' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, paragraphDoc(old, old, old, old, old))
+
+    const result = await fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'strReplace', old, new: newText, all: true }],
+    }, exec(undefined, 'edit-all-five', 'qing_edit_draft'))
+
+    expect(proposalCalls).toBe(1)
+    expect(proposalOps).toEqual([5, 4, 3, 2, 1].map((nth) => ({
+      kind: 'strReplace', old, new: newText, nth,
+    })))
+    expect(result).toMatchObject({
+      affectedCount: 5,
+      opResults: [{ opIndex: 1, affectedCount: 5 }],
+      message: expect.stringContaining('第 1 项修改 5 处；本批共影响 5 处。'),
+    })
+    const countLine = (result as { message: string }).message.split('\n').find((line) => line.includes('本批共影响')) ?? ''
+    expect(countLine).not.toMatch(/strReplace|nth|all|HTTP|\b400\b/i)
+  })
+
+  it('strReplace all:true 命中 1 处时正常提交且计数为 1', async () => {
+    let proposalOps: unknown[] = []
+    const fixture = harness([], async (path, init) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '唯一目标', title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposalOps = (JSON.parse(String(init?.body)) as { ops: unknown[] }).ops
+        return { status: 'committed', docVersion: 3 }
+      }
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({ docVersion: 3, state: 'editing', qingml: '<p>新目标</p>', title: '测试稿' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, paragraphDoc('唯一目标'))
+
+    const result = await fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'strReplace', old: '唯一目标', new: '新目标', all: true }],
+    }, exec(undefined, 'edit-all-one', 'qing_edit_draft'))
+
+    expect(proposalOps).toEqual([{ kind: 'strReplace', old: '唯一目标', new: '新目标', nth: 1 }])
+    expect(result).toMatchObject({ affectedCount: 1, opResults: [{ opIndex: 1, affectedCount: 1 }] })
+  })
+
+  it('strReplace all:true 与 nth 同传时用用户可理解的范围错误拒绝', async () => {
+    let proposalCalls = 0
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '重复目标\n\n重复目标', title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposalCalls += 1
+        return { status: 'committed', docVersion: 3 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, paragraphDoc('重复目标', '重复目标'))
+
+    await expect(fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'strReplace', old: '重复目标', new: '新目标', all: true, nth: 1 }],
+    }, exec(undefined, 'edit-all-conflict', 'qing_edit_draft')))
+      .rejects.toThrow('不能同时选择全部替换和单处位置')
+    expect(proposalCalls).toBe(0)
+  })
+
+  it('strReplace all:true 命中 0 处时沿用明确的未命中错误', async () => {
+    let proposalCalls = 0
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '现有正文', title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposalCalls += 1
+        return { status: 'committed', docVersion: 3 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, paragraphDoc('现有正文'))
+
+    await expect(fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'strReplace', old: '不存在', new: '新目标', all: true }],
+    }, exec(undefined, 'edit-all-zero', 'qing_edit_draft'))).rejects.toThrow('命中 0 处')
+    expect(proposalCalls).toBe(0)
+  })
+
   it('strReplace 命中 2 处且未指定 nth 时整批前置拒绝', async () => {
     let proposalCalls = 0
     const fixture = harness([], async (path) => {
@@ -716,11 +839,12 @@ describe('qing_edit_draft', () => {
       throw new Error(`unexpected path: ${path}`)
     }, ONLINE_ENGINE, paragraphDoc('唯一目标'))
 
-    await fixture.tools.get('qing_edit_draft')!.execute({
+    const result = await fixture.tools.get('qing_edit_draft')!.execute({
       ops: [{ kind: 'strReplace', old: '唯一目标', new: '新目标' }],
     }, exec(undefined, 'edit-unique', 'qing_edit_draft'))
 
     expect(proposalCalls).toBe(1)
+    expect(result).toMatchObject({ affectedCount: 1, opResults: [{ opIndex: 1, affectedCount: 1 }] })
   })
 
   it('同批任一 strReplace 多处命中且无 nth 时全部拒绝', async () => {
@@ -1047,12 +1171,20 @@ describe('qing_edit_draft', () => {
       throw new Error(`unexpected path: ${path}`)
     }, ONLINE_ENGINE, paragraphDoc('第一处旧文', '第二处旧文', '第二处旧文'))
 
-    await fixture.tools.get('qing_edit_draft')!.execute(
+    const result = await fixture.tools.get('qing_edit_draft')!.execute(
       { ops },
       exec(undefined, 'edit-multi-op', 'qing_edit_draft'),
     )
 
     expect(proposals).toBe(1)
+    expect(result).toMatchObject({
+      affectedCount: 2,
+      opResults: [
+        { opIndex: 1, affectedCount: 1 },
+        { opIndex: 2, affectedCount: 1 },
+      ],
+      message: expect.stringContaining('第 1 项修改 1 处，第 2 项修改 1 处；本批共影响 2 处。'),
+    })
   })
 
   it('strReplace 命中 0 处时前置报错且不调用提案引擎', async () => {
