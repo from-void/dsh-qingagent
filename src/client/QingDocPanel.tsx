@@ -50,6 +50,7 @@ import {
 import {
   DEFAULT_REVEAL_STEP_DELAY_MS,
   DEFAULT_REVEAL_TAIL_HOLD_MS,
+  revealHardTimeoutMs,
 } from './revealTypewriter.js'
 import { QingAnnotationCarousel } from './annotationCarousel.js'
 import { buildReviewPresentationModel } from './reviewPresentation.js'
@@ -421,14 +422,14 @@ export function QingDocPanel(props: QingDocPanelProps) {
   revealFrameRef.current = revealFrame
   useEffect(() => {
     setRevealProgress(null)
+    if (!revealRequest) return
     if (
-      !revealRequest
-      || revealRequest.engineSessionId !== activeEngineSessionId
+      revealRequest.engineSessionId !== activeEngineSessionId
       || revealRequest.docVersion !== panelDoc?.docVersion
-      || !panelDoc.pmDoc
+      || !panelDoc?.pmDoc
       || pendingReview
-    ) return
-    if (prefersReducedRevealMotion) {
+      || prefersReducedRevealMotion
+    ) {
       qingClientStore.finishReveal(sessionId, revealRequest.nonce)
       return
     }
@@ -436,17 +437,32 @@ export function QingDocPanel(props: QingDocPanelProps) {
     let index = 0
     let interval: number | undefined
     let tail: number | undefined
+    let hardTimeout: number | undefined
+    let settled = false
     setRevealProgress({ nonce: revealRequest.nonce, index: 0 })
-    const finish = () => {
-      tail = window.setTimeout(() => {
-        setRevealProgress(null)
-        const editor = tiptapEditorRef.current
-        if (editor) setNativePresentationDecorations(editor, [], [])
-        qingClientStore.finishReveal(sessionId, revealRequest.nonce)
-      }, DEFAULT_REVEAL_TAIL_HOLD_MS)
+    const clearTimers = () => {
+      if (interval !== undefined) window.clearInterval(interval)
+      if (tail !== undefined) window.clearTimeout(tail)
+      if (hardTimeout !== undefined) window.clearTimeout(hardTimeout)
+      interval = undefined
+      tail = undefined
+      hardTimeout = undefined
     }
+    const finishNow = () => {
+      if (settled) return
+      settled = true
+      clearTimers()
+      setRevealProgress(null)
+      const editor = tiptapEditorRef.current
+      if (editor) setNativePresentationDecorations(editor, [], [])
+      qingClientStore.finishReveal(sessionId, revealRequest.nonce)
+    }
+    const finishAfterTail = () => {
+      tail = window.setTimeout(finishNow, DEFAULT_REVEAL_TAIL_HOLD_MS)
+    }
+    hardTimeout = window.setTimeout(finishNow, revealHardTimeoutMs(frames.length))
     if (frames.length <= 1) {
-      finish()
+      finishAfterTail()
     } else {
       interval = window.setInterval(() => {
         index += 1
@@ -454,15 +470,15 @@ export function QingDocPanel(props: QingDocPanelProps) {
         if (index >= frames.length - 1) {
           if (interval !== undefined) window.clearInterval(interval)
           interval = undefined
-          finish()
+          finishAfterTail()
         }
       }, DEFAULT_REVEAL_STEP_DELAY_MS)
     }
     return () => {
-      if (interval !== undefined) window.clearInterval(interval)
-      if (tail !== undefined) window.clearTimeout(tail)
+      clearTimers()
       const editor = tiptapEditorRef.current
       if (editor) setNativePresentationDecorations(editor, [], [])
+      qingClientStore.finishReveal(sessionId, revealRequest.nonce)
     }
   }, [
     activeEngineSessionId,
@@ -497,7 +513,8 @@ export function QingDocPanel(props: QingDocPanelProps) {
     document.addEventListener('dblclick', handleReviewDrawioDoubleClick, { capture: true })
     return () => document.removeEventListener('dblclick', handleReviewDrawioDoubleClick, { capture: true })
   }, [])
-  const busy = revealActive || panelDoc?.agentBusy === true || activeBound?.agentBusy === true
+  // reveal 是已提交全文的纯视觉播放，不代表引擎仍忙，也不能锁住纸面编辑。
+  const busy = panelDoc?.agentBusy === true || activeBound?.agentBusy === true
   // 冲突态按文稿隔离(权威在 conflicts 分槽映射):当前稿有冲突记录就呈现冲突(含切走再切回),
   // 别的文稿的冲突不影响当前稿;瞬态保存状态照常走单槽。
   const rawSaveState = snapshot.saveState ?? ({ kind: 'idle' } satisfies DocumentSaveState)
@@ -593,7 +610,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const surfacePmDoc = conflictStashDoc
     ?? (revealActive ? revealFrame?.pmDoc ?? EMPTY_PM_DOC : panelDoc?.pmDoc)
     ?? EMPTY_PM_DOC
-  // 与产品 RightPane 的空稿 busy 分支同口径；reveal 首帧尚无实质文字时先保留原生加载态。
+  // 与产品 RightPane 的空稿 busy 分支同口径；reveal 不借用 busy 加载态。
   const showEmptyBusyLoading = busy && !pmDocHasSubstantiveContent(surfacePmDoc)
   const surfaceVersion = pendingReview
     ? snapshot.reviewModel?.baseVersion ?? panelDoc?.docVersion ?? 0

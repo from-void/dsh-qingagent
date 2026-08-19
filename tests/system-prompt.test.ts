@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { QINGAGENT_SYSTEM_PROMPT } from '../src/system-prompt.js'
 
 describe('QINGAGENT_SYSTEM_PROMPT', () => {
+  it('全文只进入写稿参数，不在聊天中输出正文或 QingML', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('【正文输出纪律】严禁在聊天回复中输出文稿正文或 QingML——全文只放进 qing_write_draft 的 qingml 参数')
+  })
+
   it('以最近工具状态为权威并要求新指令先刷新审阅态', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('当前注入的【文稿状态】行或最近一次 qing 工具返回的【文稿状态】行(含 qing_list_docs 的状态列)为同级权威,且都优先于聊天记忆')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('当前 system context 中的【文稿状态】摘要或最近一次 qing 工具返回为权威')

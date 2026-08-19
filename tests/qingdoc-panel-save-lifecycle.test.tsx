@@ -19,6 +19,7 @@ import {
   type QingDocPanelProps,
 } from '../src/client/QingDocPanel.js'
 import { qingClientStore } from '../src/client/store.js'
+import { revealHardTimeoutMs } from '../src/client/revealTypewriter.js'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -175,6 +176,7 @@ afterEach(() => {
   FakeEventSource.instances = []
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 
 describe('QingDocPanel 保存生命周期', () => {
@@ -207,6 +209,107 @@ describe('QingDocPanel 保存生命周期', () => {
     ).not.toBeNull())
     expect(document.querySelector('[data-wf="QingLoading"]')).toBeNull()
     expect(document.querySelector('.ws-paper-surface > .ws-editor-glow')).not.toBeNull()
+  })
+
+  it('reveal 请求遇到面板文档短暂缺失时立即清理，恢复后不滞留写作中', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const restorePanel = deferred<void>()
+    let activeEngineSessionId = 'qing-reveal-old'
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/qingagent-bridge/state?')) {
+        return Response.json({
+          dshSessionId: 'dsh-reveal-missing',
+          binding: {
+            docs: [
+              { engineSessionId: 'qing-reveal-old', title: '旧稿', createdAt: 't0' },
+              { engineSessionId: 'qing-reveal-new', title: '新稿', createdAt: 't1' },
+            ],
+            activeEngineSessionId,
+          },
+          docs: [
+            { engineSessionId: 'qing-reveal-old', title: '旧稿', createdAt: 't0', state: 'editing', docVersion: 1, agentBusy: false },
+            { engineSessionId: 'qing-reveal-new', title: '新稿', createdAt: 't1', state: 'editing', docVersion: 2, agentBusy: false },
+          ],
+          activeDoc: {
+            sessionId: activeEngineSessionId, docVersion: activeEngineSessionId === 'qing-reveal-old' ? 1 : 2,
+            state: 'editing', agentBusy: false, markdown: '正文', qingml: '<p>正文</p>', title: '测试稿',
+          },
+          engine: { state: 'online', engineUrl: 'http://127.0.0.1:8080' },
+        })
+      }
+      if (url.startsWith('/qingagent-bridge/doc-pm?')) {
+        const engineSessionId = new URL(url, 'http://local').searchParams.get('engineSessionId')!
+        if (engineSessionId === 'qing-reveal-new') await restorePanel.promise
+        return Response.json({
+          sessionId: engineSessionId, docVersion: engineSessionId === 'qing-reveal-old' ? 1 : 2,
+          contentHash: 'hash', state: 'editing', agentBusy: false, title: '测试稿', ts: 't2', pmDoc: EDITED_PM,
+        })
+      }
+      if (url.startsWith('/qingagent-bridge/review-render-model?')) {
+        return Response.json({
+          sessionId: activeEngineSessionId, docVersion: 2, state: 'editing', agentBusy: false,
+          baseVersion: 2, suggestions: [],
+        })
+      }
+      throw new Error(`unexpected ${url}`)
+    }))
+    renderPanel('dsh-reveal-missing')
+    await vi.waitFor(() => expect(viewHarness.props?.interactiveEditable).toBe(true))
+
+    const source = FakeEventSource.instances.at(-1)!
+    activeEngineSessionId = 'qing-reveal-new'
+    act(() => source.emit({
+      type: 'doc-committed', engineSessionId: 'qing-reveal-new', revealWholeDraft: true,
+      doc: {
+        sessionId: 'qing-reveal-new', docVersion: 2, state: 'editing', agentBusy: false,
+        markdown: '恢复正文', qingml: '<p>恢复正文</p>', title: '测试稿',
+      },
+      blocks: 1, words: 4,
+    }))
+
+    await vi.waitFor(() => expect(
+      qingClientStore.getSnapshot('dsh-reveal-missing').revealRequest,
+    ).toBeUndefined())
+    expect(document.querySelector('[data-qingagent-doc-panel]')?.getAttribute('data-tool')).toBe('none')
+    expect(document.querySelector('.qingdoc-status')?.textContent).not.toContain('写作中')
+
+    restorePanel.resolve(undefined)
+    await vi.waitFor(() => expect(viewHarness.props?.interactiveEditable).toBe(true))
+    expect(document.querySelector('[data-qingagent-doc-panel]')?.getAttribute('data-tool')).toBe('none')
+    expect(document.querySelector('.qingdoc-status')?.textContent).not.toContain('写作中')
+  })
+
+  it('reveal 动画不参与 busy 或编辑锁，节拍停滞后硬超时清理请求', async () => {
+    installBridgeFetch('dsh-reveal-timeout', ['qing-reveal-timeout'], { panelPm: EDITED_PM })
+    renderPanel('dsh-reveal-timeout')
+    await vi.waitFor(() => expect(viewHarness.props?.interactiveEditable).toBe(true))
+
+    vi.useFakeTimers()
+    vi.spyOn(window, 'setInterval').mockImplementation(
+      () => ({}) as ReturnType<typeof window.setInterval>,
+    )
+    act(() => FakeEventSource.instances.at(-1)!.emit({
+      type: 'doc-committed', engineSessionId: 'qing-reveal-timeout', revealWholeDraft: true,
+      doc: {
+        sessionId: 'qing-reveal-timeout', docVersion: 1, state: 'editing', agentBusy: false,
+        markdown: '工具第一稿', qingml: '<p>工具第一稿</p>', title: '测试稿', pmDoc: TOOL_FIRST_PM,
+      },
+      blocks: 1, words: 6,
+    }))
+
+    expect(qingClientStore.getSnapshot('dsh-reveal-timeout').revealRequest).toBeDefined()
+    expect(document.querySelector('[data-qingagent-doc-panel]')?.getAttribute('data-tool')).toBe('none')
+    expect(document.querySelector('[data-qingagent-doc-panel]')?.getAttribute('data-qingdoc-mode')).toBe('editable')
+    expect(viewHarness.props?.interactiveEditable).toBe(true)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(revealHardTimeoutMs(20))
+    })
+
+    expect(qingClientStore.getSnapshot('dsh-reveal-timeout').revealRequest).toBeUndefined()
+    expect(document.querySelector('[data-qingagent-doc-panel]')?.getAttribute('data-ws-state')).toBe('idle')
+    expect(viewHarness.props?.interactiveEditable).toBe(true)
   })
 
   it('空稿闲置时不挂 QingLoading', async () => {
