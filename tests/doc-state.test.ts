@@ -100,4 +100,31 @@ describe('FreshnessTracker 文稿维度', () => {
     tracker.resetSegment('dsh-1', 'doc-a', 12)
     expect(() => tracker.assertFresh(exec, 'doc-a', 12)).toThrow('qing_read_draft')
   })
+
+  it('整稿改写只接受全文级读取或本回合作者直写，提纲与定位清单不能过闸', () => {
+    const tracker = new FreshnessTracker()
+    const exec = { agent: { id: 'dsh-1' } } as unknown as ToolRunContext
+    tracker.begin('dsh-1', 1)
+    tracker.resetSegment('dsh-1', 'doc-a', 10)
+
+    tracker.markRead(exec, 'doc-a', 'outline', 10)
+    tracker.markRead(exec, 'doc-a', 'blocks', 10)
+    expect(() => tracker.assertWholeDraftReady(exec, 'doc-a', 10)).toThrow('mode:"full"')
+
+    tracker.markRead(exec, 'doc-a', 'full', 10)
+    expect(() => tracker.assertWholeDraftReady(exec, 'doc-a', 10)).not.toThrow()
+
+    tracker.resetSegment('dsh-1', 'doc-a', 11)
+    tracker.markAgentWritten(exec, 'doc-a', 11)
+    expect(() => tracker.assertWholeDraftReady(exec, 'doc-a', 11)).not.toThrow()
+  })
+
+  it.each(['base', 'lines'] as const)('mode:%s 取得完整正文后允许整稿改写', (mode) => {
+    const tracker = new FreshnessTracker()
+    const exec = { agent: { id: 'dsh-1' } } as unknown as ToolRunContext
+    tracker.begin('dsh-1', 1)
+    tracker.resetSegment('dsh-1', 'doc-a', 10)
+    tracker.markRead(exec, 'doc-a', mode, 10)
+    expect(() => tracker.assertWholeDraftReady(exec, 'doc-a', 10)).not.toThrow()
+  })
 })
