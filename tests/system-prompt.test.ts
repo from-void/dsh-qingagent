@@ -83,14 +83,12 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('任何新回合开始时一律先刷新')
   })
 
-  it('每轮以中文用户话收尾，并要求审阅轮工具前导语也是完整句', () => {
+  it('每轮以中文用户话收尾，审阅工具后也补一句且不再调用工具', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('每一轮的最后都必须有一句面向用户的中文话,说清这轮做了什么、下一步要他做什么')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('不允许以工具调用作为一轮的结尾,也不允许停在冒号或半句话上')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('只说定性结论(如「改好了/已提交待你确认」),不要报字数、内容项数、章节数')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('收尾语只复述**已经确定发生的事**,措辞不得比原文更具体:用户或正文说「好多年」就说「好多年」,**不要替换成「十几年」这类你自己推断的数字或程度词**。')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('机制上你在工具调用之后不再有发言机会,由结果卡向用户说明')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('工具调用之前的那句话仍必须是完整的一句')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不得停在冒号或半句上')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('提交审阅后也必须在工具返回后补一句简短收尾,不得再调用任何工具')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('返回 review 后，本次工具调用已经结束：不要重写、不要读稿复核、不要自动裁决')
     expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('返回 review 后，本回合已经结束')
   })
@@ -110,12 +108,22 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('需要动结构时仍按【全文重构纪律】处理')
   })
 
-  it('字数超差由主模型沿用同稿重交一次', () => {
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('沿用返回的同一 docRef 再提交一次，且只能一次')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('qing_write_draft **必须**把原话中的相关短句传入 requirements，禁止只在脑内换算')
+  it('字数超差可沿用同稿重交两次，但第三稿要求偏差大于 15% 且持续缩小', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('沿用返回的同一 docRef 重交一次')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('若第二稿相对目标或边界的偏差仍超过 15%，且绝对差距确实比首稿缩小，允许沿用同一 docRef 再重交最后一次')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('第三稿无论是否达标都必须停止')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('qing_write_draft **必须**把原话中的相关短句传入 requirements，禁止只在脑内换算，更不得把要求写进正文')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('首稿带有 requirements 时，重交必须继续按首稿的字数要求判断')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('第二次仍有偏差就如实交付')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('工具绝不会在内部代你重写')
+  })
+
+  it('表格、Mermaid、正文指令与结构数量都有确定性纪律', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('【表格纪律】')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('严禁用 insertAfterLine、insertAfterBlock 或 appendSection 插入孤立的单行管道文本')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('【Mermaid 改图纪律】')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('把从开围栏到闭围栏的整块替换为新整块')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('用户给出的字数、格式、结构等要求都是写作指令，不是正文素材')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('禁止自行估算字数、标题数、章节数、表格行列或结构维度')
   })
 
   it('已有文稿整篇重写前必须取得本回合全文', () => {

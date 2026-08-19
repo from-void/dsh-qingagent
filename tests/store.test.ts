@@ -565,9 +565,10 @@ describe('QingClientStore 生成终态', () => {
     release()
   })
 
-  it('busy 持续 90 秒且没有后续回合事件时只兜底重拉一次', async () => {
+  it.each(['panelDoc', 'activeDoc', 'activeBound'] as const)(
+    '%s 单独滞留 busy 90 秒且无后续事件时也只兜底重拉一次',
+    async (source) => {
     vi.stubGlobal('EventSource', FakeEventSource)
-    let agentBusy = false
     let panelReads = 0
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
@@ -576,13 +577,13 @@ describe('QingClientStore 生成终态', () => {
         panelReads += 1
         return Response.json({
           sessionId: 'qing-1', docVersion: 1, contentHash: 'hash-1', state: 'editing',
-          agentBusy, title: '测试稿', ts: 't1', charCount: 12,
+          agentBusy: false, title: '测试稿', ts: 't1', charCount: 12,
           pmDoc: { type: 'doc', attrs: { schemaVersion: 1 }, content: [] },
         })
       }
       if (url.startsWith('/qingagent-bridge/review-render-model?')) {
         return Response.json({
-          sessionId: 'qing-1', docVersion: 1, state: 'editing', agentBusy,
+          sessionId: 'qing-1', docVersion: 1, state: 'editing', agentBusy: false,
           baseVersion: 1, suggestions: [],
         })
       }
@@ -592,17 +593,23 @@ describe('QingClientStore 生成终态', () => {
     const store = new QingClientStore()
     const release = store.retain('dsh-busy-fallback')
     await vi.waitFor(() => expect(store.getSnapshot('dsh-busy-fallback').state).toBeDefined())
-    vi.useFakeTimers()
-    agentBusy = true
     await store.refreshPanel('dsh-busy-fallback', 'qing-1')
-    agentBusy = false
+    const stale = store.getSnapshot('dsh-busy-fallback')
+    if (source === 'panelDoc') stale.panelDoc!.agentBusy = true
+    if (source === 'activeDoc') stale.activeDoc!.agentBusy = true
+    if (source === 'activeBound') stale.state!.docs[0]!.agentBusy = true
+    vi.useFakeTimers()
+    // 触发一次正常 store 发布，让兜底计时器从与渲染相同的三域 busy 口径启动。
+    store.setSaveState('dsh-busy-fallback', { kind: 'idle' })
 
     await vi.advanceTimersByTimeAsync(PANEL_BUSY_REFRESH_DELAY_MS - 1)
     expect(panelReads).toBe(1)
-    expect(store.getSnapshot('dsh-busy-fallback').panelDoc?.agentBusy).toBe(true)
     await vi.advanceTimersByTimeAsync(1)
     expect(panelReads).toBe(2)
-    expect(store.getSnapshot('dsh-busy-fallback').panelDoc?.agentBusy).toBe(false)
+    const refreshed = store.getSnapshot('dsh-busy-fallback')
+    expect(refreshed.panelDoc?.agentBusy).toBe(false)
+    expect(refreshed.activeDoc?.agentBusy).toBe(false)
+    expect(refreshed.state?.docs[0]?.agentBusy).toBe(false)
     await vi.advanceTimersByTimeAsync(PANEL_BUSY_REFRESH_DELAY_MS * 2)
     expect(panelReads).toBe(2)
     release()

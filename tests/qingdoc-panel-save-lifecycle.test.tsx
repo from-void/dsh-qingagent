@@ -830,6 +830,24 @@ describe('QingDocPanel 保存生命周期', () => {
     ).toBe('editable'))
   })
 
+  it('提交成功且没有后续事件时强制权威刷新，清除三域 busy 并恢复审查导出', async () => {
+    const fetchMock = installBridgeFetch('dsh-review-busy-success', ['qing-review'], {
+      pendingReview: true,
+      agentBusy: true,
+      postCommitAgentBusy: false,
+      reviewSuggestionStatus: 'accepted',
+    })
+    renderPanel('dsh-review-busy-success')
+
+    await vi.waitFor(() => expect(reviewCommitCalls(fetchMock)).toBe(1))
+    await vi.waitFor(() => expect(panelReadCalls(fetchMock)).toBeGreaterThanOrEqual(2))
+    await vi.waitFor(() => expect(
+      document.querySelector('[data-qingagent-doc-panel]')?.getAttribute('data-tool'),
+    ).toBe('none'))
+    expect(document.querySelector('.qingdoc-status')?.textContent).not.toContain('写作中')
+    expect(toolbarHarness.props?.active).toBe(true)
+  })
+
   it('「在青简中打开」入口以 qingjian:// 深链拉起桌面客户端', async () => {
     installBridgeFetch('dsh-open-native', ['qing-native'])
     renderPanel('dsh-open-native')
@@ -855,24 +873,63 @@ describe('QingDocPanel 保存生命周期', () => {
       totalCount: 0,
       unrenderableOnly: true,
     })
+    expect(qingClientStore.getSnapshot('dsh-verdict-refresh').reviewModel?.suggestions.map(
+      (suggestion) => suggestion.id,
+    )).toEqual(['patch-reviewed'])
+    // 模拟编辑器句柄残留 dirty；普通 refresh 会被守卫拒绝，失配后的权威刷新必须绕过。
+    viewHarness.semanticDirty = true
+    viewHarness.innerHtml = '<p>审阅投影</p>'
     const before = panelReadCalls(fetchMock)
 
-    await act(async () => {
+    act(() => {
       const onPatchVerdict = viewHarness.props?.onPatchVerdict as
         | ((patchId: string, verdict: 'accepted' | 'rejected') => void)
         | undefined
       onPatchVerdict?.('patch-reviewed', 'accepted')
-      for (let index = 0; index < 6; index += 1) {
-        await Promise.resolve()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-      }
     })
 
     await vi.waitFor(() => expect(panelReadCalls(fetchMock)).toBeGreaterThan(before))
+    await vi.waitFor(() => expect(
+      qingClientStore.getSnapshot('dsh-verdict-refresh').reviewModel?.suggestions.map(
+        (suggestion) => suggestion.id,
+      ),
+    ).toEqual(Array.from({ length: 7 }, (_, index) => `server-patch-${index + 1}`)))
+    expect(qingClientStore.getSnapshot('dsh-verdict-refresh').saveState?.kind).not.toBe('conflict')
   })
 })
 
 describe('QingDocPanel 整篇审阅', () => {
+  it('整篇审待审数与结算回流都按同一个可裁决对象计数', async () => {
+    const qingSendMessage = vi.fn(async (_dshSessionId: string, _text: string) => undefined)
+    let releaseCommit!: () => void
+    const reviewCommitGate = new Promise<void>((resolve) => { releaseCommit = resolve })
+    const fetchMock = installBridgeFetch('dsh-whole-count', ['qing-review'], {
+      pendingReview: true,
+      wholeDocument: true,
+      reviewSuggestionStatus: 'accepted',
+      reviewCommitGate,
+      reviewBasePm: WHOLE_BASE_PM,
+      reviewEditedPm: WHOLE_EDITED_PM,
+      reviewOutcome: {
+        acceptedCount: 3,
+        rejectedCount: 0,
+        hunks: [
+          { verdict: 'accepted', blockSummary: '一', beforeText: '旧一', afterText: '新一' },
+          { verdict: 'accepted', blockSummary: '二', beforeText: '旧二', afterText: '新二' },
+          { verdict: 'accepted', blockSummary: '三', beforeText: '旧三', afterText: '新三' },
+        ],
+      },
+    })
+    renderPanel('dsh-whole-count', qingSendMessage)
+
+    await vi.waitFor(() => expect(reviewCommitCalls(fetchMock)).toBe(1))
+    expect(document.querySelector('.qingdoc-status')?.textContent).toBe('审阅中·1处')
+    releaseCommit()
+    await vi.waitFor(() => expect(qingSendMessage).toHaveBeenCalledOnce())
+    expect(qingSendMessage.mock.calls[0]?.[1]).toContain('采纳 1 处,拒绝 0 处')
+    expect(qingSendMessage.mock.calls[0]?.[1]).not.toContain('采纳 3 处')
+  })
+
   it('按青简输入侧公式派生 changeRatio，达到 0.7 阈值时切到整篇审并可切换新旧全文', async () => {
     const ratio = computeExternalReviewChangeRatio(
       {
@@ -1335,6 +1392,7 @@ function installBridgeFetch(
   engineSessionIds: string[],
   options: {
     agentBusy?: boolean
+    postCommitAgentBusy?: boolean
     panelPm?: PmDoc
     pendingReview?: boolean
     failReviewCommit?: boolean
@@ -1363,7 +1421,11 @@ function installBridgeFetch(
   let reviewCommitted = false
   let serverDocVersion = serverPendingReview ? 3 : 0
   let reviewCommitAttempts = 0
+  let verdictSubmitted = false
   let stalePostCommitPanelReads = options.stalePostCommitPanelReads ?? 0
+  const currentAgentBusy = () => reviewCommitted && options.postCommitAgentBusy !== undefined
+    ? options.postCommitAgentBusy
+    : options.agentBusy === true
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     if (url.startsWith('/qingagent-bridge/state?')) {
@@ -1378,11 +1440,11 @@ function installBridgeFetch(
         docs: engineSessionIds.map((engineSessionId) => ({
           engineSessionId, title: engineSessionId, createdAt: '2026-08-15T00:00:00.000Z',
           state: serverPendingReview ? 'pendingReview' : 'empty',
-          docVersion: serverDocVersion, agentBusy: options.agentBusy === true,
+          docVersion: serverDocVersion, agentBusy: currentAgentBusy(),
         })),
         activeDoc: {
           sessionId: engineSessionIds[0], docVersion: serverDocVersion,
-          state: serverPendingReview ? 'pendingReview' : 'empty', agentBusy: options.agentBusy === true,
+          state: serverPendingReview ? 'pendingReview' : 'empty', agentBusy: currentAgentBusy(),
           markdown: '', qingml: '', title: engineSessionIds[0],
         },
         engine: { state: 'online', engineUrl: 'http://127.0.0.1:8080' },
@@ -1403,7 +1465,7 @@ function installBridgeFetch(
         sessionId: engineSessionId, docVersion: serverDocVersion,
         contentHash: `hash-${serverDocVersion}`,
         state: pendingReview ? 'pendingReview' : 'editing',
-        agentBusy: options.agentBusy === true, title: engineSessionId, ts: 't0', charCount: 0,
+        agentBusy: currentAgentBusy(), title: engineSessionId, ts: 't0', charCount: 0,
         pmDoc: options.panelPm ?? options.reviewBasePm ?? EMPTY_PM,
       })
     }
@@ -1411,14 +1473,16 @@ function installBridgeFetch(
       const engineSessionId = new URL(url, 'http://local').searchParams.get('engineSessionId')!
       return Response.json({
         sessionId: engineSessionId, docVersion: serverDocVersion,
-        state: serverPendingReview ? 'pendingReview' : 'editing', agentBusy: options.agentBusy === true,
+        state: serverPendingReview ? 'pendingReview' : 'editing', agentBusy: currentAgentBusy(),
         markdown: '', qingml: '', title: engineSessionId,
       })
     }
     if (url.startsWith('/qingagent-bridge/review-render-model?')) {
-      const suggestionIds = options.conflictAddsSuggestion && reviewCommitAttempts > 0
-        ? ['patch-reviewed', 'patch-late']
-        : ['patch-reviewed']
+      const suggestionIds = options.mismatchVerdict && verdictSubmitted
+        ? Array.from({ length: 7 }, (_, index) => `server-patch-${index + 1}`)
+        : options.conflictAddsSuggestion && reviewCommitAttempts > 0
+          ? ['patch-reviewed', 'patch-late']
+          : ['patch-reviewed']
       return Response.json({
         sessionId: engineSessionIds[0], docVersion: serverDocVersion,
         state: serverPendingReview ? 'pendingReview' : 'editing', agentBusy: false,
@@ -1478,9 +1542,10 @@ function installBridgeFetch(
       })
     }
     if (url.startsWith('/qingagent-bridge/review-verdicts?') && init?.method === 'POST') {
+      verdictSubmitted = true
       return Response.json({
         status: 'marked', docVersion: 3,
-        patchIds: options.mismatchVerdict ? ['server-patch'] : ['patch-reviewed'],
+        patchIds: options.mismatchVerdict ? ['server-patch-1'] : ['patch-reviewed'],
         verdict: 'accepted', reviewingCount: options.mismatchVerdict ? 7 : 0, seq: null,
       })
     }

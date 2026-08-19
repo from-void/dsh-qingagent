@@ -521,7 +521,9 @@ export function QingDocPanel(props: QingDocPanelProps) {
     return () => document.removeEventListener('dblclick', handleReviewDrawioDoubleClick, { capture: true })
   }, [])
   // reveal 是已提交全文的纯视觉播放，不代表引擎仍忙，也不能锁住纸面编辑。
-  const busy = panelDoc?.agentBusy === true || activeBound?.agentBusy === true
+  const busy = panelDoc?.agentBusy === true
+    || (snapshot.activeDoc?.sessionId === activeEngineSessionId && snapshot.activeDoc?.agentBusy === true)
+    || activeBound?.agentBusy === true
   // 冲突态按文稿隔离(权威在 conflicts 分槽映射):当前稿有冲突记录就呈现冲突(含切走再切回),
   // 别的文稿的冲突不影响当前稿;瞬态保存状态照常走单槽。
   const rawSaveState = snapshot.saveState ?? ({ kind: 'idle' } satisfies DocumentSaveState)
@@ -789,7 +791,13 @@ export function QingDocPanel(props: QingDocPanelProps) {
         verdict,
       )
       if (!responseMatchesLocal) {
-        void qingClientStore.refreshPanel(sessionId, activeEngineSessionId).catch(() => undefined)
+        // 回执已经证明本地批次投影不可信；审阅态纸面不可编辑，因此这里应越过
+        // 本地刷新守卫并等待权威状态应用完成，不能只 fire-and-forget 一次可被拒绝的刷新。
+        await qingClientStore.refreshPanel(
+          sessionId,
+          activeEngineSessionId,
+          { bypassGuard: true },
+        ).catch(() => undefined)
       }
       setToast(verdict === 'accepted' ? '已保留这处改动' : '已取消这处改动')
     } catch (error) {
@@ -836,6 +844,17 @@ export function QingDocPanel(props: QingDocPanelProps) {
     const settledSuggestions = (commitSnapshot.reviewModel?.suggestions ?? [])
       .filter((suggestion) => suggestion.status === 'reviewing' || suggestion.status === 'accepted' || suggestion.status === 'rejected')
     const settledSuggestionIds = new Set(settledSuggestions.map((suggestion) => suggestion.id))
+    const settledPresentation = commitSnapshot.panelDoc && commitSnapshot.reviewModel
+      ? buildReviewPresentationModel(commitSnapshot.panelDoc, commitSnapshot.reviewModel)
+      : null
+    const settledStatusById = new Map(settledSuggestions.map((suggestion) => [suggestion.id, suggestion.status]))
+    const adjudicableVerdicts: Array<'accepted' | 'rejected'> = wholeDocReview && settledSuggestions.length > 0
+      ? [action === 'reject_all' ? 'rejected' : 'accepted']
+      : (settledPresentation?.reviewTargets ?? []).map((target) => {
+          if (action === 'reject_all') return 'rejected'
+          if (action === 'accept_all') return 'accepted'
+          return settledStatusById.get(target.patchId) === 'rejected' ? 'rejected' : 'accepted'
+        })
     let retried = false
     let retryCount = 0
     const fallbackOutcome = (): ExternalReviewOutcome => {
@@ -855,7 +874,17 @@ export function QingDocPanel(props: QingDocPanelProps) {
     const pushOutcomeToConversation = (authoritativeOutcome?: ExternalReviewOutcome) => {
       if (!props.qingSendMessage) return
       const fallback = fallbackOutcome()
-      const outcome = authoritativeOutcome ?? fallback
+      const rawOutcome = authoritativeOutcome ?? fallback
+      // 面板待审数与结算消息都按同一份可裁决 ReviewTarget 投影计数；引擎返回的
+      // suggestion/batch 数仍保留给后续批次归并，不直接混进用户显示口径。
+      const adjudicableRejectedCount = adjudicableVerdicts.filter((verdict) => verdict === 'rejected').length
+      const outcome: ExternalReviewOutcome = adjudicableVerdicts.length > 0
+        ? {
+            ...rawOutcome,
+            acceptedCount: adjudicableVerdicts.length - adjudicableRejectedCount,
+            rejectedCount: adjudicableRejectedCount,
+          }
+        : rawOutcome
       const hasAuthoritativeRejectedDetail = outcome.hunks.some((hunk) => hunk.verdict === 'rejected')
       // 回流载荷按最小披露构造：已采纳项只保留数量，正文永远不进入候选数组。
       const rejected = (authoritativeOutcome && outcome.rejectedCount > 0 && !hasAuthoritativeRejectedDetail
@@ -893,7 +922,9 @@ export function QingDocPanel(props: QingDocPanelProps) {
       }
       pushOutcomeToConversation(outcome)
       const refreshPanel = async () => {
-        await qingClientStore.refreshPanel(sessionId, activeEngineSessionId)
+        // commit 已成功，必须越过本地 dirty guard 拉取权威状态；否则 guard 拒绝应用时
+        // optimistic editing 与旧的 busy 域会分裂，面板长期停在「写作中」。
+        await qingClientStore.refreshPanel(sessionId, activeEngineSessionId, { bypassGuard: true })
         const refreshed = qingClientStore.getSnapshot(sessionId)
         if (
           refreshed.panelEngineSessionId === activeEngineSessionId &&
@@ -901,7 +932,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
           refreshed.reviewModel?.suggestions.length === 0
         ) {
           await wait(500)
-          await qingClientStore.refreshPanel(sessionId, activeEngineSessionId)
+          await qingClientStore.refreshPanel(sessionId, activeEngineSessionId, { bypassGuard: true })
         }
       }
       const refreshes = [refreshPanel()]
@@ -987,7 +1018,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
       reviewSubmittingRef.current = false
       setReviewSubmitting(false)
     }
-  }, [activeEngineSessionId, panelDoc, props, reviewCommitKey, sessionId])
+  }, [activeEngineSessionId, panelDoc, props, reviewCommitKey, sessionId, wholeDocReview])
 
   useEffect(() => {
     const suggestions = snapshot.reviewModel?.suggestions ?? []
@@ -1011,15 +1042,17 @@ export function QingDocPanel(props: QingDocPanelProps) {
 
   const authoritativeReviewCount = snapshot.reviewModel?.suggestions
     .filter((suggestion) => suggestion.status === 'reviewing').length ?? 0
-  // 数量口径与用户实际能逐项裁决的原生 ReviewTarget 完全一致；render-model 中被
-  // 丢弃/冲突而没有目标的 suggestion 不再冒充面板里的待裁决项。
-  // 整篇审在纸面上是一份新版与旧版的单一裁决对象；逐处审才按 ReviewTarget 计数。
+  // 导航仍需要“尚未点选”的 remaining 数；顶栏和结算结果则都使用本批可裁决总数。
+  // render-model 中被丢弃/冲突而没有 ReviewTarget 的 suggestion 不进入显示口径。
   const remainingReviewCount = wholeDocReview
-    ? authoritativeReviewCount > 0 ? 1 : 0
+    ? effectiveReview ? 1 : 0
     : visibleReviewTargets.length
   const unrenderableReviewOnly = !wholeDocReview && authoritativeReviewCount > 0 && remainingReviewCount === 0
+  const adjudicableReviewCount = wholeDocReview
+    ? effectiveReview ? 1 : 0
+    : reviewPresentation?.reviewTargets.length ?? 0
   const reviewCount = reviewPresentation
-    ? remainingReviewCount
+    ? adjudicableReviewCount
     : snapshot.reviewCount ?? 0
   const shownWholeDoc = wholeDocVersion === 'old'
     ? (reviewPresentation?.doc ?? surfaceDoc)

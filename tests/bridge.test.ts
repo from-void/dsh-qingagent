@@ -441,10 +441,11 @@ describe('BridgeHub', () => {
       activeEngineSessionId: 'qing-a',
     }
     const documentChanged = vi.fn(async () => undefined)
-    const { handler, engine, dispose } = fixture(
+    const { handler, hub, engine, dispose } = fixture(
       { 'dsh-a': binding },
       { documentChanged },
     )
+    const emit = vi.spyOn(hub, 'emit')
     vi.mocked(engine.fetchJson).mockImplementation(async (path) => {
       if (path.endsWith('/review/verdicts')) {
         return { status: 'marked', docVersion: 3, patchIds: ['p-1'], verdict: 'accepted', reviewingCount: 0, seq: 1 }
@@ -490,6 +491,9 @@ describe('BridgeHub', () => {
     expect(documentChanged).toHaveBeenNthCalledWith(1, 'dsh-a', 'qing-a')
     expect(documentChanged).toHaveBeenNthCalledWith(2, 'dsh-a', 'qing-a')
     expect(documentChanged).toHaveBeenNthCalledWith(3, 'dsh-a', 'qing-a')
+    expect(emit).toHaveBeenCalledWith('dsh-a', {
+      type: 'turn-ended', engineSessionIds: ['qing-a'],
+    })
     dispose()
   })
 

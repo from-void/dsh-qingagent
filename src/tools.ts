@@ -68,9 +68,9 @@ interface RuntimeToolServices extends ToolServices {
 
 const textBlock = (text: string) => [{ type: 'text' as const, text }]
 
-const REVIEW_END_MESSAGE = '改动已提交审阅，右侧面板等待用户裁决。本次工具调用结束——不要重写、不要读稿复核、不要自动裁决；收尾说明由工具卡向用户展示，本回合不再产生任何输出。'
+const REVIEW_END_MESSAGE = '改动已提交审阅，右侧面板等待用户裁决。本次工具调用结束——不要重写、不要读稿复核、不要自动裁决、不要再调用工具；只补一句简短收尾，请用户在右侧完成裁决。'
 const REVIEW_REPEAT_ERROR = '本回合已裁决过一次，禁止连环裁决；等待用户指示'
-const WRITE_REPEAT_ERROR = '本回合的完整文稿已经提交；首稿直接提交后只可沿用同一文稿引用重交一次，第二次后必须等待用户下一轮指示。'
+const WRITE_REPEAT_ERROR = '本回合的完整文稿重交额度已用尽；只有第二稿的字数偏差仍超过 15% 且差距比首稿缩小时，才允许第三次提交。请等待用户下一轮指示。'
 const REVIEW_PENDING_ERROR = '文稿正在审阅中。待审内容可能是你此前轮次提交的,也可能来自其他会话——不要断言归属。先用 ask_user 向用户说明存在待审稿,经用户明确授权后才可处置;不得代为提交或放弃。'
 const STR_REPLACE_PLAIN_TEXT_ERROR = 'old 必须是纯文本内容,不要带 ## 等 markdown 标记'
 const STR_REPLACE_LINES_NOTICE = '注意:strReplace 的 old 用纯文本,不要带行首 ## - 等标记。'
@@ -80,6 +80,7 @@ const SOURCE_SYNTAX_LEAK_ERROR = '文稿中仍有无法识别的脚注或公式�
 // 局部 op 只接受纯文本/Markdown;QingML/HTML 原始标签会被当普通文字刻进正文(用户实测颜色事故)。
 const RAW_TAG_PATTERN = /<\/?\s*(article|title|h[1-6]|p|ul|ol|li|tasks?|blockquote|hr|pre|table|tr|td|th|callout|columns?|mermaid|drawio|math(?:-block)?|img|file|pennote|b|strong|i|em|u|s|del|code|a|mark|color|footnote|br|span|div)\b[^>]*>/i
 const RAW_TAG_ERROR = '检测到 QingML/HTML 标签:局部操作(strReplace/insertAfterLine/appendSection)只接受纯文本或 Markdown；直接写入 <mark>/<color> 等标签会把它们当普通文字刻进正文。样式类修改请改用 qing_edit_draft 的 markText 操作。'
+const ORPHAN_TABLE_ROW_ERROR = '检测到孤立的 Markdown 表格行；不能用插入或追加操作写入单行管道文本。请用 strReplace 定位既有表格整行并把新行一并扩展；完整表格必须包含表头分隔行。'
 
 /**
  * 空壳按顶层块形态判定,不用字数阈值:合法的一句话通知也只需一个 <p>,
@@ -88,6 +89,23 @@ const RAW_TAG_ERROR = '检测到 QingML/HTML 标签:局部操作(strReplace/inse
 function isBodylessDraft(qingml: string): boolean {
   return !completeTopLevelBlocks(qingml).blocks.some((block) =>
     !/^<title(?:\s|>)/i.test(block) && !/^<h[1-6](?:\s|>)/i.test(block))
+}
+
+const LENGTH_INSTRUCTION_LEAK_PATTERN = /(?:字数要求|(?:全文|本文|文章|篇幅)?\s*(?:约|左右|上下|至少|不少于|不低于|不超过|不多于|最多|至多|控制在)\s*[零〇一二两三四五六七八九十百千万\d,，]+\s*字|[零〇一二两三四五六七八九十百千万\d,，]+\s*字\s*(?:以内|以下|以上|左右))/u
+
+function draftInstructionLeakWarning(qingml: string, isFirstDraft: boolean): string | undefined {
+  if (!isFirstDraft) return undefined
+  const bodyBlocks = completeTopLevelBlocks(qingml).blocks.filter((block) =>
+    !/^<title(?:\s|>)/i.test(block) && !/^<h1(?:\s|>)/i.test(block))
+  const edges = bodyBlocks.length <= 1
+    ? bodyBlocks
+    : [bodyBlocks[0]!, bodyBlocks.at(-1)!]
+  const leaked = edges.some((block) => LENGTH_INSTRUCTION_LEAK_PATTERN.test(
+    block.replace(/<[^>]+>/g, ' ').replace(/&(?:amp|lt|gt|quot|#39);/g, ' ').replace(/\s+/g, ' ').trim(),
+  ))
+  return leaked
+    ? '正文首尾可能混入了用户的字数要求；字数/格式要求属于写作指令，不应作为正文内容。请检查并在下一轮按正文语义修正。'
+    : undefined
 }
 
 interface DraftLengthRequirement {
@@ -395,6 +413,32 @@ function assertNoRawTags(ops: ExternalEditProposalOp[]): void {
   }
 }
 
+function isPipeTableRow(line: string): boolean {
+  const trimmed = line.trim()
+  return trimmed.startsWith('|') && trimmed.endsWith('|') && trimmed.length >= 3
+}
+
+function isTableDelimiterRow(line: string): boolean {
+  if (!isPipeTableRow(line)) return false
+  const cells = line.trim().slice(1, -1).split('|').map((cell) => cell.trim())
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell))
+}
+
+function isPipeRowsOnly(markdown: string): boolean {
+  const lines = markdown.split(/\r?\n/).filter((line) => line.trim().length > 0)
+  return lines.length > 0 && lines.every(isPipeTableRow)
+}
+
+function assertNoOrphanTableRows(ops: ExternalEditProposalOp[]): void {
+  for (const op of ops) {
+    if (!('markdown' in op) || typeof op.markdown !== 'string') continue
+    const lines = op.markdown.split(/\r?\n/).filter((line) => line.trim().length > 0)
+    if (lines.length > 0 && lines.every(isPipeTableRow) && !lines.some(isTableDelimiterRow)) {
+      throw new Error(ORPHAN_TABLE_ROW_ERROR)
+    }
+  }
+}
+
 function assertSynchronizedTitleChange(
   currentTitle: string | null | undefined,
   pmDoc: PmDoc,
@@ -668,7 +712,6 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
               words,
             })
           }
-          if (proposal.status === 'review') exec.concludeTurn()
           void services.telemetry?.capture('draft_created', {
             words_bucket: wordsBucket(words),
             blocks_bucket: blocksBucket(outline.blocks),
@@ -684,14 +727,20 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
           }, true)
           const lengthReport = draftLengthReport(words, requirements)
           const lengthStatus: 'not-requested' | 'met' | 'unmet' | 'target-missed' = lengthReport?.status ?? 'not-requested'
+          writeTurns.recordLengthResult(exec, bound.engineSessionId, words, lengthReport)
+          const instructionLeakWarning = draftInstructionLeakWarning(renderedQingml, !args.docRef)
+          const warnings = [
+            ...(lostBlocks > 0
+              ? [`生成了 ${submittedBlocks} 项正文内容，文稿实际保留 ${outline.blocks} 项；有 ${lostBlocks} 项未通过格式检查。请重新查看文稿，补回缺失内容。`]
+              : []),
+            ...(instructionLeakWarning ? [instructionLeakWarning] : []),
+          ]
           return {
             title,
             blocks: outline.blocks,
             structure: outline.structure,
             words,
-            ...(lostBlocks > 0
-              ? { warning: `生成了 ${submittedBlocks} 项正文内容，文稿实际保留 ${outline.blocks} 项；有 ${lostBlocks} 项未通过格式检查。请重新查看文稿，补回缺失内容。` }
-              : {}),
+            ...(warnings.length > 0 ? { warning: warnings.join('；') } : {}),
             status: proposal.status,
             engineSessionId: bound.engineSessionId,
             docVersion: official.docVersion,
@@ -721,7 +770,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
 function editDraftTool(services: RuntimeToolServices) {
   return defineTool({
     name: 'qing_edit_draft',
-    description: '对已有青简文稿做结构化局部修改。改标题时,若正文有与旧稿名相同的纸面大标题,要同时用 setTitle 改稿名(元数据)、用 strReplace 改纸面标题;两者必须在同一次 ops 里一起提交,文字保持一致。正文没有同名纸面大标题时,允许只用 setTitle。删除整段/整节/清单项用 deleteBlock/deleteListItem,先 qing_read_draft mode:"blocks" 取得短定位键 locator,严禁用 strReplace 置空留残壳;真实引擎标识由工具内部映射,不要猜测或传入。改一句、插入一段或追加一节用相应操作;高亮、文字颜色、加粗一句话等行内标记用 markText。markText remove 前先读稿确认现有标记的确切 attrs;代码段内文本不支持行内标记。strReplace 的 old/new 必须是纯文本，不含 ##、-、** 等 Markdown 标记。只有用户明确表达「所有/全部/凡是/都」等全局意图时,才用单个 strReplace + all:true;all:true 不得与 nth 同时使用。多处修改必须放进同一次调用的 ops 数组原子提交。insertAfterLine 的行号来自读稿当刻;同批先增删内容会令后续旧行号失效。复杂清单或表格附近优先使用 mode:"blocks" 给出的 locator。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
+    description: '对已有青简文稿做结构化局部修改。改标题时,若正文有与旧稿名相同的纸面大标题,要同时用 setTitle 改稿名(元数据)、用 strReplace 改纸面标题;两者必须在同一次 ops 里一起提交,文字保持一致。正文没有同名纸面大标题时,允许只用 setTitle。删除整段/整节/清单项用 deleteBlock/deleteListItem,先 qing_read_draft mode:"blocks" 取得短定位键 locator,严禁用 strReplace 置空留残壳;真实引擎标识由工具内部映射,不要猜测或传入。改一句、插入一段或追加一节用相应操作;高亮、文字颜色、加粗一句话等行内标记用 markText。markText remove 前先读稿确认现有标记的确切 attrs;代码段内文本不支持行内标记。strReplace 的 old/new 通常必须是纯文本，不含 ##、-、** 等 Markdown 标记；只有扩展既有表格行或整块替换 fenced Mermaid 时传完整 Markdown 块。表格行严禁用 insertAfterLine/insertAfterBlock/appendSection 插入孤立管道文本。只有用户明确表达「所有/全部/凡是/都」等全局意图时,才用单个 strReplace + all:true;all:true 不得与 nth 同时使用。多处修改必须放进同一次调用的 ops 数组原子提交。insertAfterLine 的行号来自读稿当刻;同批先增删内容会令后续旧行号失效。复杂清单或表格附近优先使用 mode:"blocks" 给出的 locator。修改 Mermaid 先用 mode:"lines" 读取完整 fenced 块,再整块 strReplace,不得逐行改。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
     parameters: {
       docRef: { type: 'string', description: '要局部修改的青简会话 ID；省略时使用当前激活文稿。' },
       ops: {
@@ -735,8 +784,8 @@ function editDraftTool(services: RuntimeToolServices) {
               additionalProperties: false,
               properties: {
                 kind: { type: 'string', const: 'strReplace', required: true },
-                old: { type: 'string', required: true, description: '要匹配的纯文本内容，不含行首 ##、-、数字. 或包裹性 **/__ 等 Markdown 标记。' },
-                new: { type: 'string', required: true, description: '替换后的纯文本内容，不含行首 ##、-、数字. 或包裹性 **/__ 等 Markdown 标记。' },
+                old: { type: 'string', required: true, description: '要匹配的纯文本内容；扩展表格行或替换 Mermaid 时例外传既有完整 Markdown 行/块。' },
+                new: { type: 'string', required: true, description: '替换后的纯文本内容；扩展表格行或替换 Mermaid 时例外传扩展后的完整 Markdown 行/块。' },
                 nth: { type: 'integer', description: '只替换从 1 开始计数的第几处命中；不得与 all:true 同时使用。' },
                 all: { type: 'boolean', description: '仅当用户明确说「所有/全部/凡是/都」等全局范围时设为 true；用单个操作替换全部命中，不得与 nth 同时使用。' },
               },
@@ -946,6 +995,7 @@ function editDraftTool(services: RuntimeToolServices) {
           ? resolveEditLocators(basePmDoc!, modelOps)
           : modelOps as ExternalEditProposalOp[]
         assertNoRawTags(ops)
+        assertNoOrphanTableRows(ops)
         if (basePmDoc) assertSynchronizedTitleChange(before.title, basePmDoc, ops)
         const prepared = await prepareEditOps(services, exec, engineSessionId, ops, basePmDoc)
         const proposal = await proposeEditOpsWithPlainTextRetry(
@@ -1003,7 +1053,6 @@ function editDraftTool(services: RuntimeToolServices) {
             blocks: outline.blocks,
             words,
           })
-          exec.concludeTurn()
         }
         const countLine = editCountLine(prepared.opResults, prepared.affectedCount)
         void services.telemetry?.capture('draft_edited', {
@@ -1767,6 +1816,40 @@ function expandMarkdownBlockReplacements(doc: PmDoc, ops: ExternalEditProposalOp
     expanded.origins.push(origin)
   }
   ops.forEach((op, originalIndex) => {
+    if (
+      op.kind === 'strReplace'
+      && op.all !== true
+      && isPipeRowsOnly(op.old)
+      && isPipeRowsOnly(op.new)
+    ) {
+      const oldLines = op.old.trim().split(/\r?\n/).map((line) => line.trim())
+      const newLines = op.new.trim().split(/\r?\n/)
+      const candidates = topLevel.flatMap((item) => {
+        if (item.type !== 'table') return []
+        const tableLines = lines.slice(item.span.startLine - 1, item.span.contentEndLine)
+        const matches: Array<{ start: number }> = []
+        for (let start = 0; start <= tableLines.length - oldLines.length; start += 1) {
+          if (oldLines.every((line, offset) => tableLines[start + offset]?.trim() === line)) {
+            matches.push({ start })
+          }
+        }
+        return matches.map(({ start }) => ({ item, tableLines, start }))
+      })
+      const selected = op.nth !== undefined
+        ? candidates[op.nth - 1]
+        : candidates.length === 1 ? candidates[0] : undefined
+      if (selected) {
+        const replacement = [
+          ...selected.tableLines.slice(0, selected.start),
+          ...newLines,
+          ...selected.tableLines.slice(selected.start + oldLines.length),
+        ].join('\n')
+        append({ kind: 'insertAfterBlock', blockId: selected.item.id, markdown: replacement }, originalIndex)
+        append({ kind: 'deleteBlock', blockId: selected.item.id }, originalIndex)
+        expanded.structuralReplacements.add(originalIndex)
+        return
+      }
+    }
     if (op.kind !== 'strReplace' || !op.old.includes('\n') || op.all === true) {
       append(op, originalIndex)
       return
@@ -1787,7 +1870,11 @@ function expandMarkdownBlockReplacements(doc: PmDoc, ops: ExternalEditProposalOp
     }
     const covered = topLevel.slice(selected.first, selected.last + 1)
     const isStructural = covered.length > 1 || covered.some((item) =>
-      item.type === 'table' || item.type === 'orderedList' || item.type === 'bulletList' || item.type === 'taskList')
+      item.type === 'table'
+      || item.type === 'diagram'
+      || item.type === 'orderedList'
+      || item.type === 'bulletList'
+      || item.type === 'taskList')
     if (!isStructural) {
       append(op, originalIndex)
       return
@@ -2211,8 +2298,10 @@ class WriteTurnTracker {
     key: string
     engineSessionId: string
     retryAllowed: boolean
-    retryConsumed: boolean
+    successfulAttempts: number
+    retryClaims: number
     requirements: DraftRequirements
+    lengthResults: Array<{ actual: number; report: DraftLengthReport } | undefined>
   }>()
 
   begin(agentId: string, turn: number): void {
@@ -2231,12 +2320,12 @@ class WriteTurnTracker {
     const key = this.key(agentId, exec)
     const state = this.successful.get(agentId)
     if (!state || state.key !== key) return undefined
-    if (
-      state.retryAllowed
-      && !state.retryConsumed
-      && docRef === state.engineSessionId
-    ) {
-      state.retryConsumed = true
+    const firstRetry = state.successfulAttempts === 1 && state.retryClaims === 0
+    const finalLengthRetry = state.successfulAttempts === 2
+      && state.retryClaims === 1
+      && this.canUseFinalLengthRetry(state)
+    if (state.retryAllowed && docRef === state.engineSessionId && (firstRetry || finalLengthRetry)) {
+      state.retryClaims += 1
       return state.requirements
     }
     throw new Error(WRITE_REPEAT_ERROR)
@@ -2255,15 +2344,50 @@ class WriteTurnTracker {
       key,
       engineSessionId,
       retryAllowed,
-      retryConsumed: previous?.key === key ? previous.retryConsumed : false,
+      successfulAttempts: previous?.key === key ? previous.successfulAttempts + 1 : 1,
+      retryClaims: previous?.key === key ? previous.retryClaims : 0,
       requirements: previous?.key === key ? previous.requirements : requirements,
+      lengthResults: previous?.key === key ? previous.lengthResults : [],
     })
+  }
+
+  recordLengthResult(
+    exec: ToolRunContext,
+    engineSessionId: string,
+    actual: number,
+    report: DraftLengthReport | undefined,
+  ): void {
+    if (!report) return
+    const agentId = sessionIdOf(exec)
+    const state = this.successful.get(agentId)
+    if (!state || state.key !== this.key(agentId, exec) || state.engineSessionId !== engineSessionId) return
+    state.lengthResults[state.successfulAttempts - 1] = { actual, report }
+  }
+
+  private canUseFinalLengthRetry(state: {
+    lengthResults: Array<{ actual: number; report: DraftLengthReport } | undefined>
+  }): boolean {
+    const first = state.lengthResults[0]
+    const second = state.lengthResults[1]
+    if (!first || !second) return false
+    const firstGap = Math.abs(first.report.gap)
+    const secondGap = Math.abs(second.report.gap)
+    return first.report.status !== 'met'
+      && second.report.status !== 'met'
+      && lengthDeviationRatio(first.actual, first.report) > 0.15
+      && lengthDeviationRatio(second.actual, second.report) > 0.15
+      && secondGap < firstGap
   }
 
   private key(agentId: string, exec: ToolRunContext): string {
     const turn = this.turns.get(agentId)
     return turn === undefined ? `root:${String(exec.rootCallId)}` : `turn:${turn}`
   }
+}
+
+function lengthDeviationRatio(actual: number, report: DraftLengthReport): number {
+  const reference = Math.abs(actual - report.gap)
+  return Math.abs(report.gap) / Math.max(1, reference)
 }
 
 interface TurnDocSnapshot {
