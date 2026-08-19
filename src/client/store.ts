@@ -32,6 +32,8 @@ export interface QingClientSnapshot {
   bindingCount: number
   reviewCount?: number
   draftFailure?: string
+  /** 最近一次写作链路的终态；供旧失败卡在后续自愈开始/成功后自动退出。 */
+  draftOutcome?: 'running' | 'failed' | 'succeeded'
   panelEngineSessionId?: string
   panelDoc?: ExternalPmDocReadResponse
   reviewModel?: ExternalReviewRenderModelResponse
@@ -672,6 +674,7 @@ export class QingClientStore {
         words: 0,
         reviewCount: undefined,
         draftFailure: undefined,
+        draftOutcome: 'running',
         error: undefined,
       })
       this.open(entry)
@@ -698,6 +701,7 @@ export class QingClientStore {
         words: event.words,
         reviewCount: undefined,
         draftFailure: undefined,
+        draftOutcome: 'running',
         error: undefined,
       })
       this.open(entry)
@@ -714,6 +718,7 @@ export class QingClientStore {
         activeEngineSessionId: event.engineSessionId,
         streaming: false,
         draftFailure: event.message,
+        draftOutcome: 'failed',
         error: undefined,
       })
       this.open(entry)
@@ -737,6 +742,7 @@ export class QingClientStore {
         words: event.words,
         reviewCount: undefined,
         draftFailure: undefined,
+        draftOutcome: 'succeeded',
         selection: undefined,
         error: undefined,
       })
@@ -771,6 +777,7 @@ export class QingClientStore {
         words: event.words,
         reviewCount: event.count,
         draftFailure: undefined,
+        draftOutcome: 'succeeded',
         error: undefined,
       })
       this.open(entry)

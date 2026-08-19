@@ -5,7 +5,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
 import { currentReviewStateFor, qingClientStore } from './store.js'
 import { failureSummary, openToolCardDocument } from './QingToolCard.js'
-import { isFreshnessGateFailure } from '../userVisibleText.js'
+import { isFreshnessGateFailure, isSelfHealableDraftFailure } from '../userVisibleText.js'
 import styles from './QingWriteToolCard.module.css'
 
 export { failureSummary } from './QingToolCard.js'
@@ -64,6 +64,13 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
 
   // qing_write_draft(docRef) 同样受新鲜度闸门保护；只保留给模型的纠错反馈。
   if (failed && isFreshnessGateFailure(settledBlock?.content ?? [])) return null
+  // 一次篇幅/结构失败后，模型若已开始重试或已经成功，旧橙卡属于恢复过程而非最终结果。
+  // 若后续尝试也失败，store 会回到 failed，最终失败卡仍照常显示。
+  if (
+    failed &&
+    isSelfHealableDraftFailure(settledBlock?.content ?? []) &&
+    (snapshot.draftOutcome === 'running' || snapshot.draftOutcome === 'succeeded')
+  ) return null
 
   return (
     <div className={styles.toolCard} data-state={state}>

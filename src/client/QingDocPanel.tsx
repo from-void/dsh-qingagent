@@ -904,8 +904,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
     .filter((suggestion) => suggestion.status === 'reviewing').length ?? 0
   // 数量口径与用户实际能逐项裁决的原生 ReviewTarget 完全一致；render-model 中被
   // 丢弃/冲突而没有目标的 suggestion 不再冒充面板里的待裁决项。
-  const remainingReviewCount = visibleReviewTargets.length
-  const unrenderableReviewOnly = authoritativeReviewCount > 0 && remainingReviewCount === 0
+  // 整篇审在纸面上是一份新版与旧版的单一裁决对象；逐处审才按 ReviewTarget 计数。
+  const remainingReviewCount = wholeDocReview
+    ? authoritativeReviewCount > 0 ? 1 : 0
+    : visibleReviewTargets.length
+  const unrenderableReviewOnly = !wholeDocReview && authoritativeReviewCount > 0 && remainingReviewCount === 0
   const reviewCount = reviewPresentation
     ? remainingReviewCount
     : snapshot.reviewCount ?? 0

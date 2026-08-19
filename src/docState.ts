@@ -1,7 +1,7 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
-import { FRESH_DRAFT_REQUIRED_ERROR } from './userVisibleText.js'
+import { FRESH_DRAFT_REQUIRED_ERROR, sanitizeUserVisibleText } from './userVisibleText.js'
 
 export { FRESH_DRAFT_REQUIRED_ERROR } from './userVisibleText.js'
 
@@ -27,7 +27,7 @@ export function docStateLine(state: string, patchCount?: number): string {
 
 /** 只包含状态、标题、结构和字数，绝不携带正文或内部文稿标识。 */
 export function formatDocState(snapshot: DocStateSnapshot): string {
-  return `${docStateLine(snapshot.state, snapshot.patchCount)}\n《${snapshot.title}》｜${snapshot.structure}｜约 ${snapshot.words} 字`
+  return `${docStateLine(snapshot.state, snapshot.patchCount)}\n《${snapshot.title}》｜${sanitizeUserVisibleText(snapshot.structure)}｜约 ${snapshot.words} 字`
 }
 
 export class DocStateCache {

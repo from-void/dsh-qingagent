@@ -195,6 +195,22 @@ function candidateDoc(heading: string, paragraph: string): PmDoc {
   } as PmDoc
 }
 
+function reviewSuggestion(
+  id: string,
+  status: 'reviewing' | 'accepted' | 'rejected' = 'reviewing',
+) {
+  return {
+    id,
+    kind: 'replace',
+    status,
+    anchor: {
+      blockId: 'paragraph-1', pmFrom: 1, pmTo: 7,
+      quote: '第一版正文。', textHash: `hash-${id}`,
+    },
+    preview: { deleteText: '第一版正文。', insertText: '候选正文。' },
+  }
+}
+
 function paragraphDoc(...paragraphs: string[]): PmDoc {
   return {
     type: 'doc',
@@ -404,7 +420,7 @@ describe('qing_write_draft', () => {
 
   it('明确篇幅和段落数不达标时只在工具内纠正一次，合格后才提交', async () => {
     const invalid = '<title>短稿</title><p>这一段明显超过限定字数并且没有严格分成三段正文。</p>'
-    const corrected = '<title>短稿</title><p>甲。</p><p>乙。</p><p>丙。</p>'
+    const corrected = '<title>短稿</title><h1>短稿</h1><p>甲。</p><p>乙。</p><p>丙。</p>'
     let proposed = false
     const fixture = harness([invalid, corrected], async (path, init) => {
       if (path.endsWith('/doc?format=qingml')) {
@@ -446,10 +462,17 @@ describe('qing_write_draft', () => {
     expect(proposals).toBe(0)
   })
 
-  it('显式标题含内层书名号与标点时逐字写入提案并作为结果标题', async () => {
-    const exactTitle = '《读〈小城故事〉》？！'
+  it.each([
+    ['外层与内层书名号', '《读〈小城故事〉》'],
+    ['中英文引号', '“城南旧事” / "South Notes"'],
+    ['中英混排', 'AI 时代的写作：Notes 2026'],
+  ])('显式标题含%s时逐字写入稿名和正文 H1', async (_case, exactTitle) => {
     const modelDraft = '<title>读小城故事——读后感</title><p>正文。</p>'
-    const storedDraft = `<title>${exactTitle}</title><p>正文。</p>`
+    const encodedTitle = exactTitle
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+    const submittedDraft = `<title>${encodedTitle}</title><h1>${encodedTitle}</h1><p>正文。</p>`
+    const storedDraft = `<title>${exactTitle}</title><h1>${exactTitle}</h1><p>正文。</p>`
     let proposed = false
     const fixture = harness([modelDraft], async (path, init) => {
       if (path.endsWith('/doc?format=qingml')) {
@@ -458,7 +481,7 @@ describe('qing_write_draft', () => {
       if (path.endsWith('/proposals')) {
         proposed = true
         expect(JSON.parse(String(init?.body))).toMatchObject({
-          ops: [{ kind: 'qingmlDraft', qingml: storedDraft }],
+          ops: [{ kind: 'qingmlDraft', qingml: submittedDraft }],
         })
         return { status: 'committed', docVersion: 1 }
       }
@@ -525,7 +548,7 @@ describe('qing_write_draft', () => {
     })
 
     await expect(fixture.tools.get('qing_write_draft')!.execute({ brief: '写一篇测试稿' }, exec()))
-      .rejects.toThrow('侧模型修正后仍只返回标题,缺少正文块,未提交文稿')
+      .rejects.toThrow('侧模型修正后仍只返回标题、缺少正文内容，未提交文稿。')
     expect(fixture.stream).toHaveBeenCalledTimes(2)
     expect(proposals).toBe(0)
     const draftStarts = fixture.events
@@ -666,7 +689,7 @@ describe('qing_write_draft', () => {
       if (path.endsWith('/review?format=render-model')) {
         return {
           sessionId: 'qing-1', docVersion: 1, state: 'pendingReview', agentBusy: false,
-          baseVersion: 1, suggestions: [], wholeDocument: true,
+          baseVersion: 1, suggestions: [reviewSuggestion('patch-1')], wholeDocument: true,
           editedDoc: reviewPmDoc,
         }
       }
@@ -723,9 +746,9 @@ describe('qing_write_draft', () => {
           sessionId: 'qing-1', docVersion: 1, state: 'pendingReview', agentBusy: false,
           baseVersion: 1, wholeDocument: false, editedDoc: reviewPmDoc,
           suggestions: [
-            { id: 'visible-a', kind: 'replace', status: 'reviewing', preview: { deleteText: '旧', insertText: '新' } },
+            reviewSuggestion('visible-a'),
             { id: 'note-a', kind: 'annotation', status: 'reviewing', preview: { deleteText: '', insertText: '' } },
-            { id: 'settled-a', kind: 'replace', status: 'accepted', preview: { deleteText: '旧', insertText: '新' } },
+            reviewSuggestion('settled-a', 'accepted'),
           ],
         }
       }
@@ -939,6 +962,56 @@ describe('qing_read_draft', () => {
     expect((result as { content: string }).content.startsWith('注意:strReplace 的 old 用纯文本,不要带行首 ## - 等标记。\n')).toBe(true)
     expect((result as { content: string }).content).toContain('   3 | 第一版正文。')
   })
+
+  it('所有读取模式都不泄露真实内容 ID 或裸内部术语，定位模式只返回机器 locator', async () => {
+    const rawPmDoc = {
+      type: 'doc', attrs: { schemaVersion: 1 }, content: [
+        { type: 'heading', attrs: { blockId: 'ai-block-heading_9', level: 1 }, content: [{ type: 'text', text: '标题' }] },
+        { type: 'paragraph', attrs: { blockId: 'block-paragraph_7' }, content: [{ type: 'text', text: '正文。' }] },
+      ],
+    } as PmDoc
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({ docVersion: 8, state: 'editing', qingml: '<h1>标题</h1><p>正文。</p>', title: '定位测试' })
+      }
+      if (path.endsWith('/doc?lines=1')) {
+        return { sessionId: 'qing-1', docVersion: 8, state: 'editing', agentBusy: false, markdown: '# 标题\n\n正文。', title: '定位测试' }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, rawPmDoc)
+    const tool = fixture.tools.get('qing_read_draft')!
+
+    for (const mode of ['outline', 'full', 'base', 'lines', 'blocks'] as const) {
+      const result = await tool.execute({ mode }, exec(undefined, `read-safe-${mode}`, 'qing_read_draft'))
+      const rendered = JSON.stringify(tool.output?.render({ mode }, result as never))
+      expect(rendered).not.toMatch(/ai-block-|block-paragraph|blockId|块/u)
+      if (mode === 'blocks') {
+        expect(result).toMatchObject({ content: expect.stringContaining('locator=L1') })
+        expect((result as { content: string }).content).toContain('locator=L2')
+      }
+    }
+  })
+
+  it('同回合同版本重复 full 读取只返回复用提示，大正文不再重复进入上下文', async () => {
+    const body = '长正文。'.repeat(2_000)
+    const qingml = `<title>长稿</title><h1>长稿</h1><p>${body}</p>`
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({ docVersion: 12, state: 'editing', qingml, title: '长稿' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, paragraphDoc(body))
+    const preStep = fixture.listeners.get('agent/pre-step')!
+    await preStep({ agent: { id: 'dsh-1' }, turn: 21 }, async () => ({ kind: 'enter', messages: [] }))
+    const tool = fixture.tools.get('qing_read_draft')!
+
+    const first = await tool.execute({ mode: 'full' }, exec(undefined, 'read-full-first', 'qing_read_draft')) as { content: string }
+    const second = await tool.execute({ mode: 'full' }, exec(undefined, 'read-full-second', 'qing_read_draft')) as { content: string }
+
+    expect(first.content.length).toBeGreaterThan(8_000)
+    expect(second.content).toBe('本回合已读取过相同版本的完整文稿；请沿用上一次结果，不要重复读取。')
+    expect(second.content.length / first.content.length).toBeLessThan(0.01)
+  })
 })
 
 describe('qing_edit_draft', () => {
@@ -992,12 +1065,46 @@ describe('qing_edit_draft', () => {
     }, exec(undefined, 'next-turn-edit', 'qing_edit_draft'))).rejects.toThrow('qing_read_draft')
   })
 
+  it('把 blocks 模式的短 locator 映射为引擎 ID，真实 ID 不进入读稿返回', async () => {
+    let proposalBody: { ops: unknown[] } | undefined
+    const pmDoc = candidateDoc('标题', '要删除的段落。')
+    const fixture = harness([], async (path, init) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({ docVersion: 2, state: 'editing', qingml: '<h1>标题</h1><p>要删除的段落。</p>', title: '测试稿' })
+      }
+      if (path.endsWith('/doc?lines=1')) {
+        return { sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false, markdown: '# 标题\n\n要删除的段落。', title: '测试稿' }
+      }
+      if (path.endsWith('/proposals')) {
+        proposalBody = JSON.parse(String(init?.body))
+        return { status: 'committed', docVersion: 3 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, pmDoc)
+    const preStep = fixture.listeners.get('agent/pre-step')!
+    await preStep({ agent: { id: 'dsh-1' }, turn: 22 }, async () => ({ kind: 'enter', messages: [] }))
+
+    const located = await fixture.tools.get('qing_read_draft')!.execute(
+      { mode: 'blocks' },
+      exec(undefined, 'read-locators', 'qing_read_draft'),
+    ) as { content: string }
+    expect(located.content).toContain('locator=L2')
+    expect(located.content).not.toMatch(/heading-1|paragraph-1|blockId|块/u)
+
+    await fixture.tools.get('qing_edit_draft')!.execute(
+      { ops: [{ kind: 'deleteBlock', locator: 'L2' }] },
+      exec(undefined, 'delete-by-locator', 'qing_edit_draft'),
+    )
+    expect(proposalBody?.ops).toEqual([{ kind: 'deleteBlock', blockId: 'paragraph-1' }])
+    expect(JSON.stringify(fixture.tools.get('qing_edit_draft')!.parameters)).not.toContain('blockId')
+  })
+
   it('描述要求改标题时同批同步稿名和纸面大标题', () => {
     const fixture = harness([], async () => { throw new Error('不应访问引擎') })
     const tool = fixture.tools.get('qing_edit_draft')!
-    expect(tool.description).toContain('若正文有与旧稿名相同的大标题块')
+    expect(tool.description).toContain('若正文有与旧稿名相同的纸面大标题')
     expect(tool.description).toContain('两者必须在同一次 ops 里一起提交,文字保持一致')
-    expect(tool.description).toContain('正文没有与旧稿名相同的大标题块时,允许只用 setTitle')
+    expect(tool.description).toContain('正文没有同名纸面大标题时,允许只用 setTitle')
     expect(JSON.stringify(tool.parameters)).toContain('不存在时允许只改稿名')
   })
 
@@ -1109,11 +1216,9 @@ describe('qing_edit_draft', () => {
   it('描述明确同批行号逐 op 推进、多行块与块级锚点约束', () => {
     const fixture = harness([], async () => { throw new Error('不应访问引擎') })
     const description = fixture.tools.get('qing_edit_draft')!.description
-    expect(description).toContain('同一批 ops 里一旦有插入或删除,其后所有行号都会整体偏移')
-    expect(description).toContain('改用 insertAfterBlock 这类块级锚点(不受行号偏移影响),或留到下一回合重读后再改')
-    expect(description).toContain('命中待办清单、表格、嵌套列表这类多行块时,优先用 insertAfterBlock 等项级/块级 op')
-    expect(description).toContain('例外:指向多行块的最后一行是合法的,语义是插到整块之后(不是块内)')
-    expect(description).toContain('想在清单尾部追加子项时别用它,那会插到清单外面')
+    expect(description).toContain('同批先增删内容会令后续旧行号失效')
+    expect(description).toContain('复杂清单或表格附近优先使用 mode:"blocks" 给出的 locator')
+    expect(description).toContain('真实引擎标识由工具内部映射')
   })
 
   it('描述与 schema 仅为用户明确的全局意图开放 all:true', () => {
@@ -1493,7 +1598,7 @@ describe('qing_edit_draft', () => {
 
     await expect(fixture.tools.get('qing_edit_draft')!.execute({
       ops: [
-        { kind: 'deleteBlock', blockId: 'paragraph-1' },
+        { kind: 'deleteBlock', locator: 'L1' },
         { kind: 'insertAfterLine', line: 3, markdown: '不应提交' },
       ],
     }, exec(undefined, 'edit-delete-before-line', 'qing_edit_draft')))
@@ -1608,7 +1713,7 @@ describe('qing_edit_draft', () => {
       op: 'add' as const,
       all: true,
       isRegex: false,
-      withinRef: 'paragraph-1',
+      withinLocator: 'L2',
     }
     let proposalBody: Record<string, unknown> | undefined
     const fixture = harness([], async (path, init) => {
@@ -1633,7 +1738,13 @@ describe('qing_edit_draft', () => {
       exec(undefined, 'edit-mark-text', 'qing_edit_draft'),
     )
 
-    expect(proposalBody).toMatchObject({ expectedDocVersion: 2, ops: [op] })
+    expect(proposalBody).toMatchObject({
+      expectedDocVersion: 2,
+      ops: [{
+        kind: 'markText', find: '重点句', mark: { type: 'highlight', color: 'amber' },
+        op: 'add', all: true, isRegex: false, withinRef: 'paragraph-1',
+      }],
+    })
     expect(proposalBody).toHaveProperty('clientMutationId', expect.any(String))
     expect(proposalBody).not.toHaveProperty('opId')
   })
@@ -1798,19 +1909,19 @@ describe('qing_edit_draft', () => {
     const result = await fixture.tools.get('qing_edit_draft')!.execute({ ops }, context)
 
     expect(result).toMatchObject({
-      status: 'review', reviewCount: 3, docVersion: 2, patchIds: ['p-1', 'p-2', 'p-3'],
+      status: 'review', reviewCount: 0, docVersion: 2, patchIds: [],
       message: expect.stringContaining('改动已提交审阅，右侧面板等待用户裁决'),
     })
     expect((result as { message: string }).message).not.toMatch(/v\d+/)
     expect(fixture.tools.get('qing_edit_draft')!.output?.presentationMeta?.({}, result as never))
-      .toMatchObject({ status: 'review', patchIds: ['p-1', 'p-2', 'p-3'] })
+      .toMatchObject({ status: 'review', patchIds: [] })
     expect(fixture.tools.get('qing_edit_draft')!.output?.schema).toMatchObject({
       properties: { patchIds: { type: 'array', items: { type: 'string' } } },
     })
     expectReviewEndMessage((result as { message: string }).message)
     expect(context.concludeTurn).toHaveBeenCalledOnce()
     expect(fixture.bridge.clearSelection).toHaveBeenCalledWith('dsh-1')
-    expect(fixture.events.at(-1)?.event).toMatchObject({ type: 'doc-review-pending', count: 3, blocks: 2 })
+    expect(fixture.events.at(-1)?.event).toMatchObject({ type: 'doc-review-pending', count: 0, blocks: 2 })
     expect(fixture.telemetry.capture).toHaveBeenCalledWith('draft_edited', {
       ops_bucket: '2-5',
       op_kinds: ['strReplace', 'insertAfterLine', 'appendSection'],
@@ -1822,6 +1933,7 @@ describe('qing_edit_draft', () => {
       '/sessions/qing-1/proposals',
       '/sessions/qing-1/doc?format=qingml',
       '/sessions/qing-1/review?format=render-model',
+      '/sessions/qing-1/doc?format=pm',
     ])
   })
 
