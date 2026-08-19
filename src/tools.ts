@@ -69,6 +69,8 @@ interface ToolServices {
 interface RuntimeToolServices extends ToolServices {
   docStates: DocStateCache
   freshness: FreshnessTracker
+  /** 由 registerTools 装配;写/改后用来让"本回合取稿快照"失效。 */
+  readTurns?: ReadTurnTracker
 }
 
 const textBlock = (text: string) => [{ type: 'text' as const, text }]
@@ -428,6 +430,7 @@ export function registerTools(services: ToolServices): void {
   const reviewTurns = new ReviewTurnTracker()
   const writeTurns = new WriteTurnTracker()
   const readTurns = new ReadTurnTracker()
+  runtime.readTurns = readTurns
   installTurnTracking(ctx, reviewTurns, writeTurns, readTurns, runtime)
   ctx.effect(() => ctx.tools.register(writeDraftTool(runtime, writeTurns)))
   ctx.effect(() => ctx.tools.register(editDraftTool(runtime)))
@@ -1198,14 +1201,24 @@ function readDraftTool(services: RuntimeToolServices, readTurns: ReadTurnTracker
       const dshSessionId = sessionIdOf(exec)
       await assertEngineOnline(services.engine)
       const engineSessionId = resolveDocRef(services.bindings, dshSessionId, args.docRef)
-      const [doc, basePmDoc] = await Promise.all([
-        readDoc(services.engine, engineSessionId),
-        readPmDoc(services.engine, engineSessionId),
-      ])
+      // 一回合只取一次稿:取稿会锁住编辑器输入,同回合的其它 mode 复用这份快照。
+      const held = readTurns.snapshot(dshSessionId, engineSessionId)
+      let doc: TurnDocSnapshot['doc']
+      let basePmDoc: TurnDocSnapshot['basePmDoc']
+      let currentReviewCandidate: TurnDocSnapshot['reviewCandidate']
+      if (held) {
+        ;({ doc, basePmDoc, reviewCandidate: currentReviewCandidate } = held)
+      } else {
+        ;[doc, basePmDoc] = await Promise.all([
+          readDoc(services.engine, engineSessionId),
+          readPmDoc(services.engine, engineSessionId),
+        ])
+        currentReviewCandidate = doc.state === 'pendingReview'
+          ? await readReviewCandidate(services.engine, engineSessionId)
+          : null
+        readTurns.rememberSnapshot(dshSessionId, engineSessionId, { doc, basePmDoc, reviewCandidate: currentReviewCandidate })
+      }
       const mode = args.mode ?? 'outline'
-      const currentReviewCandidate = doc.state === 'pendingReview'
-        ? await readReviewCandidate(services.engine, engineSessionId)
-        : null
       const currentQingml = currentReviewCandidate?.qingml ?? doc.qingml
       const currentPmDoc = currentReviewCandidate?.pmDoc ?? basePmDoc
       const currentOutline = outlineOf(currentQingml, doc.title)
@@ -1580,6 +1593,8 @@ async function refreshAndPublishDocState(
   establishesFreshness: boolean,
 ): Promise<void> {
   if (establishesFreshness) services.freshness.markFresh(exec)
+  // 文稿刚被写/改过:本回合的取稿快照已过期,清掉以便同回合后续读取拿到新内容。
+  services.readTurns?.invalidateSnapshot(sessionIdOf(exec))
   const dshSessionId = sessionIdOf(exec)
   try {
     const current = await refreshDocState(services, services.docStates, dshSessionId)
@@ -2191,14 +2206,22 @@ class WriteTurnTracker {
   }
 }
 
+interface TurnDocSnapshot {
+  doc: Awaited<ReturnType<typeof readDoc>>
+  basePmDoc: Awaited<ReturnType<typeof readPmDoc>>
+  reviewCandidate: Awaited<ReturnType<typeof readReviewCandidate>> | null
+}
+
 class ReadTurnTracker {
   private readonly turns = new Map<string, number>()
   private readonly reads = new Map<string, Set<string>>()
+  private readonly snapshots = new Map<string, { engineSessionId: string; snapshot: TurnDocSnapshot }>()
 
   begin(agentId: string, turn: number): void {
     if (this.turns.get(agentId) === turn) return
     this.turns.set(agentId, turn)
     this.reads.delete(agentId)
+    this.snapshots.delete(agentId)
   }
 
   has(
@@ -2226,9 +2249,30 @@ class ReadTurnTracker {
     this.reads.set(agentId, reads)
   }
 
+  /**
+   * 本回合的文稿快照。读取会**锁住编辑器输入**(编辑器的设计:agent 处理期间不让用户改),
+   * 所以一个回合只该真正取一次稿;同回合内其它 mode 一律复用这份快照,不再打引擎。
+   * 写/改提交后由 invalidateSnapshot 清掉,下次读取重新取。
+   */
+  snapshot(agentId: string, engineSessionId: string): TurnDocSnapshot | undefined {
+    if (!this.turns.has(agentId)) return undefined
+    const held = this.snapshots.get(agentId)
+    return held?.engineSessionId === engineSessionId ? held.snapshot : undefined
+  }
+
+  rememberSnapshot(agentId: string, engineSessionId: string, snapshot: TurnDocSnapshot): void {
+    if (!this.turns.has(agentId)) return
+    this.snapshots.set(agentId, { engineSessionId, snapshot })
+  }
+
+  invalidateSnapshot(agentId: string): void {
+    this.snapshots.delete(agentId)
+  }
+
   dispose(agentId: string): void {
     this.turns.delete(agentId)
     this.reads.delete(agentId)
+    this.snapshots.delete(agentId)
   }
 
   private key(engineSessionId: string, mode: string, docVersion: number): string {
