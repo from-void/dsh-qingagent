@@ -18,6 +18,7 @@ import type {
   QingSelectionAnchor,
 } from '../contracts.js'
 import { appliedDocWriteBaseline } from '@qingweb/pages/workspace/data/docWriteBaseline'
+import { countDocVisibleChars } from '@qingagent/pm-schema'
 import type { DocumentSaveState } from './documentSaveCoordinator.js'
 import { compileQingmlDocument } from '../qingmlCompile.js'
 
@@ -106,6 +107,9 @@ interface SessionEntry {
   panelLoadToken: number
   panelRefreshGuard?: PanelRefreshGuard
   revealNonce: number
+  busyFallbackTimer?: ReturnType<typeof setTimeout>
+  busyFallbackEngineSessionId?: string
+  busyFallbackAttemptedEngineSessionId?: string
 }
 
 export interface QingLibraryDoc {
@@ -128,6 +132,7 @@ const EMPTY: QingClientSnapshot = {
 
 const PANEL_CLOSED_KEY_PREFIX = 'qingagent.panelClosed.'
 const BRIDGE_RECONNECTING_ERROR = '与青简桥的实时连接暂时中断，浏览器会自动重连。'
+export const PANEL_BUSY_REFRESH_DELAY_MS = 90_000
 
 function readStoredPanelClosed(sessionId: string): boolean {
   try {
@@ -211,8 +216,11 @@ export class QingClientStore {
 
   finishReveal(sessionId: string, nonce: number): void {
     const entry = this.entry(sessionId)
-    if (entry.snapshot.revealRequest?.nonce !== nonce) return
+    const revealRequest = entry.snapshot.revealRequest
+    if (revealRequest?.nonce !== nonce) return
     this.update(entry, { ...entry.snapshot, revealRequest: undefined })
+    // reveal 只播放已落库内容；播放完仍须重拉一次，不能把播放开始时的 busy 缓存当终态。
+    void this.refreshPanel(sessionId, revealRequest.engineSessionId).catch(() => undefined)
   }
 
   retain(sessionId: string, openDetails?: () => void): () => void {
@@ -220,6 +228,7 @@ export class QingClientStore {
     entry.refs += 1
     if (openDetails) entry.openers.add(openDetails)
     if (!entry.source) this.connect(sessionId, entry)
+    this.syncBusyFallback(entry)
     void this.loadState(sessionId, entry)
     return () => {
       entry.refs = Math.max(0, entry.refs - 1)
@@ -227,6 +236,7 @@ export class QingClientStore {
       if (entry.refs === 0) {
         entry.source?.close()
         entry.source = undefined
+        this.clearBusyFallback(entry, true)
       }
     }
   }
@@ -389,6 +399,11 @@ export class QingClientStore {
         panelEngineSessionId: engineSessionId,
         panelDoc,
         reviewModel,
+        state: applyPanelDocToBridgeState(entry.snapshot.state, engineSessionId, panelDoc),
+        activeDoc: applyPanelDocToActiveDoc(entry.snapshot.activeDoc, engineSessionId, panelDoc),
+        blocks: panelDoc.pmDoc?.content?.length ?? entry.snapshot.blocks,
+        words: panelDoc.charCount
+          ?? (panelDoc.pmDoc ? countDocVisibleChars(panelDoc.pmDoc) : entry.snapshot.words),
         panelLoading: false,
         reviewCount: reviewModel
           ? reviewModel.suggestions.filter((suggestion) => suggestion.status === 'reviewing').length
@@ -627,6 +642,7 @@ export class QingClientStore {
       'doc-review-pending',
       'binding-changed',
       'focus-changed',
+      'turn-ended',
       'selection-changed',
       'engine-status',
     ]
@@ -646,6 +662,7 @@ export class QingClientStore {
 
   private handleEvent(sessionId: string, entry: SessionEntry, event: BridgeEvent): void {
     if (event.type === 'doc-committed') {
+      this.noteTurnActivity(entry, event.engineSessionId)
       const hadSelection = entry.snapshot.selection !== undefined
       const optimisticPanelDoc = committedPanelDoc(entry.snapshot, event.engineSessionId, event.doc)
       this.update(entry, {
@@ -682,6 +699,7 @@ export class QingClientStore {
       return
     }
     if (event.type === 'doc-review-pending') {
+      this.noteTurnActivity(entry, event.engineSessionId)
       this.update(entry, {
         ...entry.snapshot,
         activeEngineSessionId: event.engineSessionId,
@@ -696,6 +714,14 @@ export class QingClientStore {
       void this.loadState(sessionId, entry)
       // 进入审阅态同样重拉 PM 面板(含 review render-model),装饰层才有数据。
       void this.refreshPanel(sessionId, event.engineSessionId).catch(() => undefined)
+      return
+    }
+    if (event.type === 'turn-ended') {
+      const activeEngineSessionId = entry.snapshot.activeEngineSessionId
+        ?? entry.snapshot.state?.binding.activeEngineSessionId
+      if (activeEngineSessionId && event.engineSessionIds.includes(activeEngineSessionId)) {
+        void this.refreshPanel(sessionId, activeEngineSessionId).catch(() => undefined)
+      }
       return
     }
     if (event.type === 'focus-changed') {
@@ -795,6 +821,46 @@ export class QingClientStore {
   private update(entry: SessionEntry, snapshot: QingClientSnapshot): void {
     entry.snapshot = snapshot
     for (const listener of entry.listeners) listener()
+    this.syncBusyFallback(entry)
+  }
+
+  private noteTurnActivity(entry: SessionEntry, engineSessionId: string): void {
+    if (busyPanelEngineSessionId(entry.snapshot) !== engineSessionId) return
+    this.clearBusyFallback(entry, true)
+    this.syncBusyFallback(entry)
+  }
+
+  private syncBusyFallback(entry: SessionEntry): void {
+    const engineSessionId = entry.refs > 0 ? busyPanelEngineSessionId(entry.snapshot) : undefined
+    if (!engineSessionId) {
+      this.clearBusyFallback(entry, true)
+      return
+    }
+    if (entry.busyFallbackEngineSessionId !== engineSessionId) {
+      this.clearBusyFallback(entry, true)
+      entry.busyFallbackEngineSessionId = engineSessionId
+    }
+    if (
+      entry.busyFallbackTimer
+      || entry.busyFallbackAttemptedEngineSessionId === engineSessionId
+    ) return
+    entry.busyFallbackTimer = setTimeout(() => {
+      entry.busyFallbackTimer = undefined
+      if (entry.refs === 0 || busyPanelEngineSessionId(entry.snapshot) !== engineSessionId) {
+        this.syncBusyFallback(entry)
+        return
+      }
+      entry.busyFallbackAttemptedEngineSessionId = engineSessionId
+      void this.refreshPanel(entry.sessionId, engineSessionId).catch(() => undefined)
+    }, PANEL_BUSY_REFRESH_DELAY_MS)
+    entry.busyFallbackTimer.unref?.()
+  }
+
+  private clearBusyFallback(entry: SessionEntry, resetAttempt: boolean): void {
+    if (entry.busyFallbackTimer) clearTimeout(entry.busyFallbackTimer)
+    entry.busyFallbackTimer = undefined
+    entry.busyFallbackEngineSessionId = undefined
+    if (resetAttempt) entry.busyFallbackAttemptedEngineSessionId = undefined
   }
 
   private open(entry: SessionEntry, reclaim = true): void {
@@ -885,6 +951,57 @@ function hasConflictSaveState(state: DocumentSaveState | undefined, engineSessio
 
 function hasDocConflict(snapshot: QingClientSnapshot, engineSessionId: string): boolean {
   return Boolean(snapshot.conflicts?.[engineSessionId])
+}
+
+function busyPanelEngineSessionId(snapshot: QingClientSnapshot): string | undefined {
+  const engineSessionId = snapshot.activeEngineSessionId
+    ?? snapshot.state?.binding.activeEngineSessionId
+  if (!engineSessionId) return undefined
+  const panelBusy = snapshot.panelEngineSessionId === engineSessionId
+    && snapshot.panelDoc?.agentBusy === true
+  const activeDocBusy = snapshot.activeDoc?.sessionId === engineSessionId
+    && snapshot.activeDoc.agentBusy === true
+  const boundBusy = snapshot.state?.docs.some((doc) =>
+    doc.engineSessionId === engineSessionId && doc.agentBusy === true) === true
+  return panelBusy || activeDocBusy || boundBusy ? engineSessionId : undefined
+}
+
+function applyPanelDocToBridgeState(
+  state: BridgeState | undefined,
+  engineSessionId: string,
+  panelDoc: ExternalPmDocReadResponse,
+): BridgeState | undefined {
+  if (!state) return undefined
+  return {
+    ...state,
+    docs: state.docs.map((doc) => doc.engineSessionId === engineSessionId
+      ? {
+          ...doc,
+          state: panelDoc.state,
+          docVersion: panelDoc.docVersion,
+          agentBusy: panelDoc.agentBusy,
+        }
+      : doc),
+  }
+}
+
+function applyPanelDocToActiveDoc(
+  activeDoc: ExternalDoc | undefined,
+  engineSessionId: string,
+  panelDoc: ExternalPmDocReadResponse,
+): ExternalDoc | undefined {
+  if (activeDoc?.sessionId !== engineSessionId) return activeDoc
+  return {
+    ...activeDoc,
+    docVersion: panelDoc.docVersion,
+    state: panelDoc.state,
+    agentBusy: panelDoc.agentBusy,
+    title: panelDoc.title,
+    charCount: panelDoc.charCount ?? activeDoc.charCount,
+    ...(panelDoc.pmDoc ? { pmDoc: panelDoc.pmDoc } : {}),
+    contentHash: panelDoc.contentHash,
+    ts: panelDoc.ts,
+  }
 }
 
 function committedPanelDoc(

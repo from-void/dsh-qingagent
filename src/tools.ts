@@ -441,6 +441,9 @@ export function registerTools(services: ToolServices): void {
       freshness.resetSegment(dshSessionId, engineSessionId, generation)
       readTurns.resetSegment(dshSessionId, engineSessionId)
     },
+    (dshSessionId, engineSessionIds) => {
+      services.bridge.emit(dshSessionId, { type: 'turn-ended', engineSessionIds })
+    },
   )
   const runtime: RuntimeToolServices = {
     ...services,

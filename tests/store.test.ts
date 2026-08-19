@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BridgeEvent, BridgeState, ExternalDoc, PmDoc } from '../src/contracts.js'
-import { QingClientStore } from '../src/client/store.js'
+import { PANEL_BUSY_REFRESH_DELAY_MS, QingClientStore } from '../src/client/store.js'
 
 class FakeEventSource {
   static instances: FakeEventSource[] = []
@@ -53,6 +53,7 @@ function bridgeState(): BridgeState {
 }
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   FakeEventSource.instances = []
 })
@@ -413,7 +414,16 @@ describe('QingClientStore 生成终态', () => {
 
   it('doc-committed 携带 QingML 时先乐观推进 panelDoc，再等待权威 PM 读回', async () => {
     vi.stubGlobal('EventSource', FakeEventSource)
-    const authoritativePanel = deferred<Response>()
+    const authoritativePanel = deferred<{
+      sessionId: string
+      docVersion: number
+      contentHash: string
+      state: 'editing'
+      agentBusy: boolean
+      title: string
+      ts: string
+      pmDoc: PmDoc | null | undefined
+    }>()
     let panelReads = 0
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
@@ -426,7 +436,7 @@ describe('QingClientStore 生成终态', () => {
             agentBusy: false, title: '旧稿', ts: 't0', pmDoc: { type: 'doc', attrs: { schemaVersion: 1 }, content: [] },
           })
         }
-        return authoritativePanel.promise
+        return Response.json(await authoritativePanel.promise)
       }
       throw new Error(`unexpected ${url}`)
     })
@@ -456,12 +466,12 @@ describe('QingClientStore 生成终态', () => {
     store.finishReveal('dsh-optimistic', 1)
     expect(store.getSnapshot('dsh-optimistic').revealRequest).toBeUndefined()
     expect(beforeApply).toHaveBeenCalledWith('qing-1', expect.objectContaining({ docVersion: 2 }))
-    expect(panelReads).toBe(2)
+    expect(panelReads).toBe(3)
 
-    authoritativePanel.resolve(Response.json({
+    authoritativePanel.resolve({
       sessionId: 'qing-1', docVersion: 2, contentHash: 'hash-2', state: 'editing',
       agentBusy: false, title: '新稿', ts: 't2', pmDoc: store.getSnapshot('dsh-optimistic').panelDoc?.pmDoc,
-    }))
+    })
     await vi.waitFor(() => expect(store.getSnapshot('dsh-optimistic').panelLoading).toBe(false))
     release()
   })
@@ -501,6 +511,100 @@ describe('QingClientStore 生成终态', () => {
     })
 
     expect(store.getSnapshot('dsh-silent-commit').revealRequest).toBeUndefined()
+    release()
+  })
+
+  it('收到 turn-ended 后重拉当前活跃稿并清除各状态域的 busy 缓存', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    let agentBusy = true
+    let charCount = 8
+    let panelReads = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/qingagent-bridge/state?')) {
+        const state = bridgeState()
+        state.activeDoc!.agentBusy = agentBusy
+        state.docs[0]!.agentBusy = agentBusy
+        return Response.json(state)
+      }
+      if (url.startsWith('/qingagent-bridge/doc-pm?')) {
+        panelReads += 1
+        return Response.json({
+          sessionId: 'qing-1', docVersion: 2, contentHash: 'hash-2', state: 'editing',
+          agentBusy, title: '测试稿', ts: 't2', charCount,
+          pmDoc: { type: 'doc', attrs: { schemaVersion: 1 }, content: [] },
+        })
+      }
+      if (url.startsWith('/qingagent-bridge/review-render-model?')) {
+        return Response.json({
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy,
+          baseVersion: 2, suggestions: [],
+        })
+      }
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const store = new QingClientStore()
+    const release = store.retain('dsh-turn-ended')
+    await vi.waitFor(() => expect(store.getSnapshot('dsh-turn-ended').state).toBeDefined())
+    await store.refreshPanel('dsh-turn-ended', 'qing-1')
+    expect(store.getSnapshot('dsh-turn-ended').panelDoc?.agentBusy).toBe(true)
+
+    agentBusy = false
+    charCount = 24
+    FakeEventSource.instances.at(-1)?.emit({
+      type: 'turn-ended', engineSessionIds: ['qing-1'],
+    })
+
+    await vi.waitFor(() => expect(store.getSnapshot('dsh-turn-ended').panelDoc?.agentBusy).toBe(false))
+    const snapshot = store.getSnapshot('dsh-turn-ended')
+    expect(snapshot.activeDoc?.agentBusy).toBe(false)
+    expect(snapshot.state?.docs[0]?.agentBusy).toBe(false)
+    expect(snapshot.words).toBe(24)
+    expect(panelReads).toBe(2)
+    release()
+  })
+
+  it('busy 持续 90 秒且没有后续回合事件时只兜底重拉一次', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    let agentBusy = false
+    let panelReads = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/qingagent-bridge/state?')) return Response.json(bridgeState())
+      if (url.startsWith('/qingagent-bridge/doc-pm?')) {
+        panelReads += 1
+        return Response.json({
+          sessionId: 'qing-1', docVersion: 1, contentHash: 'hash-1', state: 'editing',
+          agentBusy, title: '测试稿', ts: 't1', charCount: 12,
+          pmDoc: { type: 'doc', attrs: { schemaVersion: 1 }, content: [] },
+        })
+      }
+      if (url.startsWith('/qingagent-bridge/review-render-model?')) {
+        return Response.json({
+          sessionId: 'qing-1', docVersion: 1, state: 'editing', agentBusy,
+          baseVersion: 1, suggestions: [],
+        })
+      }
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const store = new QingClientStore()
+    const release = store.retain('dsh-busy-fallback')
+    await vi.waitFor(() => expect(store.getSnapshot('dsh-busy-fallback').state).toBeDefined())
+    vi.useFakeTimers()
+    agentBusy = true
+    await store.refreshPanel('dsh-busy-fallback', 'qing-1')
+    agentBusy = false
+
+    await vi.advanceTimersByTimeAsync(PANEL_BUSY_REFRESH_DELAY_MS - 1)
+    expect(panelReads).toBe(1)
+    expect(store.getSnapshot('dsh-busy-fallback').panelDoc?.agentBusy).toBe(true)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(panelReads).toBe(2)
+    expect(store.getSnapshot('dsh-busy-fallback').panelDoc?.agentBusy).toBe(false)
+    await vi.advanceTimersByTimeAsync(PANEL_BUSY_REFRESH_DELAY_MS * 2)
+    expect(panelReads).toBe(2)
     release()
   })
 })
