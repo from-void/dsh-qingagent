@@ -663,8 +663,26 @@ describe('QingDocPanel 保存生命周期', () => {
     await vi.waitFor(() => expect(document.querySelector('.qingdoc-status')?.textContent).toBe('修改已提交'))
     expect(reviewCommitExpectedVersions(fetchMock)).toEqual([3, 4])
     expect(info).toHaveBeenCalledWith(
-      '[qingagent-panel] review commit conflict retrying with authoritative version',
+      '[qingagent-panel] review commit conflict retrying with authoritative probe version',
       { action: 'commit', docVersion: 4 },
+    )
+  })
+
+  it('首次 409 优先使用响应体 actual 重试，不受面板版本账影响', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const fetchMock = installBridgeFetch('dsh-review-conflict-actual', ['qing-review'], {
+      pendingReview: true,
+      reviewCommitConflictPending: 'once',
+      reviewCommitConflictActual: 9,
+    })
+    renderPanel('dsh-review-conflict-actual')
+
+    await vi.waitFor(() => expect(reviewCommitCalls(fetchMock)).toBe(2))
+    await vi.waitFor(() => expect(document.querySelector('.qingdoc-status')?.textContent).toBe('修改已提交'))
+    expect(reviewCommitExpectedVersions(fetchMock)).toEqual([3, 9])
+    expect(info).toHaveBeenCalledWith(
+      '[qingagent-panel] review commit conflict retrying with conflict actual version',
+      { action: 'commit', docVersion: 9 },
     )
   })
 
@@ -695,6 +713,22 @@ describe('QingDocPanel 保存生命周期', () => {
       .toBe('提交失败 · 候选已保留，请重试'))
     await new Promise((resolve) => setTimeout(resolve, 60))
     expect(reviewCommitCalls(fetchMock)).toBe(2)
+  })
+
+  it('actual 重试仍冲突时回落权威探测，同一动作最多重试两次', async () => {
+    const fetchMock = installBridgeFetch('dsh-review-conflict-actual-twice', ['qing-review'], {
+      pendingReview: true,
+      reviewCommitConflictPending: 'always',
+      reviewCommitConflictActual: 9,
+    })
+    renderPanel('dsh-review-conflict-actual-twice')
+
+    await vi.waitFor(() => expect(reviewCommitCalls(fetchMock)).toBe(3))
+    await vi.waitFor(() => expect(document.querySelector('.qingdoc-status')?.textContent)
+      .toBe('提交失败 · 候选已保留，请重试'))
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect(reviewCommitExpectedVersions(fetchMock)).toEqual([3, 9, 4])
+    expect(reviewCommitCalls(fetchMock)).toBe(3)
   })
 
   it('409 探测发现建议 ID 集合变化时不重试', async () => {
@@ -1307,6 +1341,7 @@ function installBridgeFetch(
     reviewCommitFailureStatus?: number
     reviewCommitConflictSettled?: boolean
     reviewCommitConflictPending?: 'once' | 'always'
+    reviewCommitConflictActual?: number
     conflictAddsSuggestion?: boolean
     reviewCommitGate?: Promise<void>
     reviewCommitRetryGate?: Promise<void>
@@ -1417,11 +1452,17 @@ function installBridgeFetch(
         (reviewCommitAttempts === 1 || options.reviewCommitConflictPending === 'always')
       ) {
         if (reviewCommitAttempts === 1) serverDocVersion += 1
-        return Response.json({ error: 'doc version conflict' }, { status: 409 })
+        return Response.json({
+          error: 'doc version conflict',
+          ...(options.reviewCommitConflictActual === undefined
+            ? {}
+            : { actual: options.reviewCommitConflictActual }),
+        }, { status: 409 })
       }
       if (options.reviewCommitConflictPending === 'once') {
         const body = JSON.parse(String(init.body)) as { expectedDocVersion: number }
-        if (body.expectedDocVersion !== serverDocVersion) {
+        const expectedVersion = options.reviewCommitConflictActual ?? serverDocVersion
+        if (body.expectedDocVersion !== expectedVersion) {
           return Response.json({ error: 'doc version conflict' }, { status: 409 })
         }
       }

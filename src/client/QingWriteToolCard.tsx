@@ -51,9 +51,8 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
           : '',
       ].filter(Boolean).join(' · ')
   const narrativeText = settled && !failed && meta?.status === 'review'
-    ? pendingReview
-      ? '新版已写好,在右侧等你确认采用或退回。'
-      : reviewState === 'settled' ? '当时写好了新版,已处理完。' : '当时写好了新版。'
+    // 标题行已经包含修改数量和待审指引，第二行只补充标题未表达的结算状态。
+    ? reviewState === 'settled' ? '已处理完。' : ''
     : ''
   const handleView = () => openToolCardDocument(
     sessionId,

@@ -147,21 +147,8 @@ export const QingEditToolCard = createQingToolCard({
   narrative: (meta, snapshot) => {
     if (meta.status !== 'review') return ''
     const reviewState = currentReviewStateFor(snapshot, meta.engineSessionId, meta.patchIds)
-    if (meta.wholeDocReview) {
-      return reviewState === 'pending'
-        ? '新版已写好,在右侧等你确认采用或退回。'
-        : reviewState === 'settled' ? '当时写好了新版,已处理完。' : '当时写好了新版。'
-    }
-    if (reviewState !== 'pending') {
-      return typeof meta.reviewCount === 'number' && Number.isFinite(meta.reviewCount)
-        ? reviewState === 'settled'
-          ? `当时改了 ${meta.reviewCount} 处,已处理完。`
-          : `当时改了 ${meta.reviewCount} 处。`
-        : reviewState === 'settled' ? '当时完成了修改,已处理完。' : '当时完成了修改。'
-    }
-    return typeof meta.reviewCount === 'number' && Number.isFinite(meta.reviewCount)
-      ? `改好了 ${meta.reviewCount} 处,都在右侧面板,逐条确认或驳回即可。`
-      : '改动已完成,都在右侧面板,逐条确认或驳回即可。'
+    // 标题行已经包含修改数量和待审指引，第二行只补充标题未表达的结算状态。
+    return reviewState === 'settled' ? '已处理完。' : ''
   },
 })
 

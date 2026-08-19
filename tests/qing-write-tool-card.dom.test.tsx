@@ -326,7 +326,7 @@ describe('Qing write/edit tool card view navigation', () => {
 })
 
 describe('Qing write/edit review tool card narratives', () => {
-  it('同一条 review meta 随当前 snapshot 结算，移除摘要与叙述里的控件指引', async () => {
+  it('同一条 review meta 随当前 snapshot 结算，标题保留指引且删除重复叙述', async () => {
     vi.stubGlobal('EventSource', FakeEventSource)
     const sessionId = 'edit-review-card'
     const engineSessionId = 'qing-edit-review'
@@ -353,9 +353,8 @@ describe('Qing write/edit review tool card narratives', () => {
       act(() => root.render(
         <QingEditToolCard {...props(sessionId, reviewMeta) as unknown as ComponentProps<typeof QingEditToolCard>} />,
       ))
-      expect(host.firstElementChild?.children).toHaveLength(2)
-      expect(host.querySelector('p')?.textContent)
-        .toBe('改好了 3 处,都在右侧面板,逐条确认或驳回即可。')
+      expect(host.firstElementChild?.children).toHaveLength(1)
+      expect(host.querySelector('p')).toBeNull()
       expect(host.firstElementChild?.firstElementChild?.textContent)
         .toContain('《局部修改稿》 · 3 处待裁决 · 请在右侧逐处确认')
       expect(host.textContent).not.toMatch(/\bv\d+\b|ai-block-|qing_edit_draft|字数|块/)
@@ -366,12 +365,11 @@ describe('Qing write/edit review tool card narratives', () => {
         [`patch-${engineSessionId}`],
         'accepted',
       ))
-      expect(host.querySelector('p')?.textContent)
-        .toBe('改好了 3 处,都在右侧面板,逐条确认或驳回即可。')
+      expect(host.querySelector('p')).toBeNull()
       expect(host.textContent).toContain('3 处待裁决')
 
       act(() => qingClientStore.applyReviewCommit(sessionId, engineSessionId, 2))
-      expect(host.querySelector('p')?.textContent).toBe('当时改了 3 处,已处理完。')
+      expect(host.querySelector('p')?.textContent).toBe('已处理完。')
       expect(host.firstElementChild?.firstElementChild?.textContent)
         .toContain('《局部修改稿》 · 3 处修改')
       for (const forbidden of ['逐条确认', '驳回', '在右侧', '已采纳', '已驳回']) {
@@ -404,7 +402,7 @@ describe('Qing write/edit review tool card narratives', () => {
           patchIds: ['patch-qing-edit-whole'],
         }) as unknown as ComponentProps<typeof QingEditToolCard>} />,
       ))
-      expect(host.querySelector('p')?.textContent).toBe('新版已写好,在右侧等你确认采用或退回。')
+      expect(host.querySelector('p')).toBeNull()
       expect(host.firstElementChild?.firstElementChild?.textContent)
         .toContain('请在右侧确认是否应用新版')
 
@@ -423,7 +421,7 @@ describe('Qing write/edit review tool card narratives', () => {
           patchIds: ['patch-qing-write-review'],
         }) as unknown as ComponentProps<typeof QingWriteToolCard>} />,
       ))
-      expect(host.querySelector('p')?.textContent).toBe('新版已写好,在右侧等你确认采用或退回。')
+      expect(host.querySelector('p')).toBeNull()
       expect(host.firstElementChild?.firstElementChild?.textContent)
         .toContain('《新稿》 · 2 处待裁决 · 请在右侧逐处确认')
       expect(host.firstElementChild?.firstElementChild?.textContent).not.toContain('新版已写好')
@@ -437,7 +435,7 @@ describe('Qing write/edit review tool card narratives', () => {
           patchIds: ['patch-qing-write-whole'],
         }) as unknown as ComponentProps<typeof QingWriteToolCard>} />,
       ))
-      expect(host.querySelector('p')?.textContent).toBe('新版已写好,在右侧等你确认采用或退回。')
+      expect(host.querySelector('p')).toBeNull()
       expect(host.firstElementChild?.firstElementChild?.textContent)
         .toContain('请在右侧确认是否应用新版')
 
@@ -478,7 +476,7 @@ describe('Qing write/edit review tool card narratives', () => {
         ))
         const narrative = host.querySelector('p')?.textContent ?? ''
         narratives.push(narrative)
-        expect(narrative).toBe('改动已完成,都在右侧面板,逐条确认或驳回即可。')
+        expect(host.querySelector('p')).toBeNull()
         expect(host.textContent).not.toMatch(/undefined|NaN/)
       }
 
@@ -523,7 +521,7 @@ describe('Qing write/edit review tool card narratives', () => {
       act(() => root.render(
         <QingEditToolCard {...props as unknown as ComponentProps<typeof QingEditToolCard>} />,
       ))
-      expect(host.querySelector('p')?.textContent).toBe('当时改了 2 处。')
+      expect(host.querySelector('p')).toBeNull()
       expect(host.textContent).not.toMatch(/逐条确认|驳回|在右侧|已采纳|已驳回|已处理完/)
     } finally {
       act(() => root.unmount())
@@ -557,7 +555,7 @@ describe('Qing write/edit review tool card narratives', () => {
           docVersion: 1,
         }) as unknown as ComponentProps<typeof QingEditToolCard>} />,
       ))
-      expect(host.querySelector('p')?.textContent).toBe('当时改了 2 处。')
+      expect(host.querySelector('p')).toBeNull()
       expect(host.textContent).not.toMatch(/逐条确认|待裁决|在右侧/)
 
       act(() => root.render(
@@ -571,8 +569,7 @@ describe('Qing write/edit review tool card narratives', () => {
           docVersion: 1,
         }) as unknown as ComponentProps<typeof QingEditToolCard>} />,
       ))
-      expect(host.querySelector('p')?.textContent)
-        .toBe('改好了 1 处,都在右侧面板,逐条确认或驳回即可。')
+      expect(host.querySelector('p')).toBeNull()
       expect(host.firstElementChild?.firstElementChild?.textContent)
         .toContain('《批次 B》 · 1 处待裁决 · 请在右侧逐处确认')
     } finally {

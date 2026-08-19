@@ -94,6 +94,13 @@ const EMPTY_PATCH_IDS = new Set<string>()
 const EMPTY_ANNOTATIONS: never[] = []
 const MISSING_DOCUMENT_TITLE = '该文档已删除'
 
+function bridgeConflictActualVersion(error: BridgeHttpError): number | undefined {
+  const actual = error.body.actual
+  return typeof actual === 'number' && Number.isSafeInteger(actual) && actual >= 0
+    ? actual
+    : undefined
+}
+
 export function QingDocPanel(props: QingDocPanelProps) {
   ensureQingdocRuntimeCss()
   const sessionId = String(props.useSession((session) => session.sessionId))
@@ -830,6 +837,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
       .filter((suggestion) => suggestion.status === 'reviewing' || suggestion.status === 'accepted' || suggestion.status === 'rejected')
     const settledSuggestionIds = new Set(settledSuggestions.map((suggestion) => suggestion.id))
     let retried = false
+    let retryCount = 0
     const fallbackOutcome = (): ExternalReviewOutcome => {
       const hunks = settledSuggestions.map((suggestion) => ({
         verdict: (action === 'reject_all'
@@ -905,6 +913,19 @@ export function QingDocPanel(props: QingDocPanelProps) {
         }
       }
     }
+    const retryCommit = async (expectedDocVersion: number, versionSource: 'conflict actual' | 'authoritative probe') => {
+      if (retryCount >= 2) throw new Error('审阅提交重试次数已用尽')
+      retryCount += 1
+      retried = true
+      console.info(`[qingagent-panel] review commit conflict retrying with ${versionSource} version`, {
+        action,
+        docVersion: expectedDocVersion,
+      })
+      return qingClientStore.reviewCommit(sessionId, activeEngineSessionId, {
+        expectedDocVersion,
+        action,
+      })
+    }
     try {
       const response = await qingClientStore.reviewCommit(sessionId, activeEngineSessionId, {
         expectedDocVersion: commitSnapshot.panelDoc.docVersion,
@@ -914,6 +935,16 @@ export function QingDocPanel(props: QingDocPanelProps) {
     } catch (error) {
       let failure = error
       if (error instanceof BridgeHttpError && error.status === 409) {
+        const actualVersion = bridgeConflictActualVersion(error)
+        if (actualVersion !== undefined) {
+          try {
+            const response = await retryCommit(actualVersion, 'conflict actual')
+            await settleAsSuccess(response.docVersion, true, response.outcome)
+            return
+          } catch (retryError) {
+            failure = retryError
+          }
+        }
         try {
           await qingClientStore.refreshPanel(sessionId, activeEngineSessionId, { bypassGuard: true })
           const authoritative = qingClientStore.getSnapshot(sessionId)
@@ -932,17 +963,9 @@ export function QingDocPanel(props: QingDocPanelProps) {
           )
           const sameSuggestionBatch = authoritativeSuggestionIds.size === settledSuggestionIds.size &&
             [...settledSuggestionIds].every((id) => authoritativeSuggestionIds.has(id))
-          if (sameSuggestionBatch) {
-            console.info('[qingagent-panel] review commit conflict retrying with authoritative version', {
-              action,
-              docVersion: authoritative.panelDoc.docVersion,
-            })
+          if (sameSuggestionBatch && retryCount < 2) {
             try {
-              retried = true
-              const response = await qingClientStore.reviewCommit(sessionId, activeEngineSessionId, {
-                expectedDocVersion: authoritative.panelDoc.docVersion,
-                action,
-              })
+              const response = await retryCommit(authoritative.panelDoc.docVersion, 'authoritative probe')
               await settleAsSuccess(response.docVersion, true, response.outcome)
               return
             } catch (retryError) {
