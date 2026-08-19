@@ -3,7 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { validateJsonSchemaValue, type ToolDefinition, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { countDocVisibleChars, type PmDoc } from '@qingagent/pm-schema'
 import type { BindingStore } from '../src/bindings.js'
-import type { BridgeHub } from '../src/bridge.js'
+import { TURN_SIGNAL_HEARTBEAT_MS, type BridgeHub } from '../src/bridge.js'
 import { DRAFT_MARK_COLORS, type BridgeEvent, type EngineStatusSnapshot, type ExternalDoc } from '../src/contracts.js'
 import { EngineHttpError, type EngineService } from '../src/engine.js'
 import { QINGJIAN_DOWNLOAD_URL } from '../src/onboarding.js'
@@ -63,6 +63,7 @@ function harness(
   fetchJson: (path: string, init?: RequestInit) => Promise<unknown>,
   engineStatus: EngineStatusSnapshot = ONLINE_ENGINE,
   pmDoc: PmDoc = candidateDoc('开篇', '第一版正文。'),
+  turnSignal: (path: string, init?: RequestInit) => Promise<unknown> = async () => ({ ok: true }),
 ) {
   const tools = new Map<string, ToolDefinition>()
   const listeners = new Map<string, (...args: any[]) => any>()
@@ -101,8 +102,10 @@ function harness(
   const engine = {
     ensureReady: vi.fn(async () => engineStatus),
     status: vi.fn(async () => engineStatus),
-    fetchJson: vi.fn((path: string, init?: RequestInit) =>
-      path.endsWith('/doc?format=pm') ? Promise.resolve({ pmDoc }) : fetchJson(path, init)),
+    fetchJson: vi.fn((path: string, init?: RequestInit) => {
+      if (path.endsWith('/turn-signal')) return turnSignal(path, init)
+      return path.endsWith('/doc?format=pm') ? Promise.resolve({ pmDoc }) : fetchJson(path, init)
+    }),
   } as unknown as EngineService
   const bridge = {
     emit: vi.fn((sessionId: string, event: BridgeEvent) => events.push({ sessionId, event })),
@@ -112,6 +115,159 @@ function harness(
   registerTools({ ctx, engine, bindings, bridge, telemetry })
   return { tools, listeners, requests, events, stream, bindings, engine, bridge, telemetry }
 }
+
+function signalActions(engine: EngineService): Array<{ action: string; turnId: string }> {
+  return vi.mocked(engine.fetchJson).mock.calls.flatMap(([path, init]) =>
+    path.endsWith('/turn-signal')
+      ? [JSON.parse(String(init?.body)) as { action: string; turnId: string }]
+      : [])
+}
+
+describe('agent 文稿回合租约', () => {
+  const editableDoc = () => doc({ state: 'editing', qingml: DRAFT_ONE, title: '测试稿' })
+
+  it('纯聊天回合即使 pre-step 刷新文稿状态也零 begin', async () => {
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?format=qingml')) return editableDoc()
+      throw new Error(`unexpected path: ${path}`)
+    })
+    const preStep = fixture.listeners.get('agent/pre-step')!
+    const stopping = fixture.listeners.get('agent/turn-stopping')!
+
+    await preStep({ agent: { id: 'dsh-1' }, turn: 1 }, async () => ({ kind: 'enter', messages: [] }))
+    await stopping({ agent: { id: 'dsh-1' }, turn: 1 })
+
+    expect(signalActions(fixture.engine)).toEqual([])
+  })
+
+  it('首次触稿前 begin 恰好一次，挂起 end 后同回合恢复会重新 begin', async () => {
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?format=qingml')) return editableDoc()
+      throw new Error(`unexpected path: ${path}`)
+    })
+    const preStep = fixture.listeners.get('agent/pre-step')!
+    const stopping = fixture.listeners.get('agent/turn-stopping')!
+    await preStep({ agent: { id: 'dsh-1' }, turn: 2 }, async () => ({ kind: 'enter', messages: [] }))
+    vi.mocked(fixture.engine.fetchJson).mockClear()
+
+    const read = fixture.tools.get('qing_read_draft')!
+    await read.execute({ mode: 'outline' }, exec(undefined, 'lease-read-1', 'qing_read_draft'))
+    await read.execute({ mode: 'base' }, exec(undefined, 'lease-read-2', 'qing_read_draft'))
+
+    const pathsBeforeEnd = vi.mocked(fixture.engine.fetchJson).mock.calls.map(([path]) => path)
+    expect(pathsBeforeEnd[0]).toBe('/sessions/qing-1/turn-signal')
+    expect(signalActions(fixture.engine)).toEqual([{ action: 'begin', turnId: expect.any(String) }])
+
+    await stopping({ agent: { id: 'dsh-1' }, turn: 2 })
+    await stopping({ agent: { id: 'dsh-1' }, turn: 2 })
+    const actions = signalActions(fixture.engine)
+    expect(actions.map(({ action }) => action)).toEqual(['begin', 'end'])
+    expect(actions[1]!.turnId).toBe(actions[0]!.turnId)
+
+    // ask_user 的答案会恢复原回合：同一个 turn number 再进 pre-step，但必须领取新租约段。
+    await preStep({ agent: { id: 'dsh-1' }, turn: 2 }, async () => ({ kind: 'enter', messages: [] }))
+    await read.execute({ mode: 'outline' }, exec(undefined, 'lease-resumed-read', 'qing_read_draft'))
+    const resumed = signalActions(fixture.engine)
+    expect(resumed.map(({ action }) => action)).toEqual(['begin', 'end', 'begin'])
+    expect(resumed[2]!.turnId).not.toBe(resumed[0]!.turnId)
+    await stopping({ agent: { id: 'dsh-1' }, turn: 2 })
+    expect(signalActions(fixture.engine).map(({ action }) => action)).toEqual(['begin', 'end', 'begin', 'end'])
+  })
+
+  it('agent/error 也只发送一次 end', async () => {
+    const fixture = harness([], async (path) => {
+      if (path.endsWith('/doc?format=qingml')) return editableDoc()
+      throw new Error(`unexpected path: ${path}`)
+    })
+    const preStep = fixture.listeners.get('agent/pre-step')!
+    const onError = fixture.listeners.get('agent/error')!
+    await preStep({ agent: { id: 'dsh-1' }, turn: 3 }, async () => ({ kind: 'enter', messages: [] }))
+    vi.mocked(fixture.engine.fetchJson).mockClear()
+    await fixture.tools.get('qing_read_draft')!.execute(
+      { mode: 'outline' },
+      exec(undefined, 'lease-error-read', 'qing_read_draft'),
+    )
+
+    await onError({ agent: { id: 'dsh-1' }, turn: 3, step: 1, error: new Error('boom') })
+    await onError({ agent: { id: 'dsh-1' }, turn: 3, step: 1, error: new Error('boom') })
+    expect(signalActions(fixture.engine).map(({ action }) => action)).toEqual(['begin', 'end'])
+  })
+
+  it('begin 后按固定间隔 heartbeat，end 后立即停止', async () => {
+    vi.useFakeTimers()
+    try {
+      const fixture = harness([], async (path) => {
+        if (path.endsWith('/doc?format=qingml')) return editableDoc()
+        throw new Error(`unexpected path: ${path}`)
+      })
+      const preStep = fixture.listeners.get('agent/pre-step')!
+      const stopping = fixture.listeners.get('agent/turn-stopping')!
+      await preStep({ agent: { id: 'dsh-1' }, turn: 4 }, async () => ({ kind: 'enter', messages: [] }))
+      vi.mocked(fixture.engine.fetchJson).mockClear()
+      await fixture.tools.get('qing_read_draft')!.execute(
+        { mode: 'outline' },
+        exec(undefined, 'lease-heartbeat-read', 'qing_read_draft'),
+      )
+
+      await vi.advanceTimersByTimeAsync(TURN_SIGNAL_HEARTBEAT_MS - 1)
+      expect(signalActions(fixture.engine).map(({ action }) => action)).toEqual(['begin'])
+      await vi.advanceTimersByTimeAsync(1)
+      expect(signalActions(fixture.engine).map(({ action }) => action)).toEqual(['begin', 'heartbeat'])
+
+      await stopping({ agent: { id: 'dsh-1' }, turn: 4 })
+      await vi.advanceTimersByTimeAsync(TURN_SIGNAL_HEARTBEAT_MS * 2)
+      expect(signalActions(fixture.engine).map(({ action }) => action)).toEqual(['begin', 'heartbeat', 'end'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('旧引擎 turn-signal 404 时读稿和改稿照常成功', async () => {
+    let proposed = false
+    let proposalBody: Record<string, unknown> | undefined
+    const fixture = harness([], async (path, init) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({
+          docVersion: proposed ? 3 : 2,
+          state: 'editing',
+          qingml: proposed ? DRAFT_TWO : DRAFT_ONE,
+          title: '测试稿',
+        })
+      }
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '# 开篇\n\n第一版正文。', title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposalBody = JSON.parse(String(init?.body))
+        proposed = true
+        return { status: 'committed', docVersion: 3 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, candidateDoc('开篇', '第一版正文。'), async () => {
+      throw new EngineHttpError(404, { error: 'route not found' })
+    })
+    const preStep = fixture.listeners.get('agent/pre-step')!
+    const stopping = fixture.listeners.get('agent/turn-stopping')!
+    await preStep({ agent: { id: 'dsh-1' }, turn: 5 }, async () => ({ kind: 'enter', messages: [] }))
+
+    await expect(fixture.tools.get('qing_read_draft')!.execute(
+      { mode: 'outline' },
+      exec(undefined, 'lease-404-read', 'qing_read_draft'),
+    )).resolves.toMatchObject({ state: 'editing' })
+    await expect(fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'strReplace', old: '第一版正文。', new: '修正后的正文。' }],
+    }, exec(undefined, 'lease-404-edit', 'qing_edit_draft'))).resolves.toMatchObject({
+      status: 'committed', docVersion: 3,
+    })
+    await expect(stopping({ agent: { id: 'dsh-1' }, turn: 5 })).resolves.toBeUndefined()
+
+    expect(proposalBody).toMatchObject({ turnId: expect.any(String) })
+    expect(signalActions(fixture.engine).map(({ action }) => action)).toEqual(['begin', 'end'])
+  })
+})
 
 describe('qing_* 未连接结构化报错', () => {
   const calls: Array<[string, Record<string, unknown>]> = [

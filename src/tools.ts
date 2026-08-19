@@ -10,7 +10,7 @@ import {
   type PmDoc,
 } from '@qingagent/pm-schema'
 import type { BindingStore } from './bindings.js'
-import type { BridgeHub } from './bridge.js'
+import { AgentTurnLeaseCoordinator, type BridgeHub } from './bridge.js'
 import type {
   ExternalDoc,
   ExternalDocReadResponse,
@@ -69,6 +69,7 @@ interface ToolServices {
 interface RuntimeToolServices extends ToolServices {
   docStates: DocStateCache
   freshness: FreshnessTracker
+  turnLeases: AgentTurnLeaseCoordinator
 }
 
 const textBlock = (text: string) => [{ type: 'text' as const, text }]
@@ -423,12 +424,14 @@ export function registerTools(services: ToolServices): void {
     ...services,
     docStates: services.docStates ?? new DocStateCache(),
     freshness: services.freshness ?? new FreshnessTracker(),
+    turnLeases: new AgentTurnLeaseCoordinator(services.engine),
   }
   const { ctx } = runtime
   const reviewTurns = new ReviewTurnTracker()
   const writeTurns = new WriteTurnTracker()
   const readTurns = new ReadTurnTracker()
   installTurnTracking(ctx, reviewTurns, writeTurns, readTurns, runtime)
+  ctx.effect(() => () => runtime.turnLeases.dispose())
   ctx.effect(() => ctx.tools.register(writeDraftTool(runtime, writeTurns)))
   ctx.effect(() => ctx.tools.register(editDraftTool(runtime)))
   ctx.effect(() => ctx.tools.register(reviewCommitTool(runtime, reviewTurns)))
@@ -532,7 +535,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
           bound = await services.bindings.createDoc(dshSessionId, args.title?.trim() || '未命名文稿')
         }
 
-        const docBefore = await readDoc(services.engine, bound.engineSessionId)
+        const docBefore = await readDoc(services, exec, bound.engineSessionId)
         if (docBefore.state === 'pendingReview') {
           throw new Error(REVIEW_PENDING_ERROR)
         }
@@ -588,7 +591,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
             }
           }
           try {
-            proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
+            proposal = await propose(services, exec, bound.engineSessionId, docBefore.docVersion, qingml)
           } catch (error) {
             if (!(error instanceof EngineHttpError) || error.status !== 400 || !hasDiagnostic(error.body)) throw error
             const retryPrompt = makeDraftPrompt({
@@ -610,7 +613,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
             if (retryFailures.length > 0) {
               throw new Error(`格式修正后不再满足明确要求（${retryFailures.join('；')}），未提交文稿。`)
             }
-            proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
+            proposal = await propose(services, exec, bound.engineSessionId, docBefore.docVersion, qingml)
           }
           writeTurns.markSuccessful(exec)
         } catch (error) {
@@ -626,11 +629,11 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
 
         try {
           const [official, reviewCandidate, officialPmDoc] = await Promise.all([
-            readDoc(services.engine, bound.engineSessionId),
+            readDoc(services, exec, bound.engineSessionId),
             proposal.status === 'review'
-              ? readReviewCandidate(services.engine, bound.engineSessionId)
+              ? readReviewCandidate(services, exec, bound.engineSessionId)
               : Promise.resolve(null),
-            readPmDoc(services.engine, bound.engineSessionId),
+            readPmDoc(services, exec, bound.engineSessionId),
           ])
           const renderedQingml = reviewCandidate?.qingml ?? official.qingml ?? qingml
           const renderedPmDoc = reviewCandidate?.pmDoc ?? officialPmDoc
@@ -947,7 +950,7 @@ function editDraftTool(services: RuntimeToolServices) {
         services.freshness.assertFresh(exec)
         const engineSessionId = resolveDocRef(services.bindings, dshSessionId, args.docRef)
         await services.bindings.setActive(dshSessionId, engineSessionId)
-        const before = await readDocWithLines(services.engine, engineSessionId)
+        const before = await readDocWithLines(services, exec, engineSessionId)
         if (before.state === 'pendingReview') throw new Error(REVIEW_PENDING_ERROR)
         const modelOps = args.ops as ModelEditProposalOp[]
         const titleOnly = modelOps.every((op) => op.kind === 'setTitle')
@@ -955,26 +958,27 @@ function editDraftTool(services: RuntimeToolServices) {
         const needsLocatorMap = modelOps.some((op) =>
           'locator' in op || (op.kind === 'markText' && 'withinLocator' in op && Boolean(op.withinLocator)))
         const basePmDoc = modelOps.some((op) => op.kind === 'setTitle') || needsLocatorMap
-          ? await readPmDoc(services.engine, engineSessionId)
+          ? await readPmDoc(services, exec, engineSessionId)
           : undefined
         const ops = needsLocatorMap
           ? resolveEditLocators(basePmDoc!, modelOps)
           : modelOps as ExternalEditProposalOp[]
         assertNoRawTags(ops)
         if (basePmDoc) assertSynchronizedTitleChange(before.title, basePmDoc, ops)
-        const prepared = await prepareEditOps(services.engine, engineSessionId, ops, basePmDoc)
+        const prepared = await prepareEditOps(services, exec, engineSessionId, ops, basePmDoc)
         const proposal = await proposeEditOpsWithPlainTextRetry(
-          services.engine,
+          services,
+          exec,
           engineSessionId,
           before.docVersion,
           prepared.ops,
         )
         const [official, reviewCandidate, officialPmDoc] = await Promise.all([
-          readDoc(services.engine, engineSessionId),
+          readDoc(services, exec, engineSessionId),
           proposal.status === 'review'
-            ? readReviewCandidate(services.engine, engineSessionId)
+            ? readReviewCandidate(services, exec, engineSessionId)
             : Promise.resolve(null),
-          readPmDoc(services.engine, engineSessionId),
+          readPmDoc(services, exec, engineSessionId),
         ])
         const renderedQingml = reviewCandidate?.qingml ?? official.qingml
         const renderedPmDoc = reviewCandidate?.pmDoc ?? officialPmDoc
@@ -1098,7 +1102,7 @@ function reviewCommitTool(services: RuntimeToolServices, reviewTurns: ReviewTurn
       await assertEngineOnline(services.engine)
       reviewTurns.assertFirstAdjudication(exec)
       const engineSessionId = resolveDocRef(services.bindings, dshSessionId, args.docRef)
-      const before = await readDoc(services.engine, engineSessionId)
+      const before = await readDoc(services, exec, engineSessionId)
       const beforeTitle = before.title?.trim() || services.bindings.listDocs(dshSessionId)
         .find((doc) => doc.engineSessionId === engineSessionId)?.title || '未命名文稿'
       if (before.state !== 'pendingReview') {
@@ -1118,13 +1122,10 @@ function reviewCommitTool(services: RuntimeToolServices, reviewTurns: ReviewTurn
         expectedDocVersion: before.docVersion,
         action: args.action,
       }
-      const reviewed = await services.engine.fetchJson<ExternalReviewCommitResponse>(
-        `/sessions/${encodeURIComponent(engineSessionId)}/review/commit`,
-        { method: 'POST', body: JSON.stringify(body) },
-      )
+      const reviewed = await commitReview(services, exec, engineSessionId, body)
       const [official, officialPmDoc] = await Promise.all([
-        readDoc(services.engine, engineSessionId),
-        readPmDoc(services.engine, engineSessionId),
+        readDoc(services, exec, engineSessionId),
+        readPmDoc(services, exec, engineSessionId),
       ])
       const outline = outlineOf(official.qingml, official.title)
       const words = countDocVisibleChars(officialPmDoc)
@@ -1199,12 +1200,12 @@ function readDraftTool(services: RuntimeToolServices, readTurns: ReadTurnTracker
       await assertEngineOnline(services.engine)
       const engineSessionId = resolveDocRef(services.bindings, dshSessionId, args.docRef)
       const [doc, basePmDoc] = await Promise.all([
-        readDoc(services.engine, engineSessionId),
-        readPmDoc(services.engine, engineSessionId),
+        readDoc(services, exec, engineSessionId),
+        readPmDoc(services, exec, engineSessionId),
       ])
       const mode = args.mode ?? 'outline'
       const currentReviewCandidate = doc.state === 'pendingReview'
-        ? await readReviewCandidate(services.engine, engineSessionId)
+        ? await readReviewCandidate(services, exec, engineSessionId)
         : null
       const currentQingml = currentReviewCandidate?.qingml ?? doc.qingml
       const currentPmDoc = currentReviewCandidate?.pmDoc ?? basePmDoc
@@ -1254,7 +1255,7 @@ function readDraftTool(services: RuntimeToolServices, readTurns: ReadTurnTracker
         }
       }
       if (mode === 'lines') {
-        const lined = repeated ? null : await readDocWithLines(services.engine, engineSessionId)
+        const lined = repeated ? null : await readDocWithLines(services, exec, engineSessionId)
         const outline = outlineOf(doc.qingml, doc.title)
         const notice = `${STR_REPLACE_LINES_NOTICE}\n${doc.state === 'pendingReview'
           ? '以下行号对应已提交基线（不含待审候选）。\n'
@@ -1397,7 +1398,7 @@ function listDocsTool(services: RuntimeToolServices) {
         let docVersion: number | undefined
         if (engine.state === 'online') {
           try {
-            const current = await readDoc(services.engine, bound.engineSessionId)
+            const current = await readDoc(services, exec, bound.engineSessionId)
             state = current.state
             docVersion = current.docVersion
           } catch (error) {
@@ -1461,7 +1462,7 @@ function focusDocTool(services: RuntimeToolServices) {
       const binding = services.bindings.getBinding(dshSessionId)
       if (binding.docs.some((item) => item.engineSessionId === args.docRef)) {
         const doc = await services.bindings.setActive(dshSessionId, args.docRef)
-        const current = await readDoc(services.engine, doc.engineSessionId)
+        const current = await readDoc(services, exec, doc.engineSessionId)
         services.bridge.emit(dshSessionId, { type: 'focus-changed', engineSessionId: doc.engineSessionId })
         await refreshAndPublishDocState(services, exec, false)
         return {
@@ -1476,7 +1477,7 @@ function focusDocTool(services: RuntimeToolServices) {
       // 模糊匹配是误收养的最大事故面,多命中一律报错并列候选让用户选。
       let target: { id: string; title: string; state: string } | undefined
       try {
-        const probe = await readDoc(services.engine, args.docRef)
+        const probe = await readDoc(services, exec, args.docRef)
         target = { id: args.docRef, title: probe.title?.trim() || '未命名文稿', state: probe.state }
       } catch {
         const listing = await services.engine.fetchJson<{
@@ -1494,7 +1495,7 @@ function focusDocTool(services: RuntimeToolServices) {
         throw new Error('未找到该文稿:既不是本会话绑定稿,ID/标题在文库中也未精确命中。先用 qing_list_docs scope:"library" 查看文库。')
       }
       const doc = await services.bindings.adoptDoc(dshSessionId, target.id, target.title)
-      const current = await readDoc(services.engine, doc.engineSessionId)
+      const current = await readDoc(services, exec, doc.engineSessionId)
       services.bridge.emit(dshSessionId, { type: 'focus-changed', engineSessionId: doc.engineSessionId })
       await refreshAndPublishDocState(services, exec, false)
       return {
@@ -1529,11 +1530,11 @@ export async function refreshDocState(
     return undefined
   }
   const [doc, basePmDoc] = await Promise.all([
-    readDoc(services.engine, active.engineSessionId),
-    readPmDoc(services.engine, active.engineSessionId),
+    readDocRaw(services.engine, active.engineSessionId),
+    readPmDocRaw(services.engine, active.engineSessionId),
   ])
   const reviewCandidate = doc.state === 'pendingReview'
-    ? await readReviewCandidate(services.engine, active.engineSessionId)
+    ? await readReviewCandidateRaw(services.engine, active.engineSessionId)
     : null
   const qingml = reviewCandidate?.qingml ?? doc.qingml
   const pmDoc = reviewCandidate?.pmDoc ?? basePmDoc
@@ -1651,8 +1652,14 @@ async function streamQingml(
   return output
 }
 
-async function propose(engine: EngineService, engineSessionId: string, expectedDocVersion: number, qingml: string): Promise<ExternalProposalResponse> {
-  return proposeOps(engine, engineSessionId, expectedDocVersion, [{ kind: 'qingmlDraft', qingml }])
+async function propose(
+  services: RuntimeToolServices,
+  exec: ToolRunContext,
+  engineSessionId: string,
+  expectedDocVersion: number,
+  qingml: string,
+): Promise<ExternalProposalResponse> {
+  return proposeOps(services, exec, engineSessionId, expectedDocVersion, [{ kind: 'qingmlDraft', qingml }])
 }
 
 const LINE_SHIFTING_BLOCK_OPS = new Set<ExternalEditProposalOp['kind']>([
@@ -1679,7 +1686,8 @@ interface ExpandedEditOps {
 }
 
 async function prepareEditOps(
-  engine: EngineService,
+  services: RuntimeToolServices,
+  exec: ToolRunContext,
   engineSessionId: string,
   ops: ExternalEditProposalOp[],
   suppliedPmDoc?: PmDoc,
@@ -1688,7 +1696,7 @@ async function prepareEditOps(
   if (!needsPmDoc) {
     return { ops, opResults: [], affectedCount: 0 }
   }
-  const pmDoc = suppliedPmDoc ?? await readPmDoc(engine, engineSessionId)
+  const pmDoc = suppliedPmDoc ?? await readPmDoc(services, exec, engineSessionId)
   const sentenceSafeOps = ops.map((op) => expandFinalSentenceReplacement(pmDoc, op))
   const expanded = expandMarkdownBlockReplacements(pmDoc, sentenceSafeOps)
   const lineOps = expanded.ops.flatMap((op, index) => op.kind === 'insertAfterLine' ? [{ op, index }] : [])
@@ -1905,18 +1913,19 @@ function editCountLine(opResults: readonly EditOpResult[], affectedCount: number
 }
 
 async function proposeEditOpsWithPlainTextRetry(
-  engine: EngineService,
+  services: RuntimeToolServices,
+  exec: ToolRunContext,
   engineSessionId: string,
   expectedDocVersion: number,
   ops: ExternalEditProposalOp[],
 ): Promise<ExternalProposalResponse> {
   try {
-    return await proposeOps(engine, engineSessionId, expectedDocVersion, ops)
+    return await proposeOps(services, exec, engineSessionId, expectedDocVersion, ops)
   } catch (error) {
     if (!isStrReplaceNoMatch(error, ops)) throw error
     const normalizedOps = ops.map(normalizeEditOp)
     try {
-      return await proposeOps(engine, engineSessionId, expectedDocVersion, normalizedOps)
+      return await proposeOps(services, exec, engineSessionId, expectedDocVersion, normalizedOps)
     } catch (retryError) {
       if (isStrReplaceNoMatch(retryError, normalizedOps)) throw plainTextStrReplaceError(retryError)
       throw retryError
@@ -1963,34 +1972,73 @@ function plainTextStrReplaceError(error: EngineHttpError): EngineHttpError {
   return new EngineHttpError(error.status, error.body, `${error.message}；${STR_REPLACE_PLAIN_TEXT_ERROR}`)
 }
 
-function proposeOps(
-  engine: EngineService,
+async function proposeOps(
+  services: RuntimeToolServices,
+  exec: ToolRunContext,
   engineSessionId: string,
   expectedDocVersion: number,
   ops: ExternalEditProposalOp[] | Array<{ kind: 'qingmlDraft'; qingml: string }>,
 ): Promise<ExternalProposalResponse> {
+  const turnId = await services.turnLeases.touchDocument(sessionIdOf(exec), engineSessionId)
   // 引擎契约:结构操作批(deleteBlock/deleteListItem)必须携带请求级 opId(幂等寻址)。
   const structural = ops.some((op) => op.kind === 'deleteBlock' || op.kind === 'deleteListItem' || op.kind === 'insertAfterBlock')
-  return engine.fetchJson<ExternalProposalResponse>(`/sessions/${encodeURIComponent(engineSessionId)}/proposals`, {
+  return services.engine.fetchJson<ExternalProposalResponse>(`/sessions/${encodeURIComponent(engineSessionId)}/proposals`, {
     method: 'POST',
     body: JSON.stringify({
       expectedDocVersion,
       clientMutationId: `dsh-${randomUUID()}`,
       ...(structural ? { opId: `dsh-op-${randomUUID()}` } : {}),
+      ...(turnId ? { turnId } : {}),
       ops,
     }),
   })
 }
 
-function readDoc(engine: EngineService, engineSessionId: string): Promise<ExternalDoc> {
+async function commitReview(
+  services: RuntimeToolServices,
+  exec: ToolRunContext,
+  engineSessionId: string,
+  body: ExternalReviewCommitRequest,
+): Promise<ExternalReviewCommitResponse> {
+  await services.turnLeases.touchDocument(sessionIdOf(exec), engineSessionId)
+  return services.engine.fetchJson<ExternalReviewCommitResponse>(
+    `/sessions/${encodeURIComponent(engineSessionId)}/review/commit`,
+    { method: 'POST', body: JSON.stringify(body) },
+  )
+}
+
+async function readDoc(
+  services: RuntimeToolServices,
+  exec: ToolRunContext,
+  engineSessionId: string,
+): Promise<ExternalDoc> {
+  await services.turnLeases.touchDocument(sessionIdOf(exec), engineSessionId)
+  return readDocRaw(services.engine, engineSessionId)
+}
+
+function readDocRaw(engine: EngineService, engineSessionId: string): Promise<ExternalDoc> {
   return engine.fetchJson<ExternalDoc>(`/sessions/${encodeURIComponent(engineSessionId)}/doc?format=qingml`)
 }
 
-function readDocWithLines(engine: EngineService, engineSessionId: string): Promise<ExternalDocReadResponse> {
-  return engine.fetchJson<ExternalDocReadResponse>(`/sessions/${encodeURIComponent(engineSessionId)}/doc?lines=1`)
+async function readDocWithLines(
+  services: RuntimeToolServices,
+  exec: ToolRunContext,
+  engineSessionId: string,
+): Promise<ExternalDocReadResponse> {
+  await services.turnLeases.touchDocument(sessionIdOf(exec), engineSessionId)
+  return services.engine.fetchJson<ExternalDocReadResponse>(`/sessions/${encodeURIComponent(engineSessionId)}/doc?lines=1`)
 }
 
-async function readPmDoc(engine: EngineService, engineSessionId: string): Promise<PmDoc> {
+async function readPmDoc(
+  services: RuntimeToolServices,
+  exec: ToolRunContext,
+  engineSessionId: string,
+): Promise<PmDoc> {
+  await services.turnLeases.touchDocument(sessionIdOf(exec), engineSessionId)
+  return readPmDocRaw(services.engine, engineSessionId)
+}
+
+async function readPmDocRaw(engine: EngineService, engineSessionId: string): Promise<PmDoc> {
   const response = await engine.fetchJson<ExternalPmDocReadResponse>(
     `/sessions/${encodeURIComponent(engineSessionId)}/doc?format=pm`,
   )
@@ -1999,6 +2047,15 @@ async function readPmDoc(engine: EngineService, engineSessionId: string): Promis
 }
 
 async function readReviewCandidate(
+  services: RuntimeToolServices,
+  exec: ToolRunContext,
+  engineSessionId: string,
+): Promise<{ qingml: string; pmDoc: PmDoc; renderModel: ExternalReviewRenderModelResponse }> {
+  await services.turnLeases.touchDocument(sessionIdOf(exec), engineSessionId)
+  return readReviewCandidateRaw(services.engine, engineSessionId)
+}
+
+async function readReviewCandidateRaw(
   engine: EngineService,
   engineSessionId: string,
 ): Promise<{ qingml: string; pmDoc: PmDoc; renderModel: ExternalReviewRenderModelResponse }> {
@@ -2245,6 +2302,8 @@ function installTurnTracking(
 ): void {
   ctx.effect(() => ctx.on('agent/pre-step', async (payload, next) => {
     const dshSessionId = String(payload.agent.id)
+    // 这里只登记回合，绝不申领租约；纯聊天回合即使刷新状态缓存也必须零 begin。
+    services.turnLeases.openTurn(dshSessionId, payload.turn)
     reviewTurns.begin(dshSessionId, payload.turn)
     writeTurns.begin(dshSessionId, payload.turn)
     readTurns.begin(dshSessionId, payload.turn)
@@ -2258,8 +2317,15 @@ function installTurnTracking(
     }
     return next()
   }))
-  ctx.effect(() => ctx.on('agent/disposed', ({ agent }) => {
+  ctx.effect(() => ctx.on('agent/turn-stopping', async ({ agent, turn }) => {
+    await services.turnLeases.endTurn(String(agent.id), turn)
+  }))
+  ctx.effect(() => ctx.on('agent/error', async ({ agent, turn }) => {
+    await services.turnLeases.endTurn(String(agent.id), turn)
+  }))
+  ctx.effect(() => ctx.on('agent/disposed', async ({ agent }) => {
     const dshSessionId = String(agent.id)
+    await services.turnLeases.disposeAgent(dshSessionId)
     reviewTurns.dispose(dshSessionId)
     writeTurns.dispose(dshSessionId)
     readTurns.dispose(dshSessionId)

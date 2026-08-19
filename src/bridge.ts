@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import type {
@@ -41,6 +42,131 @@ import {
 
 const MAX_ASSET_BYTES = 50 * 1024 * 1024
 const MAX_ASSET_JSON_BYTES = 70 * 1024 * 1024
+export const TURN_SIGNAL_HEARTBEAT_MS = 17_000
+
+type TurnSignalAction = 'begin' | 'end' | 'heartbeat'
+
+interface TrackedAgentTurn {
+  turn: number
+  turnId: string
+  engineSessionId?: string
+  beginAttempt?: Promise<boolean>
+  heartbeat?: ReturnType<typeof setInterval>
+  heartbeatInFlight?: Promise<boolean>
+  closing: boolean
+  closePromise?: Promise<void>
+}
+
+/**
+ * Agent 回合的文稿忙碌租约。pre-step 只登记回合；真正的 begin 延迟到工具首次读写文稿，
+ * 因而纯聊天回合不会冻结编辑器。signal 是兼容性增强，任何失败（尤其旧引擎 404）
+ * 都只让锁能力降级，不能改变原文稿请求的成败。
+ */
+export class AgentTurnLeaseCoordinator {
+  private readonly turns = new Map<string, TrackedAgentTurn>()
+
+  constructor(
+    private readonly engine: EngineService,
+    private readonly heartbeatMs = TURN_SIGNAL_HEARTBEAT_MS,
+    private readonly createTurnId: () => string = randomUUID,
+  ) {}
+
+  openTurn(dshSessionId: string, turn: number): void {
+    const current = this.turns.get(dshSessionId)
+    if (current?.turn === turn && !current.closing) return
+    if (current) {
+      this.turns.delete(dshSessionId)
+      void this.close(current)
+    }
+    this.turns.set(dshSessionId, {
+      turn,
+      turnId: this.createTurnId(),
+      closing: false,
+    })
+  }
+
+  /** 首次触稿先尝试 begin；并发的 GET /doc 共享同一个 Promise，保证一个租约段仅一次 begin。 */
+  async touchDocument(dshSessionId: string, engineSessionId: string): Promise<string | undefined> {
+    const current = this.turns.get(dshSessionId)
+    if (!current || current.closing) return undefined
+    if (!current.engineSessionId) current.engineSessionId = engineSessionId
+    if (!current.beginAttempt) {
+      current.beginAttempt = this.signal(current.engineSessionId, 'begin', current.turnId)
+        .then((began) => {
+          if (began && !current.closing && this.turns.get(dshSessionId) === current) {
+            this.startHeartbeat(current)
+          }
+          return began
+        })
+    }
+    await current.beginAttempt
+    return current.turnId
+  }
+
+  async endTurn(dshSessionId: string, turn: number): Promise<void> {
+    const current = this.turns.get(dshSessionId)
+    if (!current || current.turn !== turn) return
+    this.turns.delete(dshSessionId)
+    await this.close(current)
+  }
+
+  async disposeAgent(dshSessionId: string): Promise<void> {
+    const current = this.turns.get(dshSessionId)
+    if (!current) return
+    this.turns.delete(dshSessionId)
+    await this.close(current)
+  }
+
+  dispose(): void {
+    const active = [...this.turns.values()]
+    this.turns.clear()
+    for (const current of active) void this.close(current)
+  }
+
+  private startHeartbeat(current: TrackedAgentTurn): void {
+    if (current.heartbeat || current.closing || !current.engineSessionId) return
+    current.heartbeat = setInterval(() => {
+      if (current.closing || current.heartbeatInFlight || !current.engineSessionId) return
+      const pending = this.signal(current.engineSessionId, 'heartbeat', current.turnId)
+      current.heartbeatInFlight = pending
+      void pending.finally(() => {
+        if (current.heartbeatInFlight === pending) current.heartbeatInFlight = undefined
+      })
+    }, this.heartbeatMs)
+    current.heartbeat.unref?.()
+  }
+
+  private close(current: TrackedAgentTurn): Promise<void> {
+    if (current.closePromise) return current.closePromise
+    current.closing = true
+    if (current.heartbeat) {
+      clearInterval(current.heartbeat)
+      current.heartbeat = undefined
+    }
+    current.closePromise = (async () => {
+      if (!current.engineSessionId || !current.beginAttempt) return
+      await current.beginAttempt
+      await this.signal(current.engineSessionId, 'end', current.turnId)
+    })()
+    return current.closePromise
+  }
+
+  private async signal(
+    engineSessionId: string,
+    action: TurnSignalAction,
+    turnId: string,
+  ): Promise<boolean> {
+    try {
+      await this.engine.fetchJson(
+        `/sessions/${encodeURIComponent(engineSessionId)}/turn-signal`,
+        { method: 'POST', body: JSON.stringify({ action, turnId }) },
+      )
+      return true
+    } catch {
+      return false
+    }
+  }
+}
 
 interface Subscriber {
   dshSessionId: string
