@@ -147,30 +147,50 @@ function parseDraftNumber(raw: string): number | undefined {
 
 const DRAFT_NUMBER_SOURCE = String.raw`(?:\d[\d,，]*|[零〇一二两三四五六七八九十百千万]+)`
 
-function draftRequirementsOf(input: DraftRequirementInput): DraftRequirements {
+/**
+ * 「每节约 300 字」这类**分项**字数不是全文约束。模型把「1200 字分四节」自然写成
+ * 「每节约 300 字」放进 brief 时,若按全文目标解析会推出 max=330,与真实下限 1200
+ * 自相矛盾,导致写多少都不合格、自动重试永不闭合(真机 11 分钟未落稿)。
+ */
+const PER_UNIT_LOOKBEHIND = /每\s*(?:一)?\s*(?:小?节|段(?:落)?|章|部分|篇|页|条|项|个)[^，,。;；]{0,8}$/
+
+function isPerUnitLength(text: string, matchIndex: number): boolean {
+  return PER_UNIT_LOOKBEHIND.test(text.slice(Math.max(0, matchIndex - 20), matchIndex))
+}
+
+export function draftRequirementsOf(input: DraftRequirementInput): DraftRequirements {
   const text = `${input.brief}\n${input.style ?? ''}`
   const length: DraftLengthRequirement = {}
   const range = new RegExp(`(${DRAFT_NUMBER_SOURCE})\\s*(?:-|—|–|~|～|至|到)\\s*(${DRAFT_NUMBER_SOURCE})\\s*字`).exec(text)
-  if (range) {
+  if (range && !isPerUnitLength(text, range.index)) {
     length.min = parseDraftNumber(range[1]!)
     length.max = parseDraftNumber(range[2]!)
   }
   for (const match of text.matchAll(new RegExp(`(?:至少|不少于|不低于|最低)\\s*(${DRAFT_NUMBER_SOURCE})\\s*字|(${DRAFT_NUMBER_SOURCE})\\s*字以上`, 'g'))) {
+    if (isPerUnitLength(text, match.index)) continue
     const value = parseDraftNumber(match[1] ?? match[2] ?? '')
     if (value !== undefined) length.min = Math.max(length.min ?? 0, value)
   }
   for (const match of text.matchAll(new RegExp(`(?:至多|不超过|不多于|最多|控制在)\\s*(${DRAFT_NUMBER_SOURCE})\\s*字(?:以内|以下)?|(${DRAFT_NUMBER_SOURCE})\\s*字(?:以内|以下)`, 'g'))) {
+    if (isPerUnitLength(text, match.index)) continue
     const value = parseDraftNumber(match[1] ?? match[2] ?? '')
     if (value !== undefined) length.max = Math.min(length.max ?? Number.POSITIVE_INFINITY, value)
   }
   const approximate = new RegExp(`(?:大概|约莫|约|差不多)\\s*(${DRAFT_NUMBER_SOURCE})\\s*字|(${DRAFT_NUMBER_SOURCE})\\s*字\\s*(?:左右|上下)`).exec(text)
-  if (approximate) {
+  if (approximate && !isPerUnitLength(text, approximate.index)) {
     const target = parseDraftNumber(approximate[1] ?? approximate[2] ?? '')
-    if (target !== undefined) {
+    // 「约 N 字」只是软目标:已有显式下限/上限时不得用它反过来收窄,否则两者一冲突就永远不合格。
+    if (target !== undefined && length.min === undefined && length.max === undefined) {
       length.target = target
-      length.min = Math.max(length.min ?? 0, Math.floor(target * 0.9))
-      length.max = Math.min(length.max ?? Number.POSITIVE_INFINITY, Math.ceil(target * 1.1))
+      length.min = Math.floor(target * 0.9)
+      length.max = Math.ceil(target * 1.1)
+    } else if (target !== undefined) {
+      length.target = target
     }
+  }
+  // 兜底:上下限自相矛盾时,显式下限优先,丢掉不可能满足的上限,绝不把矛盾交给重试循环。
+  if (length.min !== undefined && length.max !== undefined && length.min > length.max) {
+    delete length.max
   }
 
   const paragraphMatch = new RegExp(`(?:必须|务必|严格|正好|恰好|分成?|写成?|共|一共)?\\s*(${DRAFT_NUMBER_SOURCE})\\s*(?:个)?段(?:普通)?正文`).exec(text)

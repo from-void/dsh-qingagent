@@ -7,7 +7,7 @@ import type { BridgeHub } from '../src/bridge.js'
 import { DRAFT_MARK_COLORS, type BridgeEvent, type EngineStatusSnapshot, type ExternalDoc } from '../src/contracts.js'
 import { EngineHttpError, type EngineService } from '../src/engine.js'
 import { QINGJIAN_DOWNLOAD_URL } from '../src/onboarding.js'
-import { registerTools } from '../src/tools.js'
+import { draftRequirementsOf, registerTools } from '../src/tools.js'
 import type { TelemetryCapture } from '../src/telemetry.js'
 
 const DRAFT_ONE = '<title>测试稿</title><h1>开篇</h1><p>第一版正文。</p>'
@@ -1991,5 +1991,35 @@ describe('局部 op 原始标签防线', () => {
       ops: [{ kind: 'strReplace', old: '对比', new: '对比:a<b 且 3 < 5' }],
     }, exec(undefined, 'edit-lt', 'qing_edit_draft'))
     expect(proposalCalls).toBe(1)
+  })
+})
+
+// v1 真机回归:模型把「1200 字分四节」写成「每节约 300 字」,旧解析把它当全文目标推出 max=330,
+// 与下限 1200 自相矛盾 → 写多少都不合格、自动重试 11 分钟未落稿。
+describe('写稿字数需求解析', () => {
+  const requirementsOf = (brief: string) => draftRequirementsOf({ brief })
+
+  it('每节字数不得当作全文约束', () => {
+    const r = requirementsOf('不少于 1200 字，分四个小节，每节约 300 字，每节带小标题。')
+    expect(r.length?.min).toBe(1200)
+    expect(r.length?.max).toBeUndefined()
+  })
+
+  it('显式下限存在时,「约 N 字」不得反过来收窄成上限', () => {
+    const r = requirementsOf('不少于 1200 字，整体约 1500 字。')
+    expect(r.length?.min).toBe(1200)
+    expect(r.length?.max === undefined || r.length.max >= 1200).toBe(true)
+  })
+
+  it('只给「约 N 字」时仍按 ±10% 成带', () => {
+    const r = requirementsOf('写一篇约 800 字的散文。')
+    expect(r.length?.min).toBe(720)
+    expect(r.length?.max).toBe(881) // 800*1.1 的浮点结果,沿用既有行为
+  })
+
+  it('上下限自相矛盾时丢掉上限,不把矛盾交给重试', () => {
+    const r = requirementsOf('不少于 1200 字，不超过 300 字。')
+    expect(r.length?.min).toBe(1200)
+    expect(r.length?.max).toBeUndefined()
   })
 })
