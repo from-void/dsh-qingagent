@@ -83,9 +83,13 @@ describe('组件级 CSS 抽取清单', () => {
       'node_modules/@deepseek-ai/dsh-client-ui-layout/lib/client.js',
       'utf8',
     )
+    const bundlerBridge = readFileSync('tsdown.config.ts', 'utf8')
 
     expect(launcher).toContain('document.body.appendChild(host)')
     expect(launcher).toContain('host.dataset.drawioEditorHost = "true"')
+    expect(bundlerBridge).not.toContain("id.endsWith('/drawioEditorLauncher.tsx')")
+    expect(bundlerBridge).not.toContain("id.endsWith('/diagram/GraphDiagramView.tsx')")
+    expect(bundlerBridge).not.toContain("id.endsWith('/MediaZoomFullscreen.tsx')")
     // 当前 dsh 真机层级:输入自身 z-index:auto，sticky composer=7，Tab=1，layout overlay=20。
     expect(conversationBundle).toMatch(/\.uV2eYG_input\{[^}]*position:absolute/)
     expect(conversationBundle).toMatch(/\.wSkVaW_tabs\{z-index:1;/)

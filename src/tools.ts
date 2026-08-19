@@ -52,6 +52,7 @@ import {
   injectDocState,
   type DocStateSnapshot,
 } from './docState.js'
+import { sanitizeUserVisibleText } from './userVisibleText.js'
 
 interface ToolServices {
   ctx: Context
@@ -73,6 +74,7 @@ const textBlock = (text: string) => [{ type: 'text' as const, text }]
 
 const REVIEW_END_MESSAGE = '改动已提交审阅，右侧面板等待用户裁决。本次工具调用结束——不要重写、不要读稿复核、不要自动裁决；收尾说明由工具卡向用户展示，本回合不再产生任何输出。'
 const REVIEW_REPEAT_ERROR = '本回合已裁决过一次，禁止连环裁决；等待用户指示'
+const WRITE_REPEAT_ERROR = '本回合已经成功生成过一版完整文稿，禁止再次整篇生成；等待用户下一轮指示。'
 const REVIEW_PENDING_ERROR = '文稿正在审阅中。待审内容可能是你此前轮次提交的,也可能来自其他会话——不要断言归属。先用 ask_user 向用户说明存在待审稿,经用户明确授权后才可处置;不得代为提交或放弃。'
 const STR_REPLACE_PLAIN_TEXT_ERROR = 'old 必须是纯文本内容,不要带 ## 等 markdown 标记'
 const STR_REPLACE_LINES_NOTICE = '注意:strReplace 的 old 用纯文本,不要带行首 ## - 等标记。'
@@ -91,6 +93,141 @@ const RAW_TAG_ERROR = '检测到 QingML/HTML 标签:局部操作(strReplace/inse
 function isBodylessDraft(qingml: string): boolean {
   return !completeTopLevelBlocks(qingml).blocks.some((block) =>
     !/^<title(?:\s|>)/i.test(block) && !/^<h[1-6](?:\s|>)/i.test(block))
+}
+
+interface DraftLengthRequirement {
+  min?: number
+  max?: number
+  target?: number
+}
+
+interface DraftRequirements {
+  length?: DraftLengthRequirement
+  paragraphs?: number
+  outline?: string[]
+}
+
+interface DraftRequirementInput {
+  brief: string
+  title?: string
+  outline?: string[]
+  style?: string
+}
+
+const CHINESE_DIGITS: Record<string, number> = {
+  零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4,
+  五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
+}
+
+function parseDraftNumber(raw: string): number | undefined {
+  const normalized = raw.replace(/[，,\s]/g, '')
+  if (/^\d+$/.test(normalized)) return Number(normalized)
+  if (!/^[零〇一二两三四五六七八九十百千万]+$/.test(normalized)) return undefined
+  let total = 0
+  let section = 0
+  let digit = 0
+  for (const char of normalized) {
+    if (char in CHINESE_DIGITS) {
+      digit = CHINESE_DIGITS[char]!
+      continue
+    }
+    const unit = char === '十' ? 10 : char === '百' ? 100 : char === '千' ? 1_000 : 10_000
+    if (unit === 10_000) {
+      section = (section + digit) * unit
+      total += section
+      section = 0
+      digit = 0
+    } else {
+      section += (digit || 1) * unit
+      digit = 0
+    }
+  }
+  return total + section + digit
+}
+
+const DRAFT_NUMBER_SOURCE = String.raw`(?:\d[\d,，]*|[零〇一二两三四五六七八九十百千万]+)`
+
+function draftRequirementsOf(input: DraftRequirementInput): DraftRequirements {
+  const text = `${input.brief}\n${input.style ?? ''}`
+  const length: DraftLengthRequirement = {}
+  const range = new RegExp(`(${DRAFT_NUMBER_SOURCE})\\s*(?:-|—|–|~|～|至|到)\\s*(${DRAFT_NUMBER_SOURCE})\\s*字`).exec(text)
+  if (range) {
+    length.min = parseDraftNumber(range[1]!)
+    length.max = parseDraftNumber(range[2]!)
+  }
+  for (const match of text.matchAll(new RegExp(`(?:至少|不少于|不低于|最低)\\s*(${DRAFT_NUMBER_SOURCE})\\s*字|(${DRAFT_NUMBER_SOURCE})\\s*字以上`, 'g'))) {
+    const value = parseDraftNumber(match[1] ?? match[2] ?? '')
+    if (value !== undefined) length.min = Math.max(length.min ?? 0, value)
+  }
+  for (const match of text.matchAll(new RegExp(`(?:至多|不超过|不多于|最多|控制在)\\s*(${DRAFT_NUMBER_SOURCE})\\s*字(?:以内|以下)?|(${DRAFT_NUMBER_SOURCE})\\s*字(?:以内|以下)`, 'g'))) {
+    const value = parseDraftNumber(match[1] ?? match[2] ?? '')
+    if (value !== undefined) length.max = Math.min(length.max ?? Number.POSITIVE_INFINITY, value)
+  }
+  const approximate = new RegExp(`(?:大概|约莫|约|差不多)\\s*(${DRAFT_NUMBER_SOURCE})\\s*字|(${DRAFT_NUMBER_SOURCE})\\s*字\\s*(?:左右|上下)`).exec(text)
+  if (approximate) {
+    const target = parseDraftNumber(approximate[1] ?? approximate[2] ?? '')
+    if (target !== undefined) {
+      length.target = target
+      length.min = Math.max(length.min ?? 0, Math.floor(target * 0.9))
+      length.max = Math.min(length.max ?? Number.POSITIVE_INFINITY, Math.ceil(target * 1.1))
+    }
+  }
+
+  const paragraphMatch = new RegExp(`(?:必须|务必|严格|正好|恰好|分成?|写成?|共|一共)?\\s*(${DRAFT_NUMBER_SOURCE})\\s*(?:个)?段(?:普通)?正文`).exec(text)
+    ?? new RegExp(`(?:必须|务必|严格|正好|恰好|分成?|写成?|共|一共)\\s*(${DRAFT_NUMBER_SOURCE})\\s*段`).exec(text)
+  const paragraphs = paragraphMatch ? parseDraftNumber(paragraphMatch[1]!) : undefined
+  const outline = input.outline?.map((heading) => heading.trim()).filter(Boolean)
+  return {
+    ...(length.min !== undefined || length.max !== undefined || length.target !== undefined ? { length } : {}),
+    ...(paragraphs !== undefined ? { paragraphs } : {}),
+    ...(outline?.length ? { outline } : {}),
+  }
+}
+
+function draftRequirementFailures(qingml: string, requirements: DraftRequirements): string[] {
+  const failures: string[] = []
+  if (requirements.length) {
+    const words = countWords(qingml)
+    if (requirements.length.min !== undefined && words < requirements.length.min) {
+      failures.push(`篇幅仅 ${words} 字，少于 ${requirements.length.min} 字`)
+    }
+    if (requirements.length.max !== undefined && words > requirements.length.max) {
+      failures.push(`篇幅为 ${words} 字，超过 ${requirements.length.max} 字`)
+    }
+  }
+  if (requirements.paragraphs !== undefined) {
+    const paragraphs = completeTopLevelBlocks(qingml).blocks.filter((block) => /^<p(?:\s|>)/i.test(block)).length
+    if (paragraphs !== requirements.paragraphs) {
+      failures.push(`普通正文应为 ${requirements.paragraphs} 段，实际 ${paragraphs} 段`)
+    }
+  }
+  if (requirements.outline) {
+    const outline = outlineOf(qingml)
+    const headings = outline.headings.map((heading) => heading.text)
+    const withoutDocumentTitle = headings[0] === outline.title ? headings.slice(1) : headings
+    const matches = (candidate: readonly string[]) =>
+      candidate.length === requirements.outline!.length &&
+      candidate.every((heading, index) => heading === requirements.outline![index])
+    if (!matches(headings) && !matches(withoutDocumentTitle)) {
+      failures.push(`提纲应依次为「${requirements.outline.join('」「')}」，实际为「${withoutDocumentTitle.join('」「')}」`)
+    }
+  }
+  return failures
+}
+
+function forceExplicitDraftTitle(qingml: string, title: string | undefined): string {
+  const exact = title?.trim()
+  if (!exact) return qingml
+  const escaped = exact
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+  const tag = `<title>${escaped}</title>`
+  return /<title(?:\s[^>]*)?>[\s\S]*?<\/title>/i.test(qingml)
+    ? qingml.replace(/<title(?:\s[^>]*)?>[\s\S]*?<\/title>/i, tag)
+    : `${tag}${qingml}`
 }
 
 /** P14(RC13):每个工具返回带当前聚焦文稿,纠偏模型沿用旧 docRef。 */
@@ -182,8 +319,9 @@ export function registerTools(services: ToolServices): void {
   }
   const { ctx } = runtime
   const reviewTurns = new ReviewTurnTracker()
-  installTurnTracking(ctx, reviewTurns, runtime)
-  ctx.effect(() => ctx.tools.register(writeDraftTool(runtime)))
+  const writeTurns = new WriteTurnTracker()
+  installTurnTracking(ctx, reviewTurns, writeTurns, runtime)
+  ctx.effect(() => ctx.tools.register(writeDraftTool(runtime, writeTurns)))
   ctx.effect(() => ctx.tools.register(editDraftTool(runtime)))
   ctx.effect(() => ctx.tools.register(reviewCommitTool(runtime, reviewTurns)))
   ctx.effect(() => ctx.tools.register(readDraftTool(runtime)))
@@ -191,7 +329,7 @@ export function registerTools(services: ToolServices): void {
   ctx.effect(() => ctx.tools.register(focusDocTool(runtime)))
 }
 
-function writeDraftTool(services: RuntimeToolServices) {
+function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTracker) {
   return defineTool({
     name: 'qing_write_draft',
     description: '根据写作简报生成完整 QingML 文稿并提交到青简。省略 docRef 会新建文稿；改写已有文稿必须传当前会话内的 docRef。',
@@ -225,6 +363,8 @@ function writeDraftTool(services: RuntimeToolServices) {
           footnotes: { type: 'integer', required: true, description: '文稿实际包含的脚注数。' },
           formulas: { type: 'integer', required: true, description: '文稿实际包含的公式数。' },
           automaticConversions: { type: 'integer', required: true, description: '已自动整理为正确格式的脚注与公式数。' },
+          lengthStatus: { type: 'string', enum: ['not-requested', 'met', 'unmet'], required: true, description: '显式篇幅要求的确定性验收结果。' },
+          structureStatus: { type: 'string', enum: ['not-requested', 'met', 'unmet'], required: true, description: '显式段落数/提纲要求的确定性验收结果。' },
           warning: { type: 'string', description: '落库块数与提交块数不符时的缺损警告。' },
         },
       },
@@ -271,6 +411,8 @@ function writeDraftTool(services: RuntimeToolServices) {
       try {
         await assertEngineOnline(services.engine)
         if (args.docRef) services.freshness.assertFresh(exec)
+        writeTurns.assertNoSuccessfulWrite(exec)
+        const requirements = draftRequirementsOf(args)
         let bound
         if (args.docRef) {
           if (!services.bindings.hasDoc(dshSessionId, args.docRef)) {
@@ -305,10 +447,38 @@ function writeDraftTool(services: RuntimeToolServices) {
             qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, retryPrompt)
             if (isBodylessDraft(qingml)) throw new Error(EMPTY_DRAFT_ERROR)
           }
+          qingml = forceExplicitDraftTitle(qingml, args.title)
           let sourceConversion = convertQingmlSourceSyntax(qingml)
           qingml = sourceConversion.qingml
           automaticConversions = sourceConversion.converted
           if (sourceConversion.leaks.length > 0) throw new Error(SOURCE_SYNTAX_LEAK_ERROR)
+          let requirementFailures = draftRequirementFailures(qingml, requirements)
+          if (requirementFailures.length > 0) {
+            retried = true
+            const retryPrompt = makeDraftPrompt({
+              brief: args.brief,
+              title: args.title,
+              outline: args.outline,
+              style: args.style,
+              correction: [
+                `上一次首稿未满足可确定检查的明确要求：${requirementFailures.join('；')}。`,
+                '请立即重写完整 QingML 并一次修正这些问题，只输出修正后的完整文稿。',
+                `上一次输出：\n${qingml}`,
+              ].join('\n'),
+            })
+            generation = randomUUID()
+            qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, retryPrompt)
+            if (isBodylessDraft(qingml)) throw new Error(EMPTY_DRAFT_ERROR)
+            qingml = forceExplicitDraftTitle(qingml, args.title)
+            sourceConversion = convertQingmlSourceSyntax(qingml)
+            qingml = sourceConversion.qingml
+            automaticConversions = sourceConversion.converted
+            if (sourceConversion.leaks.length > 0) throw new Error(SOURCE_SYNTAX_LEAK_ERROR)
+            requirementFailures = draftRequirementFailures(qingml, requirements)
+            if (requirementFailures.length > 0) {
+              throw new Error(`自动修正后仍未满足明确要求（${requirementFailures.join('；')}），未提交文稿。`)
+            }
+          }
           try {
             proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
           } catch (error) {
@@ -323,12 +493,18 @@ function writeDraftTool(services: RuntimeToolServices) {
             generation = randomUUID()
             qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, retryPrompt)
             if (isBodylessDraft(qingml)) throw new Error(EMPTY_DRAFT_ERROR)
+            qingml = forceExplicitDraftTitle(qingml, args.title)
             sourceConversion = convertQingmlSourceSyntax(qingml)
             qingml = sourceConversion.qingml
             automaticConversions = sourceConversion.converted
             if (sourceConversion.leaks.length > 0) throw new Error(SOURCE_SYNTAX_LEAK_ERROR)
+            const retryFailures = draftRequirementFailures(qingml, requirements)
+            if (retryFailures.length > 0) {
+              throw new Error(`格式修正后不再满足明确要求（${retryFailures.join('；')}），未提交文稿。`)
+            }
             proposal = await propose(services.engine, bound.engineSessionId, docBefore.docVersion, qingml)
           }
+          writeTurns.markSuccessful(exec)
         } catch (error) {
           const safeError = sanitizeToolBoundaryError(error)
           services.bridge.emit(dshSessionId, {
@@ -357,12 +533,19 @@ function writeDraftTool(services: RuntimeToolServices) {
           const wholeDocReview = reviewCandidate
             ? isWholeDocReview(official, reviewCandidate.renderModel, true)
             : false
-          const title = official.title?.trim() || extractTitle(renderedQingml, args.title?.trim() || bound.title)
+          const reviewSuggestionIds = reviewCandidate
+            ? reviewingSuggestionIds(
+                reviewCandidate.renderModel,
+                proposal.status === 'review' ? proposal.patchIds : [],
+              )
+            : []
+          const title = args.title?.trim() || official.title?.trim() || extractTitle(renderedQingml, bound.title)
           await services.bindings.updateTitle(dshSessionId, bound.engineSessionId, title)
           // committed 用权威落库稿，review 用 render-model 候选稿；两者都避开本地生成文本与
           // 引擎实际接受结构不一致时的误报。
           const outline = outlineOf(renderedQingml, title)
           const structureFacts = structureFactsOf(renderedQingml)
+          const finalRequirementFailures = draftRequirementFailures(renderedQingml, requirements)
           const submittedBlocks = completeTopLevelBlocks(qingml).blocks
             .filter((block) => !/^<title(?:\s|>)/i.test(block)).length
           const lostBlocks = Math.max(0, submittedBlocks - outline.blocks)
@@ -381,7 +564,7 @@ function writeDraftTool(services: RuntimeToolServices) {
               engineSessionId: bound.engineSessionId,
               generation,
               doc: official,
-              count: proposal.count,
+              count: reviewSuggestionIds.length,
               blocks: outline.blocks,
               words,
             })
@@ -399,8 +582,14 @@ function writeDraftTool(services: RuntimeToolServices) {
             structure: outline.structure,
             title,
             docVersion: official.docVersion,
-            ...(proposal.status === 'review' ? { patchCount: proposal.count } : {}),
+            ...(proposal.status === 'review' ? { patchCount: reviewSuggestionIds.length } : {}),
           }, true)
+          const lengthStatus: 'not-requested' | 'met' | 'unmet' = requirements.length
+            ? finalRequirementFailures.some((failure) => failure.startsWith('篇幅')) ? 'unmet' : 'met'
+            : 'not-requested'
+          const structureStatus: 'not-requested' | 'met' | 'unmet' = requirements.outline || requirements.paragraphs !== undefined
+            ? finalRequirementFailures.some((failure) => !failure.startsWith('篇幅')) ? 'unmet' : 'met'
+            : 'not-requested'
           return {
             title,
             blocks: outline.blocks,
@@ -416,8 +605,10 @@ function writeDraftTool(services: RuntimeToolServices) {
             footnotes: structureFacts.footnotes,
             formulas: structureFacts.formulas,
             automaticConversions,
+            lengthStatus,
+            structureStatus,
             ...(proposal.status === 'review'
-              ? { patchCount: proposal.count, patchIds: proposal.patchIds }
+              ? { patchCount: reviewSuggestionIds.length, patchIds: reviewSuggestionIds }
               : {}),
             outline: outline.headings.map((heading) => `${'  '.repeat(Math.max(0, heading.level - 1))}${heading.text}`),
           }
@@ -682,6 +873,12 @@ function editDraftTool(services: RuntimeToolServices) {
         const wholeDocReview = reviewCandidate
           ? isWholeDocReview(official, reviewCandidate.renderModel, true)
           : false
+        const reviewSuggestionIds = reviewCandidate
+          ? reviewingSuggestionIds(
+              reviewCandidate.renderModel,
+              proposal.status === 'review' ? proposal.patchIds : [],
+            )
+          : []
         const outline = outlineOf(renderedQingml, official.title)
         await services.bindings.updateTitle(dshSessionId, engineSessionId, outline.title)
         if (proposal.status === 'committed') {
@@ -697,7 +894,7 @@ function editDraftTool(services: RuntimeToolServices) {
             type: 'doc-review-pending',
             engineSessionId,
             doc: official,
-            count: proposal.count,
+            count: reviewSuggestionIds.length,
             blocks: outline.blocks,
             words,
           })
@@ -716,12 +913,12 @@ function editDraftTool(services: RuntimeToolServices) {
           structure: outline.structure,
           title: outline.title,
           docVersion: official.docVersion,
-          ...(proposal.status === 'review' ? { patchCount: proposal.count } : {}),
+          ...(proposal.status === 'review' ? { patchCount: reviewSuggestionIds.length } : {}),
         }, true)
         return {
           status: proposal.status,
           message: (proposal.status === 'review'
-            ? `${docStateLine('pendingReview', proposal.count)}${countLine}\n内容构成：${outline.structure}。\n${REVIEW_END_MESSAGE}`
+            ? `${docStateLine('pendingReview', reviewSuggestionIds.length)}${countLine}\n内容构成：${outline.structure}。\n${REVIEW_END_MESSAGE}`
             : `${docStateLine('editing')}\n局部修改已提交到《${outline.title}》。${countLine}\n内容构成：${outline.structure}。`) + focusSuffix(services, dshSessionId),
           engineSessionId,
           title: outline.title,
@@ -729,10 +926,10 @@ function editDraftTool(services: RuntimeToolServices) {
           structure: outline.structure,
           words,
           docVersion: official.docVersion,
-          reviewCount: proposal.status === 'review' ? proposal.count : 0,
+          reviewCount: proposal.status === 'review' ? reviewSuggestionIds.length : 0,
           opResults: prepared.opResults,
           affectedCount: prepared.affectedCount,
-          ...(proposal.status === 'review' ? { patchIds: proposal.patchIds } : {}),
+          ...(proposal.status === 'review' ? { patchIds: reviewSuggestionIds } : {}),
           wholeDocReview,
         }
       } catch (error) {
@@ -901,8 +1098,9 @@ function readDraftTool(services: RuntimeToolServices) {
       const currentQingml = currentReviewCandidate?.qingml ?? doc.qingml
       const currentPmDoc = currentReviewCandidate?.pmDoc ?? basePmDoc
       const currentOutline = outlineOf(currentQingml, doc.title)
-      const currentPatchCount = currentReviewCandidate?.renderModel.suggestions
-        .filter((suggestion) => suggestion.status === 'reviewing').length
+      const currentPatchCount = currentReviewCandidate
+        ? reviewingSuggestionIds(currentReviewCandidate.renderModel).length
+        : undefined
       if (mode === 'blocks') {
         const outline = outlineOf(doc.qingml, doc.title)
         const lines = ['以下为已提交基线的块 ID 清单(供 deleteBlock/deleteListItem 使用;缩进项为清单项)。']
@@ -1213,8 +1411,9 @@ export async function refreshDocState(
   const qingml = reviewCandidate?.qingml ?? doc.qingml
   const pmDoc = reviewCandidate?.pmDoc ?? basePmDoc
   const outline = outlineOf(qingml, doc.title ?? active.title)
-  const patchCount = reviewCandidate?.renderModel.suggestions
-    .filter((suggestion) => suggestion.status === 'reviewing').length
+  const patchCount = reviewCandidate
+    ? reviewingSuggestionIds(reviewCandidate.renderModel).length
+    : undefined
   return cache.update(dshSessionId, {
     state: doc.state,
     words: countDocVisibleChars(pmDoc),
@@ -1336,35 +1535,50 @@ interface PreparedEditOps {
   affectedCount: number
 }
 
+interface ExpandedEditOps {
+  ops: ExternalEditProposalOp[]
+  origins: number[]
+  structuralReplacements: Set<number>
+}
+
 async function prepareEditOps(
   engine: EngineService,
   engineSessionId: string,
   ops: ExternalEditProposalOp[],
   suppliedPmDoc?: PmDoc,
 ): Promise<PreparedEditOps> {
-  const lineOps = ops.flatMap((op, index) => op.kind === 'insertAfterLine' ? [{ op, index }] : [])
-  const strReplaceOps = ops.flatMap((op, index) => op.kind === 'strReplace' ? [{ op, index }] : [])
-  if (lineOps.length === 0 && strReplaceOps.length === 0) {
+  const needsPmDoc = ops.some((op) => op.kind === 'insertAfterLine' || op.kind === 'strReplace')
+  if (!needsPmDoc) {
     return { ops, opResults: [], affectedCount: 0 }
   }
+  const pmDoc = suppliedPmDoc ?? await readPmDoc(engine, engineSessionId)
+  const sentenceSafeOps = ops.map((op) => expandFinalSentenceReplacement(pmDoc, op))
+  const expanded = expandMarkdownBlockReplacements(pmDoc, sentenceSafeOps)
+  const lineOps = expanded.ops.flatMap((op, index) => op.kind === 'insertAfterLine' ? [{ op, index }] : [])
+  const strReplaceOps = expanded.ops.flatMap((op, index) => op.kind === 'strReplace' ? [{ op, index }] : [])
 
   for (const { index } of lineOps) {
-    if (ops.slice(0, index).some((op) => LINE_SHIFTING_BLOCK_OPS.has(op.kind))) {
+    if (expanded.ops.slice(0, index).some((op) => LINE_SHIFTING_BLOCK_OPS.has(op.kind))) {
       throw new Error('这批修改先增删了内容，后面的旧行号会失效。请重新读取文稿后改用稳定的段落位置，或调整为先按行插入再增删。')
     }
   }
 
-  const pmDoc = suppliedPmDoc ?? await readPmDoc(engine, engineSessionId)
   const matchCounts = inspectStrReplaceTargets(pmDoc, strReplaceOps)
-  const opResults = strReplaceOps.map(({ op, index }) => ({
-    opIndex: index + 1,
-    affectedCount: op.all === true ? matchCounts.get(index)! : 1,
-  }))
+  const opResults = sentenceSafeOps.flatMap((op, originalIndex) => {
+    if (op.kind !== 'strReplace') return []
+    if (expanded.structuralReplacements.has(originalIndex)) {
+      return [{ opIndex: originalIndex + 1, affectedCount: 1 }]
+    }
+    const expandedIndex = expanded.origins.findIndex((origin, index) =>
+      origin === originalIndex && expanded.ops[index]?.kind === 'strReplace')
+    const matches = matchCounts.get(expandedIndex) ?? 1
+    return [{ opIndex: originalIndex + 1, affectedCount: op.all === true ? matches : 1 }]
+  })
   const affectedCount = opResults.reduce((total, result) => total + result.affectedCount, 0)
   const expandAllReplacements = (preparedOps: ExternalEditProposalOp[]): ExternalEditProposalOp[] =>
     preparedOps.flatMap((op, index) => expandStrReplaceForEngine(op, matchCounts.get(index)))
   if (lineOps.length === 0) {
-    return { ops: expandAllReplacements(ops), opResults, affectedCount }
+    return { ops: expandAllReplacements(expanded.ops), opResults, affectedCount }
   }
 
   const spans = pmToMarkdownWithLineMap(pmDoc).blocks
@@ -1381,8 +1595,81 @@ async function prepareEditOps(
   const descending = [...lineOps].sort((left, right) =>
     right.op.line - left.op.line || right.index - left.index)
   let lineIndex = 0
-  const reorderedOps = ops.map((op) => op.kind === 'insertAfterLine' ? descending[lineIndex++]!.op : op)
+  const reorderedOps = expanded.ops.map((op) => op.kind === 'insertAfterLine' ? descending[lineIndex++]!.op : op)
   return { ops: expandAllReplacements(reorderedOps), opResults, affectedCount }
+}
+
+function expandFinalSentenceReplacement(
+  doc: PmDoc,
+  op: ExternalEditProposalOp,
+): ExternalEditProposalOp {
+  if (
+    op.kind !== 'strReplace' || op.all === true || op.nth !== undefined ||
+    op.new.length <= op.old.length ||
+    !/[。！？.!?]\s*$/u.test(op.old) || !/[。！？.!?]\s*$/u.test(op.new)
+  ) return op
+  const blocks = pmTextBlocks(doc)
+  const matches = blocks.flatMap((text, index) => {
+    const offset = text.indexOf(op.old)
+    return offset >= 0 && offset + op.old.length === text.length ? [{ text, index, offset }] : []
+  })
+  if (matches.length !== 1 || matches[0]!.index !== blocks.length - 1 || matches[0]!.offset === 0) return op
+  const match = matches[0]!
+  const prefix = match.text.slice(0, match.offset)
+  const previousBoundary = Math.max(
+    prefix.lastIndexOf('。'), prefix.lastIndexOf('！'), prefix.lastIndexOf('？'),
+    prefix.lastIndexOf('.'), prefix.lastIndexOf('!'), prefix.lastIndexOf('?'),
+  )
+  const sentence = match.text.slice(previousBoundary + 1).trimStart()
+  return sentence === op.old ? op : { ...op, old: sentence }
+}
+
+function expandMarkdownBlockReplacements(doc: PmDoc, ops: ExternalEditProposalOp[]): ExpandedEditOps {
+  const serialized = pmToMarkdownWithLineMap(doc)
+  const lines = serialized.markdown.split('\n')
+  const spanById = new Map(serialized.blocks.map((span) => [span.blockId, span]))
+  const topLevel = (doc.content as unknown as PmBlockNode[]).flatMap((node) => {
+    const id = node.attrs?.blockId
+    const span = id ? spanById.get(id) : undefined
+    return id && span ? [{ id, type: node.type ?? '', span }] : []
+  })
+  const expanded: ExpandedEditOps = { ops: [], origins: [], structuralReplacements: new Set() }
+
+  const append = (op: ExternalEditProposalOp, origin: number) => {
+    expanded.ops.push(op)
+    expanded.origins.push(origin)
+  }
+  ops.forEach((op, originalIndex) => {
+    if (op.kind !== 'strReplace' || !op.old.includes('\n') || op.all === true) {
+      append(op, originalIndex)
+      return
+    }
+    const candidates: Array<{ first: number; last: number }> = []
+    for (let first = 0; first < topLevel.length; first += 1) {
+      for (let last = first; last < topLevel.length; last += 1) {
+        const startLine = topLevel[first]!.span.startLine
+        const endLine = topLevel[last]!.span.contentEndLine
+        const markdown = lines.slice(startLine - 1, endLine).join('\n').trim()
+        if (markdown === op.old.trim()) candidates.push({ first, last })
+      }
+    }
+    const selected = op.nth !== undefined ? candidates[op.nth - 1] : candidates.length === 1 ? candidates[0] : undefined
+    if (!selected) {
+      append(op, originalIndex)
+      return
+    }
+    const covered = topLevel.slice(selected.first, selected.last + 1)
+    const isStructural = covered.length > 1 || covered.some((item) =>
+      item.type === 'table' || item.type === 'orderedList' || item.type === 'bulletList' || item.type === 'taskList')
+    if (!isStructural) {
+      append(op, originalIndex)
+      return
+    }
+    if (op.new.trim()) append({ kind: 'insertAfterBlock', blockId: covered.at(-1)!.id, markdown: op.new }, originalIndex)
+    for (const item of covered) append({ kind: 'deleteBlock', blockId: item.id }, originalIndex)
+    expanded.structuralReplacements.add(originalIndex)
+  })
+  return expanded
 }
 
 interface PmTextNodeLike {
@@ -1586,6 +1873,16 @@ async function readReviewCandidate(
   return { qingml: serializePmQingml(candidate), pmDoc: candidate, renderModel }
 }
 
+function reviewingSuggestionIds(
+  renderModel: ExternalReviewRenderModelResponse,
+  emptyModelFallback: readonly string[] = [],
+): string[] {
+  if (renderModel.suggestions.length === 0) return [...emptyModelFallback]
+  return renderModel.suggestions
+    .filter((suggestion) => suggestion.kind !== 'annotation' && suggestion.status === 'reviewing')
+    .map((suggestion) => suggestion.id)
+}
+
 function serializePmQingml(doc: PmDoc): string {
   return aiBlocksToQingml(pmToAiIr(doc).blocks)
 }
@@ -1663,7 +1960,7 @@ function sanitizeFailureSummary(text: string): string {
   if (/paragraph|insertAfter(?:Line|Block)?|blockId|HTTP\s*\d{3}|\b[45]\d{2}\b|第\s*\d+\s*行|块\s+[A-Za-z0-9_-]+/i.test(text)) {
     return '修改位置需要重新确认，请重新读取文稿后再试'
   }
-  return text
+  return sanitizeUserVisibleText(text)
 }
 
 function sanitizeEditFailureContent(content: readonly unknown[]) {
@@ -1722,14 +2019,48 @@ class ReviewTurnTracker {
   }
 }
 
+class WriteTurnTracker {
+  private readonly turns = new Map<string, number>()
+  private readonly successful = new Map<string, string>()
+
+  begin(agentId: string, turn: number): void {
+    if (this.turns.get(agentId) === turn) return
+    this.turns.set(agentId, turn)
+    this.successful.delete(agentId)
+  }
+
+  dispose(agentId: string): void {
+    this.turns.delete(agentId)
+    this.successful.delete(agentId)
+  }
+
+  assertNoSuccessfulWrite(exec: ToolRunContext): void {
+    const agentId = sessionIdOf(exec)
+    const key = this.key(agentId, exec)
+    if (this.successful.get(agentId) === key) throw new Error(WRITE_REPEAT_ERROR)
+  }
+
+  markSuccessful(exec: ToolRunContext): void {
+    const agentId = sessionIdOf(exec)
+    this.successful.set(agentId, this.key(agentId, exec))
+  }
+
+  private key(agentId: string, exec: ToolRunContext): string {
+    const turn = this.turns.get(agentId)
+    return turn === undefined ? `root:${String(exec.rootCallId)}` : `turn:${turn}`
+  }
+}
+
 function installTurnTracking(
   ctx: Context,
   reviewTurns: ReviewTurnTracker,
+  writeTurns: WriteTurnTracker,
   services: RuntimeToolServices,
 ): void {
   ctx.effect(() => ctx.on('agent/pre-step', async (payload, next) => {
     const dshSessionId = String(payload.agent.id)
     reviewTurns.begin(dshSessionId, payload.turn)
+    writeTurns.begin(dshSessionId, payload.turn)
     services.freshness.begin(dshSessionId, payload.turn)
     if (services.bindings.getActive(dshSessionId) && services.docStates.needsRefresh(dshSessionId)) {
       try {
@@ -1743,6 +2074,7 @@ function installTurnTracking(
   ctx.effect(() => ctx.on('agent/disposed', ({ agent }) => {
     const dshSessionId = String(agent.id)
     reviewTurns.dispose(dshSessionId)
+    writeTurns.dispose(dshSessionId)
     services.freshness.dispose(dshSessionId)
     services.docStates.dispose(dshSessionId)
   }))
