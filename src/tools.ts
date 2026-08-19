@@ -48,10 +48,9 @@ import {
   DocStateCache,
   FreshnessTracker,
   docStateLine,
-  formatDocState,
-  injectDocState,
   type DocStateSnapshot,
 } from './docState.js'
+import { compileQingmlDocument } from './qingmlCompile.js'
 import { sanitizeUserVisibleText } from './userVisibleText.js'
 import { renderedReviewSummary } from './reviewCount.js'
 
@@ -70,8 +69,7 @@ interface RuntimeToolServices extends ToolServices {
   docStates: DocStateCache
   freshness: FreshnessTracker
   turnLeases: AgentTurnLeaseCoordinator
-  /** 由 registerTools 装配;写/改后用来让"本回合取稿快照"失效。 */
-  readTurns?: ReadTurnTracker
+  readTurns: ReadTurnTracker
 }
 
 const textBlock = (text: string) => [{ type: 'text' as const, text }]
@@ -103,6 +101,7 @@ interface DraftLengthRequirement {
   min?: number
   max?: number
   target?: number
+  targetKind?: 'approx' | 'bare'
 }
 
 interface DraftRequirements {
@@ -165,30 +164,66 @@ function isPerUnitLength(text: string, matchIndex: number): boolean {
 export function draftRequirementsOf(input: DraftRequirementInput): DraftRequirements {
   const text = `${input.brief}\n${input.style ?? ''}`
   const length: DraftLengthRequirement = {}
-  const range = new RegExp(`(${DRAFT_NUMBER_SOURCE})\\s*(?:-|—|–|~|～|至|到)\\s*(${DRAFT_NUMBER_SOURCE})\\s*字`).exec(text)
-  if (range && !isPerUnitLength(text, range.index)) {
-    length.min = parseDraftNumber(range[1]!)
-    length.max = parseDraftNumber(range[2]!)
+  const consumed: Array<{ start: number; end: number }> = []
+  let hasHardBoundary = false
+  const consume = (match: RegExpExecArray): void => {
+    consumed.push({ start: match.index, end: match.index + match[0].length })
+  }
+  const overlapsConsumed = (match: RegExpExecArray): boolean => {
+    const end = match.index + match[0].length
+    return consumed.some((span) => match.index < span.end && end > span.start)
+  }
+  for (const range of text.matchAll(new RegExp(`(${DRAFT_NUMBER_SOURCE})\\s*(?:-|—|–|~|～|至|到)\\s*(${DRAFT_NUMBER_SOURCE})\\s*字`, 'g'))) {
+    if (isPerUnitLength(text, range.index)) continue
+    const min = parseDraftNumber(range[1]!)
+    const max = parseDraftNumber(range[2]!)
+    if (min === undefined || max === undefined) continue
+    length.min = min
+    length.max = max
+    hasHardBoundary = true
+    consume(range)
+    break
   }
   for (const match of text.matchAll(new RegExp(`(?:至少|不少于|不低于|最低)\\s*(${DRAFT_NUMBER_SOURCE})\\s*字|(${DRAFT_NUMBER_SOURCE})\\s*字以上`, 'g'))) {
     if (isPerUnitLength(text, match.index)) continue
     const value = parseDraftNumber(match[1] ?? match[2] ?? '')
-    if (value !== undefined) length.min = Math.max(length.min ?? 0, value)
+    if (value !== undefined) {
+      length.min = Math.max(length.min ?? 0, value)
+      hasHardBoundary = true
+      consume(match)
+    }
   }
   for (const match of text.matchAll(new RegExp(`(?:至多|不超过|不多于|最多|控制在)\\s*(${DRAFT_NUMBER_SOURCE})\\s*字(?:以内|以下)?|(${DRAFT_NUMBER_SOURCE})\\s*字(?:以内|以下)`, 'g'))) {
     if (isPerUnitLength(text, match.index)) continue
     const value = parseDraftNumber(match[1] ?? match[2] ?? '')
-    if (value !== undefined) length.max = Math.min(length.max ?? Number.POSITIVE_INFINITY, value)
+    if (value !== undefined) {
+      length.max = Math.min(length.max ?? Number.POSITIVE_INFINITY, value)
+      hasHardBoundary = true
+      consume(match)
+    }
   }
-  const approximate = new RegExp(`(?:大概|约莫|约|差不多)\\s*(${DRAFT_NUMBER_SOURCE})\\s*字|(${DRAFT_NUMBER_SOURCE})\\s*字\\s*(?:左右|上下)`).exec(text)
-  if (approximate && !isPerUnitLength(text, approximate.index)) {
-    const target = parseDraftNumber(approximate[1] ?? approximate[2] ?? '')
-    // 「约 N 字」只是软目标:已有显式下限/上限时不得用它反过来收窄,否则两者一冲突就永远不合格。
-    // 「约/上下/左右 N 字」是**软目标**:插件没有客户端那种并发赛马挑版的条件,
-    // 一旦按 ±10% 变成硬性拒绝,首稿几乎每次都要甩两三张失败卡再自愈(真机 v2 三席全中)。
-    // 因此只记 target 供模型参考,不产生 min/max —— 硬失败只留给用户给了明确边界的情形
-    // (不少于 / 不超过 / N-M 字区间)。
-    if (target !== undefined) length.target = target
+  if (!hasHardBoundary) {
+    for (const approximate of text.matchAll(new RegExp(`(?:大概|约莫|约|差不多)\\s*(${DRAFT_NUMBER_SOURCE})\\s*字|(${DRAFT_NUMBER_SOURCE})\\s*字\\s*(?:左右|上下)`, 'g'))) {
+      if (isPerUnitLength(text, approximate.index) || overlapsConsumed(approximate)) continue
+      const target = parseDraftNumber(approximate[1] ?? approximate[2] ?? '')
+      if (target !== undefined) {
+        length.target = target
+        length.targetKind = 'approx'
+        consume(approximate)
+        break
+      }
+    }
+  }
+  if (!hasHardBoundary && length.target === undefined) {
+    for (const bare of text.matchAll(new RegExp(`(${DRAFT_NUMBER_SOURCE})\\s*字`, 'g'))) {
+      if (isPerUnitLength(text, bare.index) || overlapsConsumed(bare)) continue
+      const target = parseDraftNumber(bare[1] ?? '')
+      if (target !== undefined) {
+        length.target = target
+        length.targetKind = 'bare'
+        break
+      }
+    }
   }
   // 兜底:上下限自相矛盾时,显式下限优先,丢掉不可能满足的上限,绝不把矛盾交给重试循环。
   if (length.min !== undefined && length.max !== undefined && length.min > length.max) {
@@ -209,7 +244,7 @@ export function draftRequirementsOf(input: DraftRequirementInput): DraftRequirem
 function draftRequirementFailures(qingml: string, requirements: DraftRequirements): string[] {
   const failures: string[] = []
   if (requirements.length) {
-    const words = countWords(qingml)
+    const words = countDocVisibleChars(compileQingmlDocument(qingml))
     if (requirements.length.min !== undefined && words < requirements.length.min) {
       failures.push(`篇幅仅 ${words} 字，少于 ${requirements.length.min} 字`)
     }
@@ -235,6 +270,19 @@ function draftRequirementFailures(qingml: string, requirements: DraftRequirement
     }
   }
   return failures
+}
+
+function draftTargetLength(qingml: string, requirements: DraftRequirements): {
+  target: number
+  actual: number
+  gap: number
+  met: boolean
+} | undefined {
+  const target = requirements.length?.target
+  if (target === undefined) return undefined
+  const actual = countDocVisibleChars(compileQingmlDocument(qingml))
+  const gap = actual - target
+  return { target, actual, gap, met: Math.abs(gap) <= Math.max(1, Math.round(target * 0.1)) }
 }
 
 function forceExplicitDraftTitle(qingml: string, title: string | undefined): string {
@@ -422,17 +470,28 @@ const outlineSchema = {
 }
 
 export function registerTools(services: ToolServices): void {
+  const docStates = services.docStates ?? new DocStateCache()
+  const freshness = services.freshness ?? new FreshnessTracker()
+  const readTurns = new ReadTurnTracker()
+  const turnLeases = new AgentTurnLeaseCoordinator(
+    services.engine,
+    undefined,
+    undefined,
+    (dshSessionId, engineSessionId, generation) => {
+      freshness.resetSegment(dshSessionId, engineSessionId, generation)
+      readTurns.resetSegment(dshSessionId, engineSessionId)
+    },
+  )
   const runtime: RuntimeToolServices = {
     ...services,
-    docStates: services.docStates ?? new DocStateCache(),
-    freshness: services.freshness ?? new FreshnessTracker(),
-    turnLeases: new AgentTurnLeaseCoordinator(services.engine),
+    docStates,
+    freshness,
+    turnLeases,
+    readTurns,
   }
   const { ctx } = runtime
   const reviewTurns = new ReviewTurnTracker()
   const writeTurns = new WriteTurnTracker()
-  const readTurns = new ReadTurnTracker()
-  runtime.readTurns = readTurns
   installTurnTracking(ctx, reviewTurns, writeTurns, readTurns, runtime)
   ctx.effect(() => () => runtime.turnLeases.dispose())
   ctx.effect(() => ctx.tools.register(writeDraftTool(runtime, writeTurns)))
@@ -477,7 +536,8 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
           footnotes: { type: 'integer', required: true, description: '文稿实际包含的脚注数。' },
           formulas: { type: 'integer', required: true, description: '文稿实际包含的公式数。' },
           automaticConversions: { type: 'integer', required: true, description: '已自动整理为正确格式的脚注与公式数。' },
-          lengthStatus: { type: 'string', enum: ['not-requested', 'met', 'unmet'], required: true, description: '显式篇幅要求的确定性验收结果。' },
+          lengthStatus: { type: 'string', enum: ['not-requested', 'met', 'unmet', 'target-missed'], required: true, description: '显式篇幅要求的确定性验收结果。' },
+          lengthGap: { type: 'integer', description: '软目标的有符号差值：实际字数减目标字数。' },
           structureStatus: { type: 'string', enum: ['not-requested', 'met', 'unmet'], required: true, description: '显式段落数/提纲要求的确定性验收结果。' },
           warning: { type: 'string', description: '实际保留的内容项数与提交项数不符时的缺损警告。' },
         },
@@ -491,6 +551,9 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
           `文稿已直接落库生效,当前不在审阅态,没有任何待审稿,可以立即继续修改。`,
           `文稿引用：${value.engineSessionId}`,
           `全文约 ${value.words} 字。`,
+          ...(typeof value.lengthGap === 'number'
+            ? [`目标 ${value.words - value.lengthGap} 字，当前 ${value.words} 字（差 ${value.lengthGap >= 0 ? '+' : ''}${value.lengthGap}）。`]
+            : []),
           `内容构成：${value.structure}。`,
           `本稿含 ${value.footnotes} 处脚注、${value.formulas} 个公式，其中 ${value.automaticConversions} 处已自动整理为正确格式。`,
           ...(typeof value.warning === 'string' ? [`⚠ ${value.warning}`] : []),
@@ -524,7 +587,6 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
       let retried = false
       try {
         await assertEngineOnline(services.engine)
-        if (args.docRef) services.freshness.assertFresh(exec)
         writeTurns.assertNoSuccessfulWrite(exec)
         const requirements = draftRequirementsOf(args)
         let bound
@@ -536,6 +598,16 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
           await services.bindings.setActive(dshSessionId, args.docRef)
         } else {
           bound = await services.bindings.createDoc(dshSessionId, args.title?.trim() || '未命名文稿')
+        }
+
+        // 改写时是显式写意图；新稿则在创建成功、拿到真实文稿 ID 后立即申领。
+        await services.turnLeases.touchDocument(dshSessionId, bound.engineSessionId)
+        if (args.docRef) {
+          services.freshness.assertFresh(
+            exec,
+            bound.engineSessionId,
+            services.turnLeases.generation(dshSessionId, bound.engineSessionId),
+          )
         }
 
         const docBefore = await readDoc(services, exec, bound.engineSessionId)
@@ -593,6 +665,35 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
               throw new Error(`自动修正后仍未满足明确要求（${requirementFailures.join('；')}），未提交文稿。`)
             }
           }
+          // 这里是 propose 前本地编译 PM；引擎若丢弃非法块，最终字数可能微差，±10% 容差可接受。
+          const targetLength = draftTargetLength(qingml, requirements)
+          if (targetLength && !targetLength.met) {
+            // bare/约类软目标有独立的一次 correction：不进硬失败卡链，重写后即使仍有偏差也照常提交。
+            retried = true
+            const retryPrompt = makeDraftPrompt({
+              brief: args.brief,
+              title: args.title,
+              outline: args.outline,
+              style: args.style,
+              correction: [
+                `上一版的软目标为 ${targetLength.target} 字，按青简可见字数口径当前 ${targetLength.actual} 字（差 ${targetLength.gap >= 0 ? '+' : ''}${targetLength.gap}）。`,
+                '请只再重写一次完整 QingML，尽量进入目标 ±10%，同时保留其他结构与内容约束。',
+                `上一次输出：\n${qingml}`,
+              ].join('\n'),
+            })
+            generation = randomUUID()
+            qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, retryPrompt)
+            if (isBodylessDraft(qingml)) throw new Error(EMPTY_DRAFT_ERROR)
+            qingml = forceExplicitDraftTitle(qingml, args.title)
+            sourceConversion = convertQingmlSourceSyntax(qingml)
+            qingml = sourceConversion.qingml
+            automaticConversions = sourceConversion.converted
+            if (sourceConversion.leaks.length > 0) throw new Error(SOURCE_SYNTAX_LEAK_ERROR)
+            const nonTargetFailures = draftRequirementFailures(qingml, requirements)
+            if (nonTargetFailures.length > 0) {
+              throw new Error(`字数软修正后不再满足明确结构要求（${nonTargetFailures.join('；')}），未提交文稿。`)
+            }
+          }
           try {
             proposal = await propose(services, exec, bound.engineSessionId, docBefore.docVersion, qingml)
           } catch (error) {
@@ -638,6 +739,14 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
               : Promise.resolve(null),
             readPmDoc(services, exec, bound.engineSessionId),
           ])
+          reconcileReadTrackingAfterWrite(
+            services,
+            dshSessionId,
+            bound.engineSessionId,
+            proposal.status,
+            official,
+            officialPmDoc,
+          )
           const renderedQingml = reviewCandidate?.qingml ?? official.qingml ?? qingml
           const renderedPmDoc = reviewCandidate?.pmDoc ?? officialPmDoc
           const words = countDocVisibleChars(renderedPmDoc)
@@ -688,7 +797,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
             blocks_bucket: blocksBucket(outline.blocks),
             retried,
           })
-          rememberDocState(services, exec, {
+          rememberDocState(services, exec, bound.engineSessionId, {
             state: proposal.status === 'review' ? 'pendingReview' : 'editing',
             words,
             blocks: outline.blocks,
@@ -697,9 +806,12 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
             docVersion: official.docVersion,
             ...(proposal.status === 'review' ? { patchCount: reviewCount } : {}),
           }, true)
-          const lengthStatus: 'not-requested' | 'met' | 'unmet' = requirements.length
-            ? finalRequirementFailures.some((failure) => failure.startsWith('篇幅')) ? 'unmet' : 'met'
-            : 'not-requested'
+          const finalTargetLength = draftTargetLength(renderedQingml, requirements)
+          const lengthStatus: 'not-requested' | 'met' | 'unmet' | 'target-missed' = finalTargetLength
+            ? finalTargetLength.met ? 'met' : 'target-missed'
+            : requirements.length
+              ? finalRequirementFailures.some((failure) => failure.startsWith('篇幅')) ? 'unmet' : 'met'
+              : 'not-requested'
           const structureStatus: 'not-requested' | 'met' | 'unmet' = requirements.outline || requirements.paragraphs !== undefined
             ? finalRequirementFailures.some((failure) => !failure.startsWith('篇幅')) ? 'unmet' : 'met'
             : 'not-requested'
@@ -719,6 +831,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
             formulas: structureFacts.formulas,
             automaticConversions,
             lengthStatus,
+            ...(finalTargetLength ? { lengthGap: words - finalTargetLength.target } : {}),
             structureStatus,
             ...(proposal.status === 'review'
               ? { patchCount: reviewCount, patchIds: reviewSuggestionIds }
@@ -950,8 +1063,13 @@ function editDraftTool(services: RuntimeToolServices) {
       const dshSessionId = sessionIdOf(exec)
       try {
         await assertEngineOnline(services.engine)
-        services.freshness.assertFresh(exec)
-        const engineSessionId = resolveDocRef(services.bindings, dshSessionId, args.docRef)
+        const engineSessionId = resolveDocRef(services, dshSessionId, args.docRef)
+        await services.turnLeases.touchDocument(dshSessionId, engineSessionId)
+        services.freshness.assertFresh(
+          exec,
+          engineSessionId,
+          services.turnLeases.generation(dshSessionId, engineSessionId),
+        )
         await services.bindings.setActive(dshSessionId, engineSessionId)
         const before = await readDocWithLines(services, exec, engineSessionId)
         if (before.state === 'pendingReview') throw new Error(REVIEW_PENDING_ERROR)
@@ -983,6 +1101,14 @@ function editDraftTool(services: RuntimeToolServices) {
             : Promise.resolve(null),
           readPmDoc(services, exec, engineSessionId),
         ])
+        reconcileReadTrackingAfterWrite(
+          services,
+          dshSessionId,
+          engineSessionId,
+          proposal.status,
+          official,
+          officialPmDoc,
+        )
         const renderedQingml = reviewCandidate?.qingml ?? official.qingml
         const renderedPmDoc = reviewCandidate?.pmDoc ?? officialPmDoc
         const words = countDocVisibleChars(renderedPmDoc)
@@ -1024,7 +1150,7 @@ function editDraftTool(services: RuntimeToolServices) {
           op_kinds: [...new Set(modelOps.map((op) => op.kind))],
           outcome: proposal.status,
         })
-        rememberDocState(services, exec, {
+        rememberDocState(services, exec, engineSessionId, {
           state: proposal.status === 'review' ? 'pendingReview' : 'editing',
           words,
           blocks: outline.blocks,
@@ -1104,12 +1230,13 @@ function reviewCommitTool(services: RuntimeToolServices, reviewTurns: ReviewTurn
       const dshSessionId = sessionIdOf(exec)
       await assertEngineOnline(services.engine)
       reviewTurns.assertFirstAdjudication(exec)
-      const engineSessionId = resolveDocRef(services.bindings, dshSessionId, args.docRef)
+      const engineSessionId = resolveDocRef(services, dshSessionId, args.docRef)
+      await services.turnLeases.touchDocument(dshSessionId, engineSessionId)
       const before = await readDoc(services, exec, engineSessionId)
       const beforeTitle = before.title?.trim() || services.bindings.listDocs(dshSessionId)
         .find((doc) => doc.engineSessionId === engineSessionId)?.title || '未命名文稿'
       if (before.state !== 'pendingReview') {
-        await refreshAndPublishDocState(services, exec, true)
+        await refreshAndPublishDocState(services, exec, true, engineSessionId)
         return {
           status: 'no_pending_review' as const,
           message: `【文稿状态】已落库生效,当前无待审稿——此前的审阅已由用户在面板处理完毕。不要再次询问如何处置待审稿,直接按用户最新指令继续。${focusSuffix(services, dshSessionId)}`,
@@ -1130,6 +1257,14 @@ function reviewCommitTool(services: RuntimeToolServices, reviewTurns: ReviewTurn
         readDoc(services, exec, engineSessionId),
         readPmDoc(services, exec, engineSessionId),
       ])
+      reconcileReadTrackingAfterWrite(
+        services,
+        dshSessionId,
+        engineSessionId,
+        'committed',
+        official,
+        officialPmDoc,
+      )
       const outline = outlineOf(official.qingml, official.title)
       const words = countDocVisibleChars(officialPmDoc)
       await services.bindings.updateTitle(dshSessionId, engineSessionId, outline.title)
@@ -1148,7 +1283,7 @@ function reviewCommitTool(services: RuntimeToolServices, reviewTurns: ReviewTurn
           retried: false,
         })
       }
-      rememberDocState(services, exec, {
+      rememberDocState(services, exec, engineSessionId, {
         state: 'editing',
         words,
         blocks: outline.blocks,
@@ -1201,9 +1336,9 @@ function readDraftTool(services: RuntimeToolServices, readTurns: ReadTurnTracker
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
       await assertEngineOnline(services.engine)
-      const engineSessionId = resolveDocRef(services.bindings, dshSessionId, args.docRef)
-      await services.turnLeases.touchDocument(dshSessionId, engineSessionId)
-      // 一回合只取一次稿:取稿会锁住编辑器输入,同回合的其它 mode 复用这份快照。
+      const engineSessionId = resolveDocRef(services, dshSessionId, args.docRef)
+      services.turnLeases.observeDocument(dshSessionId, engineSessionId)
+      // 纯读不申领租约；同回合的其它 mode 复用这份单读快照。
       const held = readTurns.snapshot(dshSessionId, engineSessionId)
       let doc: TurnDocSnapshot['doc']
       let basePmDoc: TurnDocSnapshot['basePmDoc']
@@ -1246,7 +1381,7 @@ function readDraftTool(services: RuntimeToolServices, readTurns: ReadTurnTracker
               '以下为已提交内容的机器定位清单；locator 只在当前版本有效，结构操作只传 locator，不要猜测真实标识。',
               ...locatePmNodes(basePmDoc).map(describeLocatedNode),
             ].join('\n')
-        rememberDocState(services, exec, {
+        rememberDocState(services, exec, engineSessionId, {
           state: doc.state,
           words: countDocVisibleChars(currentPmDoc),
           blocks: currentOutline.blocks,
@@ -1274,7 +1409,7 @@ function readDraftTool(services: RuntimeToolServices, readTurns: ReadTurnTracker
         const notice = `${STR_REPLACE_LINES_NOTICE}\n${doc.state === 'pendingReview'
           ? '以下行号对应已提交基线（不含待审候选）。\n'
           : ''}`
-        rememberDocState(services, exec, {
+        rememberDocState(services, exec, engineSessionId, {
           state: doc.state,
           words: countDocVisibleChars(currentPmDoc),
           blocks: currentOutline.blocks,
@@ -1312,7 +1447,7 @@ function readDraftTool(services: RuntimeToolServices, readTurns: ReadTurnTracker
         : mode === 'full' || mode === 'base'
           ? `${notice}${candidate}`
           : `${notice}${outline.headings.map((heading) => `${'#'.repeat(heading.level)} ${heading.text}${heading.firstSentence ? `\n${heading.firstSentence}` : ''}`).join('\n') || '暂无标题层级。'}`
-      rememberDocState(services, exec, {
+      rememberDocState(services, exec, engineSessionId, {
         state: doc.state,
         words: countDocVisibleChars(currentPmDoc),
         blocks: currentOutline.blocks,
@@ -1577,33 +1712,65 @@ export async function refreshDocState(
   })
 }
 
+function reconcileReadTrackingAfterWrite(
+  services: RuntimeToolServices,
+  dshSessionId: string,
+  engineSessionId: string,
+  status: ExternalProposalResponse['status'] | 'committed',
+  official: ExternalDoc,
+  officialPmDoc: PmDoc,
+): void {
+  if (status === 'committed') {
+    // canonical 已推进：用新版本权威稿覆盖快照，作者当回合无需再读。
+    services.readTurns.rememberSnapshot(dshSessionId, engineSessionId, {
+      doc: official,
+      basePmDoc: officialPmDoc,
+      reviewCandidate: null,
+    })
+  } else {
+    // review 只产生候选，canonical 版本未动；旧快照必须删掉而不能伪装成新稿。
+    services.readTurns.invalidateSnapshot(dshSessionId, engineSessionId)
+  }
+  services.readTurns.clearMarks(dshSessionId, engineSessionId)
+}
+
 function rememberDocState(
   services: RuntimeToolServices,
   exec: ToolRunContext,
+  engineSessionId: string,
   snapshot: Omit<DocStateSnapshot, 'dirty'>,
   establishesFreshness: boolean,
 ): void {
   const dshSessionId = sessionIdOf(exec)
-  const current = services.docStates.update(dshSessionId, snapshot)
-  if (establishesFreshness) services.freshness.markFresh(exec)
-  injectDocState(exec.agent, formatDocState(current))
+  services.docStates.update(dshSessionId, snapshot)
+  if (establishesFreshness) {
+    services.freshness.markFresh(
+      exec,
+      engineSessionId,
+      services.turnLeases.generation(dshSessionId, engineSessionId),
+    )
+  }
 }
 
 async function refreshAndPublishDocState(
   services: RuntimeToolServices,
   exec: ToolRunContext,
   establishesFreshness: boolean,
+  engineSessionId?: string,
 ): Promise<void> {
-  if (establishesFreshness) services.freshness.markFresh(exec)
-  // 文稿刚被写/改过:本回合的取稿快照已过期,清掉以便同回合后续读取拿到新内容。
-  services.readTurns?.invalidateSnapshot(sessionIdOf(exec))
   const dshSessionId = sessionIdOf(exec)
+  const target = engineSessionId ?? services.bindings.getActive(dshSessionId)?.engineSessionId
+  if (establishesFreshness && target) {
+    services.freshness.markFresh(
+      exec,
+      target,
+      services.turnLeases.generation(dshSessionId, target),
+    )
+  }
   try {
-    const current = await refreshDocState(services, services.docStates, dshSessionId)
-    if (current) injectDocState(exec.agent, formatDocState(current))
+    await refreshDocState(services, services.docStates, dshSessionId)
   } catch {
     services.docStates.markDirty(dshSessionId)
-    injectDocState(exec.agent, services.docStates.contextText(dshSessionId))
   }
 }
 
@@ -1995,19 +2162,25 @@ async function proposeOps(
   expectedDocVersion: number,
   ops: ExternalEditProposalOp[] | Array<{ kind: 'qingmlDraft'; qingml: string }>,
 ): Promise<ExternalProposalResponse> {
-  const turnId = await services.turnLeases.touchDocument(sessionIdOf(exec), engineSessionId)
+  const dshSessionId = sessionIdOf(exec)
+  const turnId = await services.turnLeases.touchDocument(dshSessionId, engineSessionId)
   // 引擎契约:结构操作批(deleteBlock/deleteListItem)必须携带请求级 opId(幂等寻址)。
   const structural = ops.some((op) => op.kind === 'deleteBlock' || op.kind === 'deleteListItem' || op.kind === 'insertAfterBlock')
-  return services.engine.fetchJson<ExternalProposalResponse>(`/sessions/${encodeURIComponent(engineSessionId)}/proposals`, {
-    method: 'POST',
-    body: JSON.stringify({
-      expectedDocVersion,
-      clientMutationId: `dsh-${randomUUID()}`,
-      ...(structural ? { opId: `dsh-op-${randomUUID()}` } : {}),
-      ...(turnId ? { turnId } : {}),
-      ops,
-    }),
-  })
+  try {
+    return await services.engine.fetchJson<ExternalProposalResponse>(`/sessions/${encodeURIComponent(engineSessionId)}/proposals`, {
+      method: 'POST',
+      body: JSON.stringify({
+        expectedDocVersion,
+        clientMutationId: `dsh-${randomUUID()}`,
+        ...(structural ? { opId: `dsh-op-${randomUUID()}` } : {}),
+        ...(turnId ? { turnId } : {}),
+        ops,
+      }),
+    })
+  } catch (error) {
+    services.turnLeases.recordWriteFailure(dshSessionId, engineSessionId, error)
+    throw error
+  }
 }
 
 async function commitReview(
@@ -2016,19 +2189,24 @@ async function commitReview(
   engineSessionId: string,
   body: ExternalReviewCommitRequest,
 ): Promise<ExternalReviewCommitResponse> {
-  await services.turnLeases.touchDocument(sessionIdOf(exec), engineSessionId)
-  return services.engine.fetchJson<ExternalReviewCommitResponse>(
-    `/sessions/${encodeURIComponent(engineSessionId)}/review/commit`,
-    { method: 'POST', body: JSON.stringify(body) },
-  )
+  const dshSessionId = sessionIdOf(exec)
+  const turnId = await services.turnLeases.touchDocument(dshSessionId, engineSessionId)
+  try {
+    return await services.engine.fetchJson<ExternalReviewCommitResponse>(
+      `/sessions/${encodeURIComponent(engineSessionId)}/review/commit`,
+      { method: 'POST', body: JSON.stringify({ ...body, ...(turnId ? { turnId } : {}) }) },
+    )
+  } catch (error) {
+    services.turnLeases.recordWriteFailure(dshSessionId, engineSessionId, error)
+    throw error
+  }
 }
 
 async function readDoc(
   services: RuntimeToolServices,
-  exec: ToolRunContext,
+  _exec: ToolRunContext,
   engineSessionId: string,
 ): Promise<ExternalDoc> {
-  await services.turnLeases.touchDocument(sessionIdOf(exec), engineSessionId)
   return readDocRaw(services.engine, engineSessionId)
 }
 
@@ -2038,19 +2216,17 @@ function readDocRaw(engine: EngineService, engineSessionId: string): Promise<Ext
 
 async function readDocWithLines(
   services: RuntimeToolServices,
-  exec: ToolRunContext,
+  _exec: ToolRunContext,
   engineSessionId: string,
 ): Promise<ExternalDocReadResponse> {
-  await services.turnLeases.touchDocument(sessionIdOf(exec), engineSessionId)
   return services.engine.fetchJson<ExternalDocReadResponse>(`/sessions/${encodeURIComponent(engineSessionId)}/doc?lines=1`)
 }
 
 async function readPmDoc(
   services: RuntimeToolServices,
-  exec: ToolRunContext,
+  _exec: ToolRunContext,
   engineSessionId: string,
 ): Promise<PmDoc> {
-  await services.turnLeases.touchDocument(sessionIdOf(exec), engineSessionId)
   return readPmDocRaw(services.engine, engineSessionId)
 }
 
@@ -2064,10 +2240,9 @@ async function readPmDocRaw(engine: EngineService, engineSessionId: string): Pro
 
 async function readReviewCandidate(
   services: RuntimeToolServices,
-  exec: ToolRunContext,
+  _exec: ToolRunContext,
   engineSessionId: string,
 ): Promise<{ qingml: string; pmDoc: PmDoc; renderModel: ExternalReviewRenderModelResponse }> {
-  await services.turnLeases.touchDocument(sessionIdOf(exec), engineSessionId)
   return readReviewCandidateRaw(services.engine, engineSessionId)
 }
 
@@ -2109,11 +2284,14 @@ function sessionIdOf(exec: ToolRunContext): string {
   return String(exec.agent.id)
 }
 
-function resolveDocRef(bindings: BindingStore, dshSessionId: string, docRef?: string): string {
+function resolveDocRef(services: RuntimeToolServices, dshSessionId: string, docRef?: string): string {
+  const { bindings } = services
   if (docRef) {
     if (!bindings.hasDoc(dshSessionId, docRef)) throw new Error('docRef 不属于当前 DSH 会话。')
     return docRef
   }
+  const pinned = services.turnLeases.pinnedDocument(dshSessionId)
+  if (pinned && bindings.hasDoc(dshSessionId, pinned)) return pinned
   const active = bindings.getActive(dshSessionId)
   if (!active) throw new Error('当前会话没有激活文稿。请先写一篇，或用 qing_list_docs / qing_focus_doc 选择。')
   return active.engineSessionId
@@ -2273,7 +2451,7 @@ interface TurnDocSnapshot {
 class ReadTurnTracker {
   private readonly turns = new Map<string, number>()
   private readonly reads = new Map<string, Set<string>>()
-  private readonly snapshots = new Map<string, { engineSessionId: string; snapshot: TurnDocSnapshot }>()
+  private readonly snapshots = new Map<string, Map<string, TurnDocSnapshot>>()
 
   begin(agentId: string, turn: number): void {
     if (this.turns.get(agentId) === turn) return
@@ -2308,23 +2486,40 @@ class ReadTurnTracker {
   }
 
   /**
-   * 本回合的文稿快照。读取会**锁住编辑器输入**(编辑器的设计:agent 处理期间不让用户改),
-   * 所以一个回合只该真正取一次稿;同回合内其它 mode 一律复用这份快照,不再打引擎。
-   * 写/改提交后由 invalidateSnapshot 清掉,下次读取重新取。
+   * 本回合的文稿快照。纯读不申领编辑租约，但同回合的其它 mode 仍复用这份快照。
+   * committed 写后由新版权威快照覆盖；review 写后才 invalidate，下次读取重拿候选。
    */
   snapshot(agentId: string, engineSessionId: string): TurnDocSnapshot | undefined {
     if (!this.turns.has(agentId)) return undefined
-    const held = this.snapshots.get(agentId)
-    return held?.engineSessionId === engineSessionId ? held.snapshot : undefined
+    return this.snapshots.get(agentId)?.get(engineSessionId)
   }
 
   rememberSnapshot(agentId: string, engineSessionId: string, snapshot: TurnDocSnapshot): void {
     if (!this.turns.has(agentId)) return
-    this.snapshots.set(agentId, { engineSessionId, snapshot })
+    const snapshots = this.snapshots.get(agentId) ?? new Map<string, TurnDocSnapshot>()
+    snapshots.set(engineSessionId, snapshot)
+    this.snapshots.set(agentId, snapshots)
   }
 
-  invalidateSnapshot(agentId: string): void {
-    this.snapshots.delete(agentId)
+  invalidateSnapshot(agentId: string, engineSessionId: string): void {
+    const snapshots = this.snapshots.get(agentId)
+    snapshots?.delete(engineSessionId)
+    if (snapshots?.size === 0) this.snapshots.delete(agentId)
+  }
+
+  clearMarks(agentId: string, engineSessionId: string): void {
+    const prefix = `${engineSessionId}\u0000`
+    const reads = this.reads.get(agentId)
+    if (!reads) return
+    for (const key of reads) {
+      if (key.startsWith(prefix)) reads.delete(key)
+    }
+    if (reads.size === 0) this.reads.delete(agentId)
+  }
+
+  resetSegment(agentId: string, engineSessionId: string): void {
+    this.invalidateSnapshot(agentId, engineSessionId)
+    this.clearMarks(agentId, engineSessionId)
   }
 
   dispose(agentId: string): void {
@@ -2347,13 +2542,14 @@ function installTurnTracking(
 ): void {
   ctx.effect(() => ctx.on('agent/pre-step', async (payload, next) => {
     const dshSessionId = String(payload.agent.id)
-    // 这里只登记回合，绝不申领租约；纯聊天回合即使刷新状态缓存也必须零 begin。
-    services.turnLeases.openTurn(dshSessionId, payload.turn)
     reviewTurns.begin(dshSessionId, payload.turn)
     writeTurns.begin(dshSessionId, payload.turn)
     readTurns.begin(dshSessionId, payload.turn)
     services.freshness.begin(dshSessionId, payload.turn)
-    if (services.bindings.getActive(dshSessionId) && services.docStates.needsRefresh(dshSessionId)) {
+    // 回合起点钉住当时聚焦稿；面板在回合中途切换只影响下一回合。
+    const pinned = services.bindings.getActive(dshSessionId)?.engineSessionId
+    await services.turnLeases.openTurn(dshSessionId, payload.turn, pinned)
+    if (pinned && services.docStates.needsRefresh(dshSessionId)) {
       try {
         await refreshDocState(services, services.docStates, dshSessionId)
       } catch {
@@ -2366,7 +2562,8 @@ function installTurnTracking(
     await services.turnLeases.endTurn(String(agent.id), turn)
   }))
   ctx.effect(() => ctx.on('agent/error', async ({ agent, turn }) => {
-    await services.turnLeases.endTurn(String(agent.id), turn)
+    // step 级 error 不等于回合结束；保持租约与心跳，等 stopping/dispose 收口。
+    services.turnLeases.markAgentError(String(agent.id), turn)
   }))
   ctx.effect(() => ctx.on('agent/disposed', async ({ agent }) => {
     const dshSessionId = String(agent.id)

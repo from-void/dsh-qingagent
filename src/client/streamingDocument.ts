@@ -1,9 +1,7 @@
-import { aiIrToPm, qingmlParse, type PmDoc } from '@qingagent/pm-schema'
+import type { PmDoc } from '@qingagent/pm-schema'
+import { compileQingmlDocument } from '../qingmlCompile.js'
 
-export function compileQingmlDocument(qingml: string): PmDoc {
-  const parsed = qingmlParse(qingml)
-  return aiIrToPm({ blocks: parsed.blocks })
-}
+export { compileQingmlDocument } from '../qingmlCompile.js'
 
 export interface QingmlCompileThrottle {
   push(qingml: string): void

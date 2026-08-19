@@ -22,7 +22,12 @@ import type {
   QingSelection,
   SessionBinding,
 } from './contracts.js'
-import { EngineHttpError, type EngineService } from './engine.js'
+import {
+  EngineHttpError,
+  EngineUnavailableError,
+  isMissingSessionError,
+  type EngineService,
+} from './engine.js'
 import type { BindingStore } from './bindings.js'
 import { engineAssetFileId } from './assetBridge.js'
 import {
@@ -46,126 +51,458 @@ export const TURN_SIGNAL_HEARTBEAT_MS = 17_000
 
 type TurnSignalAction = 'begin' | 'end' | 'heartbeat'
 
-interface TrackedAgentTurn {
-  turn: number
+export type AgentTurnLeaseState = 'acquired' | 'unsupported' | 'lost' | 'unknown'
+
+interface TurnSignalResponse {
+  active: boolean
+}
+
+type LeaseBlockReason = 'busy-native' | 'lease-held' | 'lock-lost' | 'auth' | 'session-missing' | 'unknown'
+
+interface TrackedLeaseSegment {
+  dshSessionId: string
+  engineSessionId: string
   turnId: string
-  engineSessionId?: string
-  beginAttempt?: Promise<boolean>
+  generation: number
+  state: AgentTurnLeaseState
+  blockReason?: LeaseBlockReason
+  lastError?: unknown
+  beginAttempt?: Promise<void>
   heartbeat?: ReturnType<typeof setInterval>
-  heartbeatInFlight?: Promise<boolean>
+  heartbeatInFlight?: Promise<void>
+  heartbeatFailureCount: number
+  writeOutcomeUnknown: boolean
+  unsupportedReported: boolean
+  suspicious: boolean
   closing: boolean
   closePromise?: Promise<void>
 }
 
+interface TrackedAgentTurn {
+  turn: number
+  pinnedEngineSessionId?: string
+  segments: Map<string, TrackedLeaseSegment>
+}
+
+const TURN_SIGNAL_DEADLINE_MS = 10_000
+const TURN_CLOSE_DEADLINE_MS = 10_000
+const BEGIN_RETRY_DELAY_MS = 2_000
+const COLD_BEGIN_BUSY_RETRIES = 2
+const RECOVERY_BEGIN_ATTEMPTS = 2
+const UNKNOWN_DISAMBIGUATION_BUDGET_MS = 20_000
+
+export const LEASE_UNSUPPORTED_ERROR = '当前引擎不支持编辑锁，请升级客户端'
+export const LEASE_LOST_ERROR = '文稿已被其他持有者锁定/锁已失效，本回合停止写作'
+export const LEASE_BUSY_NATIVE_ERROR = '客户端正在处理，稍后再试'
+export const LEASE_AUTH_ERROR = '青简连接授权已失效，请重新连接客户端；本回合停止写作'
+export const LEASE_UNKNOWN_ERROR = '无法确认文稿编辑锁状态，本回合停止写作'
+
 /**
- * Agent 回合的文稿忙碌租约。pre-step 只登记回合；真正的 begin 延迟到工具首次读写文稿，
- * 因而纯聊天回合不会冻结编辑器。signal 是兼容性增强，任何失败（尤其旧引擎 404）
- * 都只让锁能力降级，不能改变原文稿请求的成败。
+ * Agent 回合的多文稿忙碌租约。每个 (DSH 会话,青简文稿) 有独立租约段，
+ * 只有 acquired 段才能发写/改/审阅请求。同一文稿的旧段 end 与新段 begin 串行，
+ * 不同文稿则并行收口。
  */
 export class AgentTurnLeaseCoordinator {
   private readonly turns = new Map<string, TrackedAgentTurn>()
+  private readonly closingByDocument = new Map<string, Promise<void>>()
+  private nextGeneration = 1
 
   constructor(
     private readonly engine: EngineService,
     private readonly heartbeatMs = TURN_SIGNAL_HEARTBEAT_MS,
     private readonly createTurnId: () => string = randomUUID,
+    private readonly onSegmentOpened?: (dshSessionId: string, engineSessionId: string, generation: number) => void,
   ) {}
 
-  openTurn(dshSessionId: string, turn: number): void {
+  async openTurn(dshSessionId: string, turn: number, pinnedEngineSessionId?: string): Promise<void> {
     const current = this.turns.get(dshSessionId)
-    if (current?.turn === turn && !current.closing) return
+    if (current?.turn === turn) return
     if (current) {
       this.turns.delete(dshSessionId)
-      void this.close(current)
+      void this.closeTurn(current)
     }
-    this.turns.set(dshSessionId, {
+    const opened: TrackedAgentTurn = {
       turn,
-      turnId: this.createTurnId(),
-      closing: false,
-    })
+      pinnedEngineSessionId,
+      segments: new Map(),
+    }
+    this.turns.set(dshSessionId, opened)
+    if (pinnedEngineSessionId) {
+      const segment = this.createSegment(dshSessionId, pinnedEngineSessionId)
+      opened.segments.set(pinnedEngineSessionId, segment)
+      await this.beginCold(segment)
+    }
   }
 
-  /** 首次触稿先尝试 begin；并发的 GET /doc 共享同一个 Promise，保证一个租约段仅一次 begin。 */
-  async touchDocument(dshSessionId: string, engineSessionId: string): Promise<string | undefined> {
+  pinnedDocument(dshSessionId: string): string | undefined {
+    return this.turns.get(dshSessionId)?.pinnedEngineSessionId
+  }
+
+  generation(dshSessionId: string, engineSessionId: string): number | undefined {
+    return this.turns.get(dshSessionId)?.segments.get(engineSessionId)?.generation
+  }
+
+  state(dshSessionId: string, engineSessionId: string): AgentTurnLeaseState | undefined {
+    return this.turns.get(dshSessionId)?.segments.get(engineSessionId)?.state
+  }
+
+  /** 纯读只领取本回合的文稿 generation，不发 begin；后续写意图复用该段。 */
+  observeDocument(dshSessionId: string, engineSessionId: string): number | undefined {
     const current = this.turns.get(dshSessionId)
-    if (!current || current.closing) return undefined
-    if (!current.engineSessionId) current.engineSessionId = engineSessionId
-    if (!current.beginAttempt) {
-      current.beginAttempt = this.signal(current.engineSessionId, 'begin', current.turnId)
-        .then((began) => {
-          if (began && !current.closing && this.turns.get(dshSessionId) === current) {
-            this.startHeartbeat(current)
-          }
-          return began
-        })
+    if (!current) return undefined
+    let segment = current.segments.get(engineSessionId)
+    if (!segment) {
+      segment = this.createSegment(dshSessionId, engineSessionId)
+      current.segments.set(engineSessionId, segment)
     }
-    await current.beginAttempt
-    return current.turnId
+    return segment.generation
+  }
+
+  /** 写意图首次触稿时冷 begin；同文稿并发写共享 beginAttempt。 */
+  async touchDocument(dshSessionId: string, engineSessionId: string): Promise<string | undefined> {
+    let current = this.turns.get(dshSessionId)
+    if (!current) {
+      current = { turn: Number.MIN_SAFE_INTEGER, pinnedEngineSessionId: engineSessionId, segments: new Map() }
+      this.turns.set(dshSessionId, current)
+    }
+    current.pinnedEngineSessionId ??= engineSessionId
+    let segment = current.segments.get(engineSessionId)
+    if (!segment) {
+      segment = this.createSegment(dshSessionId, engineSessionId)
+      current.segments.set(engineSessionId, segment)
+    }
+    segment.beginAttempt ??= this.beginCold(segment)
+    await segment.beginAttempt
+    if (segment.state !== 'acquired') throw this.blockingError(segment)
+    return segment.turnId
   }
 
   async endTurn(dshSessionId: string, turn: number): Promise<void> {
     const current = this.turns.get(dshSessionId)
     if (!current || current.turn !== turn) return
     this.turns.delete(dshSessionId)
-    await this.close(current)
+    await this.closeTurn(current)
   }
 
   async disposeAgent(dshSessionId: string): Promise<void> {
     const current = this.turns.get(dshSessionId)
     if (!current) return
     this.turns.delete(dshSessionId)
-    await this.close(current)
+    await this.closeTurn(current)
   }
 
   dispose(): void {
     const active = [...this.turns.values()]
     this.turns.clear()
-    for (const current of active) void this.close(current)
+    for (const current of active) void this.closeTurn(current)
   }
 
-  private startHeartbeat(current: TrackedAgentTurn): void {
-    if (current.heartbeat || current.closing || !current.engineSessionId) return
-    current.heartbeat = setInterval(() => {
-      if (current.closing || current.heartbeatInFlight || !current.engineSessionId) return
-      const pending = this.signal(current.engineSessionId, 'heartbeat', current.turnId)
-      current.heartbeatInFlight = pending
+  markAgentError(dshSessionId: string, turn: number): void {
+    const current = this.turns.get(dshSessionId)
+    if (!current || current.turn !== turn) return
+    for (const segment of current.segments.values()) segment.suspicious = true
+  }
+
+  recordWriteFailure(dshSessionId: string, engineSessionId: string, error: unknown): void {
+    const segment = this.turns.get(dshSessionId)?.segments.get(engineSessionId)
+    if (!segment || segment.state === 'lost') return
+    const kind = signalFailureKind(error)
+    if (kind === 'route-missing') this.transition(segment, 'unsupported', 'unknown', error)
+    else if (kind === 'session-missing') this.transition(segment, 'lost', 'session-missing', error)
+    else if (kind === 'auth') this.transition(segment, 'lost', 'auth', error)
+    else if (kind === 'busy-native' || kind === 'lease-held' || kind === 'lock-lost') {
+      this.transition(segment, 'lost', kind === 'busy-native' ? 'lock-lost' : kind, error)
+    } else if (kind === 'transient') {
+      segment.writeOutcomeUnknown = true
+      if (segment.heartbeat) clearInterval(segment.heartbeat)
+      segment.heartbeat = undefined
+      this.transition(segment, 'unknown', 'unknown', error)
+    }
+  }
+
+  private createSegment(dshSessionId: string, engineSessionId: string): TrackedLeaseSegment {
+    const segment: TrackedLeaseSegment = {
+      dshSessionId,
+      engineSessionId,
+      turnId: this.createTurnId(),
+      generation: this.nextGeneration++,
+      state: 'unknown',
+      heartbeatFailureCount: 0,
+      writeOutcomeUnknown: false,
+      unsupportedReported: false,
+      suspicious: false,
+      closing: false,
+    }
+    this.onSegmentOpened?.(dshSessionId, engineSessionId, segment.generation)
+    return segment
+  }
+
+  private async beginCold(segment: TrackedLeaseSegment): Promise<void> {
+    segment.beginAttempt ??= (async () => {
+      const previousClose = this.closingByDocument.get(this.documentKey(segment))
+      if (previousClose) await previousClose.catch(() => undefined)
+      for (let attempt = 0; attempt <= COLD_BEGIN_BUSY_RETRIES; attempt += 1) {
+        if (segment.closing) return
+        try {
+          const response = await this.signal(segment, 'begin')
+          if (response.active) {
+            this.transition(segment, 'acquired')
+            this.startHeartbeat(segment)
+            return
+          }
+          return this.recoverBegin(segment, Date.now() + UNKNOWN_DISAMBIGUATION_BUDGET_MS)
+        } catch (error) {
+          const kind = signalFailureKind(error)
+          if (kind === 'busy-native') {
+            if (attempt < COLD_BEGIN_BUSY_RETRIES) {
+              await delay(BEGIN_RETRY_DELAY_MS)
+              continue
+            }
+            this.transition(segment, 'unknown', 'busy-native', error)
+            return
+          }
+          if (kind === 'lease-held' || kind === 'lock-lost') {
+            this.transition(segment, 'lost', kind, error)
+            return
+          }
+          if (kind === 'auth') {
+            this.transition(segment, 'lost', 'auth', error)
+            return
+          }
+          if (kind === 'route-missing') {
+            this.transition(segment, 'unsupported', 'unknown', error)
+            return
+          }
+          if (kind === 'session-missing') {
+            this.transition(segment, 'lost', 'session-missing', error)
+            return
+          }
+          if (kind === 'transient') {
+            this.transition(segment, 'unknown', 'unknown', error)
+            await this.recoverBegin(segment, Date.now() + UNKNOWN_DISAMBIGUATION_BUDGET_MS)
+            return
+          }
+          this.transition(segment, 'lost', 'unknown', error)
+          return
+        }
+      }
+    })()
+    return segment.beginAttempt
+  }
+
+  private async recoverBegin(segment: TrackedLeaseSegment, deadline: number): Promise<void> {
+    if (segment.state === 'lost' || segment.state === 'unsupported' || segment.closing) return
+    segment.state = 'unknown'
+    for (let attempt = 0; attempt < RECOVERY_BEGIN_ATTEMPTS; attempt += 1) {
+      const remaining = deadline - Date.now()
+      if (remaining <= 0 || segment.closing) break
+      try {
+        const response = await this.signal(segment, 'begin', Math.min(TURN_SIGNAL_DEADLINE_MS, remaining))
+        if (response.active) {
+          this.transition(segment, 'acquired')
+          this.startHeartbeat(segment)
+          return
+        }
+      } catch (error) {
+        const kind = signalFailureKind(error)
+        // H2:recovery begin 的 BUSY_NATIVE/LEASE_HELD 直接进 lost，不走 cold 重试。
+        if (kind === 'busy-native' || kind === 'lease-held' || kind === 'lock-lost') {
+          this.transition(segment, 'lost', kind === 'busy-native' ? 'lock-lost' : kind, error)
+          return
+        }
+        if (kind === 'auth') {
+          this.transition(segment, 'lost', 'auth', error)
+          return
+        }
+        if (kind === 'route-missing') {
+          this.transition(segment, 'unsupported', 'unknown', error)
+          return
+        }
+        if (kind === 'session-missing') {
+          this.transition(segment, 'lost', 'session-missing', error)
+          return
+        }
+        if (kind !== 'transient') {
+          this.transition(segment, 'lost', 'unknown', error)
+          return
+        }
+        segment.lastError = error
+      }
+    }
+    this.transition(segment, 'lost', 'unknown', segment.lastError)
+  }
+
+  private startHeartbeat(segment: TrackedLeaseSegment): void {
+    if (segment.heartbeat || segment.closing || segment.state !== 'acquired') return
+    segment.heartbeat = setInterval(() => {
+      if (segment.closing || segment.heartbeatInFlight || (segment.state !== 'acquired' && segment.state !== 'unknown')) return
+      const pending = this.heartbeat(segment)
+      segment.heartbeatInFlight = pending
       void pending.finally(() => {
-        if (current.heartbeatInFlight === pending) current.heartbeatInFlight = undefined
+        if (segment.heartbeatInFlight === pending) segment.heartbeatInFlight = undefined
       })
     }, this.heartbeatMs)
-    current.heartbeat.unref?.()
+    segment.heartbeat.unref?.()
   }
 
-  private close(current: TrackedAgentTurn): Promise<void> {
-    if (current.closePromise) return current.closePromise
-    current.closing = true
-    if (current.heartbeat) {
-      clearInterval(current.heartbeat)
-      current.heartbeat = undefined
-    }
-    current.closePromise = (async () => {
-      if (!current.engineSessionId || !current.beginAttempt) return
-      await current.beginAttempt
-      await this.signal(current.engineSessionId, 'end', current.turnId)
-    })()
-    return current.closePromise
-  }
-
-  private async signal(
-    engineSessionId: string,
-    action: TurnSignalAction,
-    turnId: string,
-  ): Promise<boolean> {
+  private async heartbeat(segment: TrackedLeaseSegment): Promise<void> {
+    if (segment.writeOutcomeUnknown) return
     try {
-      await this.engine.fetchJson(
-        `/sessions/${encodeURIComponent(engineSessionId)}/turn-signal`,
-        { method: 'POST', body: JSON.stringify({ action, turnId }) },
-      )
-      return true
-    } catch {
-      return false
+      const response = await this.signal(segment, 'heartbeat')
+      if (response.active) {
+        this.transition(segment, 'acquired')
+        segment.heartbeatFailureCount = 0
+        return
+      }
+      segment.beginAttempt = this.recoverBegin(segment, Date.now() + UNKNOWN_DISAMBIGUATION_BUDGET_MS)
+      await segment.beginAttempt
+    } catch (error) {
+      const kind = signalFailureKind(error)
+      if (kind === 'busy-native') {
+        segment.beginAttempt = this.recoverBegin(segment, Date.now() + UNKNOWN_DISAMBIGUATION_BUDGET_MS)
+        await segment.beginAttempt
+      } else if (kind === 'lease-held' || kind === 'lock-lost') {
+        this.transition(segment, 'lost', kind, error)
+      } else if (kind === 'auth') {
+        this.transition(segment, 'lost', 'auth', error)
+      } else if (kind === 'route-missing') {
+        this.transition(segment, 'unsupported', 'unknown', error)
+      } else if (kind === 'session-missing') {
+        this.transition(segment, 'lost', 'session-missing', error)
+      } else {
+        this.transition(segment, 'unknown', 'unknown', error)
+        segment.heartbeatFailureCount += 1
+        if (segment.heartbeatFailureCount >= 3) {
+          segment.heartbeatFailureCount = 0
+          segment.beginAttempt = this.recoverBegin(segment, Date.now() + UNKNOWN_DISAMBIGUATION_BUDGET_MS)
+          await segment.beginAttempt
+        }
+      }
     }
   }
+
+  private async closeTurn(current: TrackedAgentTurn): Promise<void> {
+    const pending = Promise.allSettled([...current.segments.values()].map((segment) => this.closeSegment(segment)))
+    await raceDeadline(pending, TURN_CLOSE_DEADLINE_MS)
+  }
+
+  private closeSegment(segment: TrackedLeaseSegment): Promise<void> {
+    if (segment.closePromise) return segment.closePromise
+    segment.closing = true
+    if (segment.heartbeat) {
+      clearInterval(segment.heartbeat)
+      segment.heartbeat = undefined
+    }
+    segment.closePromise = (async () => {
+      const attempted = Boolean(segment.beginAttempt)
+      if (segment.beginAttempt) await segment.beginAttempt.catch(() => undefined)
+      if (!attempted) return
+      if (segment.state !== 'acquired' && segment.state !== 'unknown') return
+      await this.signal(segment, 'end').catch(() => undefined)
+    })()
+    const key = this.documentKey(segment)
+    this.closingByDocument.set(key, segment.closePromise)
+    void segment.closePromise.finally(() => {
+      if (this.closingByDocument.get(key) === segment.closePromise) this.closingByDocument.delete(key)
+    })
+    return segment.closePromise
+  }
+
+  private transition(
+    segment: TrackedLeaseSegment,
+    state: AgentTurnLeaseState,
+    blockReason?: LeaseBlockReason,
+    lastError?: unknown,
+  ): void {
+    if (segment.state === 'lost' && state !== 'lost') return
+    segment.state = state
+    segment.blockReason = blockReason
+    segment.lastError = lastError
+    if (state === 'lost' || state === 'unsupported') {
+      if (segment.heartbeat) clearInterval(segment.heartbeat)
+      segment.heartbeat = undefined
+    }
+  }
+
+  private blockingError(segment: TrackedLeaseSegment): Error {
+    if (segment.blockReason === 'session-missing' && segment.lastError instanceof Error) return segment.lastError
+    if (segment.state === 'unsupported') {
+      if (!segment.unsupportedReported) {
+        segment.unsupportedReported = true
+        return new Error(LEASE_UNSUPPORTED_ERROR)
+      }
+      return new Error('当前引擎不支持编辑锁，本回合已停止写作')
+    }
+    if (segment.blockReason === 'busy-native') return new Error(LEASE_BUSY_NATIVE_ERROR)
+    if (segment.blockReason === 'auth') return new Error(LEASE_AUTH_ERROR)
+    if (segment.state === 'lost') return new Error(LEASE_LOST_ERROR)
+    return new Error(LEASE_UNKNOWN_ERROR)
+  }
+
+  private documentKey(segment: TrackedLeaseSegment): string {
+    return `${segment.dshSessionId}\u0000${segment.engineSessionId}`
+  }
+
+  private signal(
+    segment: TrackedLeaseSegment,
+    action: TurnSignalAction,
+    timeoutMs = TURN_SIGNAL_DEADLINE_MS,
+  ): Promise<TurnSignalResponse> {
+    return this.engine.fetchTurnSignal<TurnSignalResponse>(
+      `/sessions/${encodeURIComponent(segment.engineSessionId)}/turn-signal`,
+      { action, turnId: segment.turnId },
+      timeoutMs,
+    )
+  }
+}
+
+type SignalFailureKind =
+  | 'busy-native'
+  | 'lease-held'
+  | 'lock-lost'
+  | 'auth'
+  | 'route-missing'
+  | 'session-missing'
+  | 'transient'
+  | 'other'
+
+function signalFailureKind(error: unknown): SignalFailureKind {
+  if (isMissingSessionError(error)) return 'session-missing'
+  if (error instanceof EngineHttpError) {
+    const body = error.body as { code?: unknown } | null
+    const code = typeof body?.code === 'string' ? body.code : ''
+    if (code === 'BUSY_NATIVE') return 'busy-native'
+    if (code === 'LEASE_HELD') return 'lease-held'
+    if (code === 'LOCK_LOST') return 'lock-lost'
+    if (error.status === 401 || error.status === 403) return 'auth'
+    if (error.status === 404) return 'route-missing'
+    if (error.status === 429 || error.status >= 500) return 'transient'
+    return 'other'
+  }
+  if (error instanceof EngineUnavailableError) {
+    return error.status.reason === 'unauthorized' ? 'auth' : 'transient'
+  }
+  if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) return 'transient'
+  return 'transient'
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, milliseconds)
+    timer.unref?.()
+  })
+}
+
+async function raceDeadline(promise: Promise<unknown>, milliseconds: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  await Promise.race([
+    promise,
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, milliseconds)
+      timer.unref?.()
+    }),
+  ])
+  if (timer) clearTimeout(timer)
 }
 
 interface Subscriber {
@@ -593,13 +930,6 @@ export class BridgeHub {
 class HttpInputError extends Error {}
 class HttpNotFoundError extends Error {}
 class HttpPayloadTooLargeError extends Error {}
-
-function isMissingSessionError(error: unknown): boolean {
-  if (!(error instanceof EngineHttpError) || error.status !== 404) return false
-  const body = error.body
-  return typeof body === 'object' && body !== null
-    && (body as Record<string, unknown>).code === 'SESSION_NOT_FOUND'
-}
 
 function requiredQuery(url: URL, name: string): string {
   const value = url.searchParams.get(name)?.trim()

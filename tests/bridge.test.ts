@@ -484,7 +484,7 @@ describe('BridgeHub', () => {
     dispose()
   })
 
-  it('review-commit 后刷新权威摘要并通过 agent.inject 推到下一步，注入不含正文或内部标识', async () => {
+  it('review-commit 后只刷新 system context 权威摘要，不再另走 agent.inject', async () => {
     const binding = {
       docs: [{ engineSessionId: 'qing-a', title: '旧标题', createdAt: '2026-08-15T00:00:00.000Z' }],
       activeEngineSessionId: 'qing-a',
@@ -542,13 +542,11 @@ describe('BridgeHub', () => {
       { expectedDocVersion: 3, action: 'commit' },
     ), response() as unknown as ServerResponse)
 
-    expect(inject).toHaveBeenCalledOnce()
-    const injected = inject.mock.calls[0]?.[0] as { content: Array<{ text?: string }> }
-    const text = injected.content[0]?.text ?? ''
+    expect(inject).not.toHaveBeenCalled()
+    const text = cache.contextText('dsh-a')
     expect(text).toContain('【文稿状态】已落库生效,无待审稿。')
     expect(text).toContain('《新标题》｜一个标题加 1 段正文｜约 7 字')
     expect(text).not.toMatch(/机密正文|pendingReview|docRef|blockId|qing-a/u)
-    expect(cache.contextText('dsh-a')).toBe(text)
     runtime.dispose()
   })
 

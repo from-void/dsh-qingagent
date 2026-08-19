@@ -4,8 +4,8 @@ import { QINGAGENT_SYSTEM_PROMPT } from '../src/system-prompt.js'
 describe('QINGAGENT_SYSTEM_PROMPT', () => {
   it('以最近工具状态为权威并要求新指令先刷新审阅态', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('当前注入的【文稿状态】行或最近一次 qing 工具返回的【文稿状态】行(含 qing_list_docs 的状态列)为同级权威,且都优先于聊天记忆')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('当前注入的【文稿状态】摘要或 qing_read_draft(mode:"outline" 或相应粒度)的返回为同级权威,二者都优先于聊天记忆')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('摘要明确未刷新时必须读稿')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('当前 system context 中的【文稿状态】摘要或最近一次 qing 工具返回为权威')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('摘要明确未刷新时才调用 qing_read_draft')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('先调用一次 qing_list_docs 刷新文稿状态权威态')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('严禁不调工具就宣称文稿处于审阅态')
     expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('若结算后没有收到该消息,即为全部采纳')
@@ -17,7 +17,7 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【编辑作用域纪律】')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【叙述一致性红线】')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【结构摘要自检纪律】')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('字数等你确认后再核对')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('软目标最多自动重写一次,仍有偏差也会提交')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('这是文末自动落款，会随字数和保存时间自动更新，属于固定装饰，无法编辑或关闭；正文本身不包含它')
   })
 
@@ -56,8 +56,7 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
   })
 
   it('区分内容项统计与纸面自然段数', () => {
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('工具返回的内容项统计包含标题、列表、表格等非段落结构,不等于自然段')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('向用户描述篇幅结构时按纸面实际形态说(几段正文、几节、几个清单),不得把内容项数直译成段数')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('工具返回的内容项包含标题、列表、表格等非段落结构,不等于自然段')
   })
 
   it('改标题时同步稿名和纸面大标题并覆盖无大标题分支', () => {
@@ -71,10 +70,11 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('不能只把提纲埋在 brief 里')
   })
 
-  it('现状提问会刷新旧审阅态且免读仅限刚提交编辑的本回合', () => {
+  it('现状提问会刷新旧审阅态且作者快照免读', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('新的修改指令或任何关于文稿现状的提问(当前状态/结构/字数/改了什么/还剩什么没处理)时')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('免读只适用于本回合内刚提交过编辑这一种情形')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('新回合若要判断/汇报文稿状态、结构、字数,或要动手编辑,而上下文里存在可能已过期的审阅态线索,就先刷新权威状态再决定读不读')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('【作者免读】')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('committed 时直接按返回摘要汇报,不要再读稿复核')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('新回合遇到可能过期的状态线索时,先刷新权威状态再决定是否读稿')
     expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('任何新回合开始时一律先刷新')
   })
 
@@ -101,18 +101,14 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
 
   it('压缩只授权原结构内删字，章节变更仍按全文重构征询', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('用户要求「压缩字数/删减篇幅」不等于授权重排结构——它免征询的范围仅限于删字,不动章节')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('「压缩到 N 字/删掉一半」这类要求只是字数目标,**不附带结构授权**')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('压缩只能在保持原有章节结构的前提下删冗余')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('凡会增删、合并或重排章节的做法都属整篇重构,按【全文重构纪律】先 ask_user')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('「合并相近小节」是起草新稿满足长度规格的策略,已成稿后的压缩不得用它')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('「压缩到 N 字」不授权增删、合并或重排章节')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('需要动结构时仍按【全文重构纪律】处理')
   })
 
-  it('首稿字数补足与单回合例外成对存在', () => {
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('例外见【字数纪律】的首稿补足')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('首稿落库即发现低于硬要求时,当回合紧接着做这一次补足不算违反【单回合单次编辑纪律】')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不得只汇报不达标就把字数问题推回用户')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('若首稿走了审阅路径,当回合无法再改,等用户裁决后下一回合再补足')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('「禁止反复整篇重写」禁的是重写手段和自驱循环,**不是禁止这一次局部修正**')
+  it('字数软修正收在工具内，不开放同回合第二次编辑', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('字数软目标的唯一次自动修正由 qing_write_draft 工具内部完成')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不得在同回合再自驱读稿或追加修改')
+    expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('首稿落库即发现低于硬要求时')
   })
 
   it('审核结果回流:全采纳一句话收尾', () => {
