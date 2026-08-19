@@ -454,6 +454,67 @@ describe('qing_write_draft', () => {
     expect(fixture.events[0]?.event).toMatchObject({ revealWholeDraft: true })
   })
 
+  it('已有稿仅在本回合读过 outline 时拒绝整稿改写', async () => {
+    let proposals = 0
+    const fixture = harness(async (path) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({ docVersion: 2, state: 'editing', qingml: DRAFT_ONE, title: '测试稿' })
+      }
+      if (path.endsWith('/proposals')) {
+        proposals += 1
+        return { status: 'committed', docVersion: 3 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, compileQingmlDocument(DRAFT_ONE))
+    const preStep = fixture.listeners.get('agent/pre-step')!
+    await preStep({ agent: { id: 'dsh-1' }, turn: 40 }, async () => ({ kind: 'enter', messages: [] }))
+
+    await fixture.tools.get('qing_read_draft')!.execute(
+      { mode: 'outline' },
+      exec(undefined, 'outline-before-rewrite', 'qing_read_draft'),
+    )
+    await expect(fixture.tools.get('qing_write_draft')!.execute(
+      { qingml: DRAFT_TWO, docRef: 'qing-1' },
+      exec(undefined, 'rewrite-after-outline', 'qing_write_draft'),
+    )).rejects.toThrow('mode:"full"')
+    expect(proposals).toBe(0)
+  })
+
+  it.each(['full', 'base', 'lines'] as const)('已有稿在本回合读过 mode:%s 全文后允许整稿改写', async (mode) => {
+    let proposed = false
+    const fixture = harness(async (path) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return proposed
+          ? doc({ docVersion: 3, state: 'editing', qingml: DRAFT_TWO, title: '测试稿' })
+          : doc({ docVersion: 2, state: 'editing', qingml: DRAFT_ONE, title: '测试稿' })
+      }
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '# 开篇\n\n第一版正文。',
+          markdownWithLineNumbers: '   1 | # 开篇\n   2 | \n   3 | 第一版正文。',
+          title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposed = true
+        return { status: 'committed', docVersion: 3 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, compileQingmlDocument(DRAFT_TWO))
+    const preStep = fixture.listeners.get('agent/pre-step')!
+    await preStep({ agent: { id: 'dsh-1' }, turn: 41 }, async () => ({ kind: 'enter', messages: [] }))
+
+    await fixture.tools.get('qing_read_draft')!.execute(
+      { mode },
+      exec(undefined, `full-before-rewrite-${mode}`, 'qing_read_draft'),
+    )
+    await expect(fixture.tools.get('qing_write_draft')!.execute(
+      { qingml: DRAFT_TWO, docRef: 'qing-1' },
+      exec(undefined, `rewrite-after-${mode}`, 'qing_write_draft'),
+    )).resolves.toMatchObject({ status: 'committed', docVersion: 3 })
+  })
+
   it('字数不达标仍直接提交并只报告差距，重交省略 requirements 时继承首稿合同', async () => {
     const qingml = '<title>测试稿</title><h1>测试稿</h1><p>短稿。</p>'
     const pmDoc = compileQingmlDocument(qingml)
@@ -507,9 +568,11 @@ describe('qing_write_draft', () => {
         return { status: 'committed', docVersion: version }
       }
       throw new Error(`unexpected path: ${path}`)
-    }, ONLINE_ENGINE, pmDoc)
+    }, ONLINE_ENGINE, pmDoc, undefined, false)
     const tool = fixture.tools.get('qing_write_draft')!
     const context = exec(undefined, 'unconditional-retry', 'qing_write_draft')
+    const preStep = fixture.listeners.get('agent/pre-step')!
+    await preStep({ agent: { id: 'dsh-1' }, turn: 42 }, async () => ({ kind: 'enter', messages: [] }))
 
     await expect(tool.execute({ qingml }, context))
       .resolves.toMatchObject({ status: 'committed', lengthStatus: 'not-requested' })

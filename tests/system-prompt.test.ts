@@ -120,6 +120,7 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
 
   it('已有文稿整篇重写前必须取得本回合全文', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('若全文不在本回合上下文中，必须先调用 qing_read_draft 读取全文再改写')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('优先 mode:"full"；mode:"base"/"lines" 也能提供完整正文')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('禁止只凭大纲或记忆重写')
   })
 

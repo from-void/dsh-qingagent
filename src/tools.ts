@@ -42,6 +42,7 @@ import {
   DocStateCache,
   FreshnessTracker,
   docStateLine,
+  type DraftReadMode,
   type DocStateSnapshot,
 } from './docState.js'
 import { compileQingmlDocument } from './qingmlCompile.js'
@@ -468,12 +469,12 @@ export function registerTools(services: ToolServices): void {
 function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTracker) {
   return defineTool({
     name: 'qing_write_draft',
-    description: '把你在主对话中写好的完整 QingML 文稿提交到青简。省略 docRef 会新建文稿；改写已有文稿必须传当前会话内的 docRef。',
+    description: '把你在主对话中写好的完整 QingML 文稿提交到青简。省略 docRef 会新建文稿；改写已有文稿必须传当前会话内的 docRef，并先在本回合用 full/base/lines 模式取得全文。',
     parameters: {
       qingml: { type: 'string', required: true, description: '完整 QingML 全文；必须含最前面的 <title>、同名 <h1> 纸面大标题和全部正文。' },
       title: { type: 'string', description: '用户明确指定的标题；传入后工具会让 <title> 与首个 <h1> 逐字一致。' },
       requirements: { type: 'string', description: '仅在用户明确提出全文字数要求时，原样传入相关短句（如“约 1200 字”或“至少 800 字”），供工具报告差距；不要放正文。' },
-      docRef: { type: 'string', description: '要整稿改写的青简会话 ID；省略即新建。' },
+      docRef: { type: 'string', description: '要整稿改写的青简会话 ID；省略即新建。传入时，本回合须已用 qing_read_draft 的 full/base/lines 模式取得全文，作者刚直写后的唯一一次重交除外。' },
     },
     output: {
       schema: {
@@ -577,7 +578,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
         // 改写时是显式写意图；新稿则在创建成功、拿到真实文稿 ID 后立即申领。
         await services.turnLeases.touchDocument(dshSessionId, bound.engineSessionId)
         if (args.docRef) {
-          services.freshness.assertFresh(
+          services.freshness.assertWholeDraftReady(
             exec,
             bound.engineSessionId,
             services.turnLeases.generation(dshSessionId, bound.engineSessionId),
@@ -598,6 +599,13 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
             requirements,
             proposal.status === 'committed',
           )
+          if (proposal.status === 'committed') {
+            services.freshness.markAgentWritten(
+              exec,
+              bound.engineSessionId,
+              services.turnLeases.generation(dshSessionId, bound.engineSessionId),
+            )
+          }
         } catch (error) {
           throw sanitizeToolBoundaryError(error)
         }
@@ -1242,7 +1250,7 @@ function readDraftTool(services: RuntimeToolServices, readTurns: ReadTurnTracker
           title: currentOutline.title,
           docVersion: doc.docVersion,
           ...(currentPatchCount !== undefined ? { patchCount: currentPatchCount } : {}),
-        }, true)
+        }, true, mode)
         readTurns.remember(exec, engineSessionId, mode, doc.docVersion)
         return {
           title: outline.title,
@@ -1270,7 +1278,7 @@ function readDraftTool(services: RuntimeToolServices, readTurns: ReadTurnTracker
           title: currentOutline.title,
           docVersion: doc.docVersion,
           ...(currentPatchCount !== undefined ? { patchCount: currentPatchCount } : {}),
-        }, true)
+        }, true, mode)
         readTurns.remember(exec, engineSessionId, mode, doc.docVersion)
         return {
           title: outline.title,
@@ -1308,7 +1316,7 @@ function readDraftTool(services: RuntimeToolServices, readTurns: ReadTurnTracker
         title: currentOutline.title,
         docVersion: doc.docVersion,
         ...(currentPatchCount !== undefined ? { patchCount: currentPatchCount } : {}),
-      }, true)
+      }, true, mode)
       readTurns.remember(exec, engineSessionId, mode, doc.docVersion)
       return {
         title: outline.title,
@@ -1593,15 +1601,14 @@ function rememberDocState(
   engineSessionId: string,
   snapshot: Omit<DocStateSnapshot, 'dirty'>,
   establishesFreshness: boolean,
+  readMode?: DraftReadMode,
 ): void {
   const dshSessionId = sessionIdOf(exec)
   services.docStates.update(dshSessionId, snapshot)
   if (establishesFreshness) {
-    services.freshness.markFresh(
-      exec,
-      engineSessionId,
-      services.turnLeases.generation(dshSessionId, engineSessionId),
-    )
+    const generation = services.turnLeases.generation(dshSessionId, engineSessionId)
+    if (readMode) services.freshness.markRead(exec, engineSessionId, readMode, generation)
+    else services.freshness.markFresh(exec, engineSessionId, generation)
   }
 }
 

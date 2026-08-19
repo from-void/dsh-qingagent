@@ -1,9 +1,24 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
-import { FRESH_DRAFT_REQUIRED_ERROR, sanitizeUserVisibleText } from './userVisibleText.js'
+import {
+  FRESH_DRAFT_REQUIRED_ERROR,
+  FULL_DRAFT_REQUIRED_ERROR,
+  sanitizeUserVisibleText,
+} from './userVisibleText.js'
 
-export { FRESH_DRAFT_REQUIRED_ERROR } from './userVisibleText.js'
+export { FRESH_DRAFT_REQUIRED_ERROR, FULL_DRAFT_REQUIRED_ERROR } from './userVisibleText.js'
+
+export type DraftReadMode = 'outline' | 'full' | 'base' | 'lines' | 'blocks'
+
+const FULL_CONTENT_READ_MODES = new Set<DraftReadMode>(['full', 'base', 'lines'])
+
+interface FreshDocumentMarker {
+  generation?: number
+  fresh: boolean
+  readModes: Set<DraftReadMode>
+  agentWritten: boolean
+}
 
 export interface DocStateSnapshot {
   state: string
@@ -65,7 +80,7 @@ export class DocStateCache {
 /** 与 agent/pre-step 的 turn 及文稿租约段绑定；A 稿的读取不能让 B 稿越过写前新鲜度门。 */
 export class FreshnessTracker {
   private readonly turns = new Map<string, number>()
-  private readonly documents = new Map<string, Map<string, { generation?: number; fresh: boolean }>>()
+  private readonly documents = new Map<string, Map<string, FreshDocumentMarker>>()
 
   begin(sessionId: string, turn: number): void {
     if (this.turns.get(sessionId) === turn) return
@@ -75,15 +90,38 @@ export class FreshnessTracker {
 
   resetSegment(sessionId: string, engineSessionId: string, generation: number): void {
     const documents = this.documents.get(sessionId) ?? new Map()
-    documents.set(engineSessionId, { generation, fresh: false })
+    documents.set(engineSessionId, {
+      generation,
+      fresh: false,
+      readModes: new Set(),
+      agentWritten: false,
+    })
     this.documents.set(sessionId, documents)
   }
 
   markFresh(exec: ToolRunContext, engineSessionId: string, generation?: number): void {
-    const sessionId = sessionIdOf(exec)
-    const documents = this.documents.get(sessionId) ?? new Map()
-    documents.set(engineSessionId, { generation, fresh: true })
-    this.documents.set(sessionId, documents)
+    this.updateMarker(exec, engineSessionId, generation, (marker) => {
+      marker.fresh = true
+    })
+  }
+
+  markRead(
+    exec: ToolRunContext,
+    engineSessionId: string,
+    mode: DraftReadMode,
+    generation?: number,
+  ): void {
+    this.updateMarker(exec, engineSessionId, generation, (marker) => {
+      marker.fresh = true
+      marker.readModes.add(mode)
+    })
+  }
+
+  markAgentWritten(exec: ToolRunContext, engineSessionId: string, generation?: number): void {
+    this.updateMarker(exec, engineSessionId, generation, (marker) => {
+      marker.fresh = true
+      marker.agentWritten = true
+    })
   }
 
   assertFresh(exec: ToolRunContext, engineSessionId: string, generation?: number): void {
@@ -96,9 +134,39 @@ export class FreshnessTracker {
     }
   }
 
+  assertWholeDraftReady(exec: ToolRunContext, engineSessionId: string, generation?: number): void {
+    const sessionId = sessionIdOf(exec)
+    // 独立工具测试没有 agent loop 的 pre-step；真机每回合必先 begin。
+    if (!this.turns.has(sessionId)) return
+    const marker = this.documents.get(sessionId)?.get(engineSessionId)
+    const currentGeneration = generation === undefined || marker?.generation === generation
+    const hasFullContent = marker?.agentWritten
+      || [...(marker?.readModes ?? [])].some((mode) => FULL_CONTENT_READ_MODES.has(mode))
+    if (!marker?.fresh || !currentGeneration || !hasFullContent) {
+      throw new Error(FULL_DRAFT_REQUIRED_ERROR)
+    }
+  }
+
   dispose(sessionId: string): void {
     this.turns.delete(sessionId)
     this.documents.delete(sessionId)
+  }
+
+  private updateMarker(
+    exec: ToolRunContext,
+    engineSessionId: string,
+    generation: number | undefined,
+    update: (marker: FreshDocumentMarker) => void,
+  ): void {
+    const sessionId = sessionIdOf(exec)
+    const documents = this.documents.get(sessionId) ?? new Map<string, FreshDocumentMarker>()
+    const existing = documents.get(engineSessionId)
+    const marker = existing && existing.generation === generation
+      ? existing
+      : { generation, fresh: false, readModes: new Set<DraftReadMode>(), agentWritten: false }
+    update(marker)
+    documents.set(engineSessionId, marker)
+    this.documents.set(sessionId, documents)
   }
 }
 

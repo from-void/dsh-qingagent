@@ -1,6 +1,9 @@
 /** 新鲜度闸门给模型的稳定错误；客户端据此隐藏仅用于自恢复的失败卡。 */
 export const FRESH_DRAFT_REQUIRED_ERROR = '请先调用 qing_read_draft 读取当前文稿，再基于最新内容修改。'
 
+/** 整稿替换必须真的取得全文，提纲或定位清单不能冒充完整正文。 */
+export const FULL_DRAFT_REQUIRED_ERROR = '整稿改写前，请先调用 qing_read_draft，以 mode:"full"、mode:"base" 或 mode:"lines" 读取当前全文，再基于完整内容重写。'
+
 /**
  * 工具呈现、状态摘要与 toast 的统一用户文案出口。
  * 旧记录或引擎错误仍可能带内部定位信息；所有真正展示给用户的摘要在这里去内部术语。
@@ -28,5 +31,6 @@ export function toolContentText(content: readonly unknown[]): string {
 }
 
 export function isFreshnessGateFailure(content: readonly unknown[]): boolean {
-  return toolContentText(content).includes(FRESH_DRAFT_REQUIRED_ERROR)
+  const text = toolContentText(content)
+  return text.includes(FRESH_DRAFT_REQUIRED_ERROR) || text.includes(FULL_DRAFT_REQUIRED_ERROR)
 }

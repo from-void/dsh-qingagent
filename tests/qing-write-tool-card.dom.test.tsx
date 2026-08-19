@@ -9,6 +9,7 @@ import { failureSummary, QingWriteToolCard } from '../src/client/QingWriteToolCa
 import { qingClientStore } from '../src/client/store.js'
 import {
   FRESH_DRAFT_REQUIRED_ERROR,
+  FULL_DRAFT_REQUIRED_ERROR,
   sanitizeUserVisibleText,
 } from '../src/userVisibleText.js'
 
@@ -154,6 +155,11 @@ describe('Qing write/edit tool card view navigation', () => {
     try {
       act(() => root.render(
         <QingEditToolCard {...failedProps(`Error: ${FRESH_DRAFT_REQUIRED_ERROR}`) as unknown as ComponentProps<typeof QingEditToolCard>} />,
+      ))
+      expect(host.textContent).toBe('')
+
+      act(() => root.render(
+        <QingWriteToolCard {...failedProps(`Error: ${FULL_DRAFT_REQUIRED_ERROR}`) as unknown as ComponentProps<typeof QingWriteToolCard>} />,
       ))
       expect(host.textContent).toBe('')
 
