@@ -2,7 +2,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-agent'
-import type {} from '@deepseek-ai/dsh-llm'
 import type {} from '@deepseek-ai/dsh-storage-domain'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-tools'
@@ -12,7 +11,6 @@ import { EngineService } from './engine.js'
 import { QINGAGENT_SYSTEM_PROMPT } from './system-prompt.js'
 import { createTelemetry } from './telemetry.js'
 import { refreshDocState, registerTools } from './tools.js'
-import type { SideModelConfig } from './contracts.js'
 import {
   AgentIndex,
   DOC_STATE_STALE_LINE,
@@ -23,7 +21,7 @@ import {
 } from './docState.js'
 
 export const name = 'dsh-qingagent'
-export const inject = ['agents', 'llm', 'tools', 'webServer', 'storageDomain', 'systemPrompt']
+export const inject = ['agents', 'tools', 'webServer', 'storageDomain', 'systemPrompt']
 
 export interface Config {
   engineUrl?: string
@@ -32,7 +30,6 @@ export interface Config {
   autoLaunch?: boolean
   /** 批次 1 保留配置位；工作区导出将在后续批次实现。 */
   workspaceProjection?: boolean
-  sideModel?: SideModelConfig
 }
 
 export const Config: z<Config> = z.object({
@@ -41,14 +38,6 @@ export const Config: z<Config> = z.object({
   engineCwd: z.string(),
   autoLaunch: z.boolean().default(false),
   workspaceProjection: z.boolean().default(true),
-  // Schemastery 的 object 自带 {} 默认；与 never 联合才能表达“整段可省略，出现时两项必填”。
-  sideModel: z.union([
-    z.never(),
-    z.object({
-      provider: z.string().required(),
-      model: z.string().required(),
-    }),
-  ]),
 })
 
 export function createBridgeDocStateObserver(
@@ -132,7 +121,6 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     bindings,
     bridge,
     telemetry,
-    sideModel: config.sideModel,
     docStates,
     freshness,
   })
@@ -167,7 +155,7 @@ export {
   PluginUpdateChecker,
 } from './updateCheck.js'
 export { QINGJIAN_DOWNLOAD_URL, qingjianUnavailableMessage } from './onboarding.js'
-export { QINGML_SYSTEM, completeTopLevelBlocks, countWords, outlineOf } from './qingml.js'
+export { completeTopLevelBlocks, outlineOf } from './qingml.js'
 export { compileQingmlDocument } from './qingmlCompile.js'
 export { selectionSystemPrompt } from './selection.js'
 export {

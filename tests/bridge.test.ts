@@ -229,10 +229,19 @@ describe('BridgeHub', () => {
     await handler(reqA, resA as unknown as ServerResponse)
     await handler(reqB, resB as unknown as ServerResponse)
 
-    hub.emit('dsh-a', { type: 'draft-failed', engineSessionId: 'qing-a', generation: 'draft-a', message: '已中止' })
+    hub.emit('dsh-a', {
+      type: 'doc-committed',
+      engineSessionId: 'qing-a',
+      doc: {
+        sessionId: 'qing-a', docVersion: 1, state: 'editing', agentBusy: false,
+        markdown: '', qingml: '<p>正文</p>', title: '文稿',
+      },
+      blocks: 1,
+      words: 2,
+    })
 
-    expect(resA.writes.join('')).toContain('event: draft-failed')
-    expect(resB.writes.join('')).not.toContain('event: draft-failed')
+    expect(resA.writes.join('')).toContain('event: doc-committed')
+    expect(resB.writes.join('')).not.toContain('event: doc-committed')
     expect((hub as unknown as { subscribers: Set<unknown> }).subscribers.size).toBe(2)
 
     reqA.emit('close')

@@ -97,7 +97,7 @@ describe('telemetry 事件构造与分桶', () => {
     const { instance } = telemetry(fetchMock)
 
     await expect(instance.capture('draft_created', {
-      words_bucket: '201-500', blocks_bucket: '6-20', retried: false,
+      words_bucket: '201-500', blocks_bucket: '6-20',
     })).resolves.toBeUndefined()
 
     expect(fetchMock).toHaveBeenCalledOnce()
@@ -122,7 +122,6 @@ describe('telemetry 事件构造与分桶', () => {
         data: expect.objectContaining({
           words_bucket: '201-500',
           blocks_bucket: '6-20',
-          retried: false,
           device_id: DEVICE_ID,
           pluginVersion: '1.2.3',
           nodeVersion: process.versions.node,

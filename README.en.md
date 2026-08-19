@@ -100,7 +100,7 @@ The implementation also includes macOS client detection (`mdfind` with an Applic
 
 | Tool | Parameters | Purpose |
 |---|---|---|
-| `qing_write_draft` | `brief` required; `title?` `outline?` `style?` `docRef?` | Generate a whole QingML document from the brief and optional explicit outline. Without `docRef` it creates a new draft; with a `docRef` bound to this session it rewrites the whole piece (requires explicit user authorisation) |
+| `qing_write_draft` | `qingml` required; `title?` `requirements?` `docRef?` | Directly submit the complete QingML authored by the main model. Length requirements only produce a status and gap; the tool never rewrites internally. Without `docRef` it creates a new draft; with a `docRef` bound to this session it rewrites the whole piece (requires explicit user authorisation) |
 | `qing_edit_draft` | `docRef?`; `ops[]` required | Atomically submit a batch of structured local edits; refused while a review is in progress |
 | `qing_read_draft` | `docRef?`; `mode` defaults to `outline` | Tiered reads: `outline` / `full` / `base` (committed baseline) / `lines` (numbered Markdown) / `blocks` (block ids) |
 | `qing_review_commit` | `docRef?`; `action: accept_all \| reject_all` | Accept or reject the pending review wholesale; hard-limited to one call per turn |
@@ -157,7 +157,6 @@ qingagent's web editor is compiled straight into the plugin from the `vendor/qin
 | `engineUrl` | `http://127.0.0.1:8080` | **Fallback only** — used when no `instance.json` can be read; a live instance's port wins |
 | `engineCommand` / `engineCwd` | unset | Optional launch command and working directory, executed only with `autoLaunch` |
 | `autoLaunch` | `false` | Starts the engine detached when offline; removing the plugin never kills your engine |
-| `sideModel.provider` / `.model` | unset | Fallback when the current agent does not expose a provider/model; the block is optional, but both fields are required if present |
 | `workspaceProjection` | `true` | **Reserved field** — no runtime effect today |
 
 ---

@@ -9,7 +9,6 @@ import { failureSummary, QingWriteToolCard } from '../src/client/QingWriteToolCa
 import { qingClientStore } from '../src/client/store.js'
 import {
   FRESH_DRAFT_REQUIRED_ERROR,
-  SELF_HEALABLE_DRAFT_FAILURE_PREFIX,
   sanitizeUserVisibleText,
 } from '../src/userVisibleText.js'
 
@@ -114,6 +113,8 @@ describe('QingWriteToolCard theme styles', () => {
 
     expect(document.styleSheets[0]?.cssRules.length).toBeGreaterThan(0)
     expect(stylesheet).not.toMatch(/#[\da-f]{3,8}\b|rgba?\s*\(/i)
+    expect(stylesheet).not.toContain("[data-state='failed'] .toolTitle")
+    expect(stylesheet).not.toContain("[data-state='failed'] .toolSummary")
 
     const themeColors = [...stylesheet.matchAll(
       /^\s*(?:color|background(?:-color)?|border-color|outline-color|box-shadow)\s*:\s*([^;]+);/gm,
@@ -161,58 +162,6 @@ describe('Qing write/edit tool card view navigation', () => {
       ))
       expect(host.textContent).toContain('修改未完成')
       expect(host.textContent).toContain('真实编辑失败')
-    } finally {
-      act(() => root.unmount())
-      host.remove()
-    }
-  })
-
-  it('篇幅自愈开始或成功后隐藏中间失败卡，连续失败时保留最终失败', async () => {
-    stubBackgroundLoads()
-    const host = document.createElement('div')
-    document.body.append(host)
-    const root = createRoot(host)
-    const props = {
-      block: {
-        kind: 'tool-result', isError: true,
-        content: [{ type: 'text', text: `Error: ${SELF_HEALABLE_DRAFT_FAILURE_PREFIX}（篇幅仍不足），未提交文稿。` }],
-      },
-      useSession: (selector: (session: { sessionId: string }) => unknown) => selector({ sessionId: 'self-heal-card' }),
-      qingLayout: { openDetails: vi.fn() },
-    }
-
-    try {
-      await act(async () => root.render(
-        <QingWriteToolCard {...props as unknown as ComponentProps<typeof QingWriteToolCard>} />,
-      ))
-      const source = FakeEventSource.latest!
-      act(() => {
-        source.emit('draft-started', { type: 'draft-started', engineSessionId: 'qing-heal', generation: 'g1' })
-        source.emit('draft-failed', { type: 'draft-failed', engineSessionId: 'qing-heal', generation: 'g1', message: '首次仍不合格' })
-      })
-      expect(host.textContent).toContain('青简写作未完成')
-
-      act(() => source.emit('draft-started', {
-        type: 'draft-started', engineSessionId: 'qing-heal', generation: 'g2',
-      }))
-      expect(host.textContent).toBe('')
-
-      act(() => source.emit('draft-failed', {
-        type: 'draft-failed', engineSessionId: 'qing-heal', generation: 'g2', message: '再次失败',
-      }))
-      expect(host.textContent).toContain('青简写作未完成')
-
-      act(() => {
-        source.emit('draft-started', { type: 'draft-started', engineSessionId: 'qing-heal', generation: 'g3' })
-        source.emit('doc-committed', {
-          type: 'doc-committed', engineSessionId: 'qing-heal', generation: 'g3', blocks: 2, words: 1200,
-          doc: {
-            sessionId: 'qing-heal', docVersion: 1, state: 'editing', agentBusy: false,
-            markdown: '# 合格稿', qingml: '<h1>合格稿</h1><p>正文</p>', title: '合格稿',
-          },
-        })
-      })
-      expect(host.textContent).toBe('')
     } finally {
       act(() => root.unmount())
       host.remove()

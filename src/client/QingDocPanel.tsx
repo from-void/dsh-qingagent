@@ -13,6 +13,7 @@ import {
   DocumentSnapshotView,
   type DocumentSnapshotViewHandle,
 } from '@qingweb/pages/workspace/components/DocumentSnapshotView'
+import { setNativePresentationDecorations } from '@qingweb/pages/workspace/data/nativePresentationPm'
 import { buildAnnotationInstruction } from '@qingweb/pages/workspace/components/AnnotationCarousel'
 import { DocFindBar } from '@qingweb/pages/workspace/components/DocFindBar'
 import { DocToolbar } from '@qingweb/pages/workspace/components/DocToolbar'
@@ -40,7 +41,11 @@ import {
 import { AssetBridgeProvider } from '../qingdoc/AssetBridgeProvider.js'
 import { ConfirmProvider } from '../qingdoc/shims/system.js'
 import { DocumentSaveCoordinator, type DocumentSaveState } from './documentSaveCoordinator.js'
-import { createQingmlCompileThrottle, type QingmlCompileThrottle } from './streamingDocument.js'
+import { planDocumentReveal, type DocumentRevealFrame } from './documentReveal.js'
+import {
+  DEFAULT_REVEAL_STEP_DELAY_MS,
+  DEFAULT_REVEAL_TAIL_HOLD_MS,
+} from './revealTypewriter.js'
 import { QingAnnotationCarousel } from './annotationCarousel.js'
 import { buildReviewPresentationModel } from './reviewPresentation.js'
 import { installDetailsColumnWidth } from './detailsWidth.js'
@@ -98,7 +103,9 @@ export function QingDocPanel(props: QingDocPanelProps) {
   )
   const [toast, setToast] = useState<string | null>(null)
   const [showSavingStatus, setShowSavingStatus] = useState(false)
-  const [streamingPmDoc, setStreamingPmDoc] = useState<PmDoc | null>(null)
+  const [revealFrame, setRevealFrame] = useState<DocumentRevealFrame | null>(null)
+  const revealFrameRef = useRef(revealFrame)
+  revealFrameRef.current = revealFrame
   const [activeReviewTargetId, setActiveReviewTargetId] = useState<string | null>(null)
   const [wholeDocVersion, setWholeDocVersion] = useState<'new' | 'old'>('new')
   const [reviewSubmitting, setReviewSubmitting] = useState(false)
@@ -110,7 +117,6 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const [tiptapEditor, setTiptapEditor] = useState<Editor | null>(null)
   const editorEngineSessionIdRef = useRef<string | null>(null)
   const saveCoordinatorRef = useRef<DocumentSaveCoordinator | null>(null)
-  const compileThrottleRef = useRef<QingmlCompileThrottle | null>(null)
   const autoCommitKeyRef = useRef<string | null>(null)
   const reviewSubmittingRef = useRef(false)
   const reviewSettlementRetryPendingRef = useRef(false)
@@ -160,6 +166,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const handleEditorReady = useCallback((editor: Editor | null) => {
     tiptapEditorRef.current = editor
     setTiptapEditor(editor)
+    if (editor) setNativePresentationDecorations(editor, [], revealFrameRef.current?.charEnters ?? [])
+  }, [])
+
+  const handleEditorContentReady = useCallback((editor: Editor) => {
+    setNativePresentationDecorations(editor, [], revealFrameRef.current?.charEnters ?? [])
   }, [])
 
   const flushPendingDocSave = useCallback(async () => {
@@ -181,33 +192,6 @@ export function QingDocPanel(props: QingDocPanelProps) {
     if (!activeEngineSessionId || (snapshot.state && snapshot.state.engine.state !== 'online')) return
     void qingClientStore.refreshPanel(sessionId, activeEngineSessionId).catch(() => undefined)
   }, [activeEngineSessionId, observedState, observedVersion, sessionId, snapshot.state?.engine.state])
-
-  useEffect(() => {
-    compileThrottleRef.current?.cancel()
-    setStreamingPmDoc(null)
-    if (!activeEngineSessionId) return
-    const throttle = createQingmlCompileThrottle({
-      onCompiled: setStreamingPmDoc,
-      onError: (error) => {
-        console.warn('[qingagent-panel] QingML 增量编译跳过一帧', error)
-      },
-    })
-    compileThrottleRef.current = throttle
-    return () => {
-      throttle.cancel()
-      if (compileThrottleRef.current === throttle) compileThrottleRef.current = null
-    }
-  }, [activeEngineSessionId])
-
-  useEffect(() => {
-    const throttle = compileThrottleRef.current
-    if (!snapshot.streaming) {
-      throttle?.cancel()
-      setStreamingPmDoc(null)
-      return
-    }
-    if (snapshot.qingml) throttle?.push(snapshot.qingml)
-  }, [snapshot.qingml, snapshot.streaming])
 
   useEffect(() => {
     const coordinator = new DocumentSaveCoordinator({
@@ -397,7 +381,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
       window.removeEventListener('resize', measurePaper)
       window.clearInterval(driftTimer)
     }
-  }, [measurePaper, snapshot.panelDoc, snapshot.reviewModel, snapshot.streaming, activeEngineSessionId])
+  }, [measurePaper, snapshot.panelDoc, snapshot.reviewModel, revealFrame, activeEngineSessionId])
 
   const panelDoc = snapshot.panelEngineSessionId === activeEngineSessionId
     ? snapshot.panelDoc
@@ -411,6 +395,66 @@ export function QingDocPanel(props: QingDocPanelProps) {
     : snapshot.reviewModel?.annotations ?? EMPTY_ANNOTATIONS
   const pendingReviewRef = useRef(pendingReview)
   pendingReviewRef.current = pendingReview
+
+  const revealRequest = snapshot.revealRequest
+  const revealActive = Boolean(
+    revealRequest
+    && revealRequest.engineSessionId === activeEngineSessionId
+    && revealRequest.docVersion === panelDoc?.docVersion
+    && !pendingReview,
+  )
+  useEffect(() => {
+    setRevealFrame(null)
+    if (
+      !revealRequest
+      || revealRequest.engineSessionId !== activeEngineSessionId
+      || revealRequest.docVersion !== panelDoc?.docVersion
+      || !panelDoc.pmDoc
+      || pendingReview
+    ) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      qingClientStore.finishReveal(sessionId, revealRequest.nonce)
+      return
+    }
+    const frames = planDocumentReveal(panelDoc.pmDoc)
+    let index = 0
+    let interval: number | undefined
+    let tail: number | undefined
+    setRevealFrame(frames[0] ?? null)
+    const finish = () => {
+      tail = window.setTimeout(() => {
+        setRevealFrame(null)
+        const editor = tiptapEditorRef.current
+        if (editor) setNativePresentationDecorations(editor, [], [])
+        qingClientStore.finishReveal(sessionId, revealRequest.nonce)
+      }, DEFAULT_REVEAL_TAIL_HOLD_MS)
+    }
+    if (frames.length <= 1) {
+      finish()
+    } else {
+      interval = window.setInterval(() => {
+        index += 1
+        setRevealFrame(frames[index] ?? null)
+        if (index >= frames.length - 1) {
+          if (interval !== undefined) window.clearInterval(interval)
+          interval = undefined
+          finish()
+        }
+      }, DEFAULT_REVEAL_STEP_DELAY_MS)
+    }
+    return () => {
+      if (interval !== undefined) window.clearInterval(interval)
+      if (tail !== undefined) window.clearTimeout(tail)
+      const editor = tiptapEditorRef.current
+      if (editor) setNativePresentationDecorations(editor, [], [])
+    }
+  }, [activeEngineSessionId, panelDoc?.docVersion, pendingReview, revealRequest?.nonce, sessionId])
+
+  useLayoutEffect(() => {
+    const editor = tiptapEditorRef.current
+    if (!editor) return
+    setNativePresentationDecorations(editor, [], revealFrame?.charEnters ?? [])
+  }, [revealFrame])
   useEffect(() => {
     const handleReviewDrawioDoubleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null
@@ -429,7 +473,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
     document.addEventListener('dblclick', handleReviewDrawioDoubleClick, { capture: true })
     return () => document.removeEventListener('dblclick', handleReviewDrawioDoubleClick, { capture: true })
   }, [])
-  const busy = snapshot.streaming || panelDoc?.agentBusy === true || activeBound?.agentBusy === true
+  const busy = revealActive || panelDoc?.agentBusy === true || activeBound?.agentBusy === true
   // 冲突态按文稿隔离(权威在 conflicts 分槽映射):当前稿有冲突记录就呈现冲突(含切走再切回),
   // 别的文稿的冲突不影响当前稿;瞬态保存状态照常走单槽。
   const rawSaveState = snapshot.saveState ?? ({ kind: 'idle' } satisfies DocumentSaveState)
@@ -522,9 +566,8 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const conflictStashDoc = activeConflict && activeEngineSessionId
     ? snapshot.conflictStash?.[activeEngineSessionId]
     : undefined
-  const surfacePmDoc = conflictStashDoc ?? streamingPmDoc ?? panelDoc?.pmDoc ?? EMPTY_PM_DOC
-  // 与产品 RightPane 的空稿 busy 分支同口径；surfacePmDoc 包含流式投影，首个实质块
-  // 落下时会在同一渲染周期从青字扩散切回既有纸面内发光。
+  const surfacePmDoc = conflictStashDoc ?? revealFrame?.pmDoc ?? panelDoc?.pmDoc ?? EMPTY_PM_DOC
+  // 与产品 RightPane 的空稿 busy 分支同口径；reveal 首帧尚无实质文字时先保留原生加载态。
   const showEmptyBusyLoading = busy && !pmDocHasSubstantiveContent(surfacePmDoc)
   const surfaceVersion = pendingReview
     ? snapshot.reviewModel?.baseVersion ?? panelDoc?.docVersion ?? 0
@@ -1055,7 +1098,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
         data-wf="WorkspacePage"
         data-content={contentKind}
         data-tool={busy ? 'agentBusy' : 'none'}
-        data-ws-state={busy ? 'streaming' : 'idle'}
+        data-ws-state={revealActive ? 'revealing' : 'idle'}
         data-qingdoc-mode={interactiveEditable ? 'editable' : 'readonly'}
         data-save-state={docMissing ? undefined : saveState.kind}
         style={rootStyle}
@@ -1162,6 +1205,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
                     activePatchId={null}
                     {...{ annotations }}
                     onEditorReady={handleEditorReady}
+                    onEditorContentReady={handleEditorContentReady}
                   />
                 </div>
               ) : (
@@ -1191,6 +1235,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
                   activeReviewTargetId={activeReviewTargetId}
                   {...{ annotations }}
                   onEditorReady={handleEditorReady}
+                  onEditorContentReady={handleEditorContentReady}
                   onEditorChange={interactiveEditable ? handleEditorChange : undefined}
                   onAiModify={handleAiModify}
                   onToast={setToast}

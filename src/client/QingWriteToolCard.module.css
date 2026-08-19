@@ -21,10 +21,6 @@
   line-height: 24px;
 }
 
-.toolCard[data-state='failed'] .toolTitle {
-  color: var(--dsw-alias-state-warn-primary);
-}
-
 .separator {
   flex: none;
   width: 2px;
@@ -42,10 +38,6 @@
   line-height: 24px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.toolCard[data-state='failed'] .toolSummary {
-  color: var(--dsw-alias-state-warn-label);
 }
 
 .toolNarrative {

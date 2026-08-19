@@ -59,7 +59,7 @@ export interface TelemetryEventMap {
     has_reviewed: boolean
   }
   panel_opened: { source: PanelOpenSource }
-  draft_created: { words_bucket: WordsBucket; blocks_bucket: BlocksBucket; retried: boolean }
+  draft_created: { words_bucket: WordsBucket; blocks_bucket: BlocksBucket }
   draft_edited: { ops_bucket: CountBucket; op_kinds: string[]; outcome: 'committed' | 'review' }
   edit_rejected: { reason: EditRejectedReason }
   review_settled: { action: ReviewAction; patches_bucket: PatchesBucket; retried: boolean }
