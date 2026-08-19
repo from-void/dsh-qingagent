@@ -112,6 +112,7 @@ export class AgentTurnLeaseCoordinator {
     private readonly heartbeatMs = TURN_SIGNAL_HEARTBEAT_MS,
     private readonly createTurnId: () => string = randomUUID,
     private readonly onSegmentOpened?: (dshSessionId: string, engineSessionId: string, generation: number) => void,
+    private readonly onTurnClosed?: (dshSessionId: string, engineSessionIds: string[]) => void,
   ) {}
 
   async openTurn(dshSessionId: string, turn: number, pinnedEngineSessionId?: string): Promise<void> {
@@ -382,8 +383,16 @@ export class AgentTurnLeaseCoordinator {
   }
 
   private async closeTurn(current: TrackedAgentTurn): Promise<void> {
-    const pending = Promise.allSettled([...current.segments.values()].map((segment) => this.closeSegment(segment)))
+    const segments = [...current.segments.values()]
+    const pending = Promise.allSettled(segments.map((segment) => this.closeSegment(segment)))
     await raceDeadline(pending, TURN_CLOSE_DEADLINE_MS)
+    const dshSessionId = segments[0]?.dshSessionId
+    if (!dshSessionId || segments.length === 0) return
+    try {
+      this.onTurnClosed?.(dshSessionId, segments.map((segment) => segment.engineSessionId))
+    } catch {
+      // 面板通知失败不能反向阻断租约本地收口。
+    }
   }
 
   private closeSegment(segment: TrackedLeaseSegment): Promise<void> {

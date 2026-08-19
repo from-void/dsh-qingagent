@@ -134,6 +134,10 @@ describe('agent 文稿回合租约', () => {
     const actions = signalActions(fixture.engine)
     expect(actions.map(({ action }) => action)).toEqual(['begin', 'end'])
     expect(actions[1]!.turnId).toBe(actions[0]!.turnId)
+    expect(fixture.events).toContainEqual({
+      sessionId: 'dsh-1',
+      event: { type: 'turn-ended', engineSessionIds: ['qing-1'] },
+    })
   })
 
   it('没有预绑定目标时，显式纯读不申领租约', async () => {

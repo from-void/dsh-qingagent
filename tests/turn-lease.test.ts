@@ -20,13 +20,15 @@ function fixture(responses: Array<unknown | Error> = []) {
   })
   const engine = { fetchTurnSignal } as unknown as EngineService
   const opened: Array<[string, string, number]> = []
+  const closed: Array<[string, string[]]> = []
   const coordinator = new AgentTurnLeaseCoordinator(
     engine,
     10,
     (() => { let id = 0; return () => `turn-${++id}` })(),
     (dshSessionId, engineSessionId, generation) => opened.push([dshSessionId, engineSessionId, generation]),
+    (dshSessionId, engineSessionIds) => closed.push([dshSessionId, engineSessionIds]),
   )
-  return { coordinator, fetchTurnSignal, opened }
+  return { coordinator, fetchTurnSignal, opened, closed }
 }
 
 function actions(mock: ReturnType<typeof vi.fn>): string[] {
@@ -216,13 +218,14 @@ describe('AgentTurnLeaseCoordinator 多文稿与段代际', () => {
   })
 
   it('同一 DSH 回合可同时持有多稿，end 并行发出', async () => {
-    const { coordinator, fetchTurnSignal, opened } = fixture()
+    const { coordinator, fetchTurnSignal, opened, closed } = fixture()
     await coordinator.openTurn('dsh', 1, 'doc-a')
     await coordinator.touchDocument('dsh', 'doc-b')
     await coordinator.endTurn('dsh', 1)
     expect(actions(fetchTurnSignal)).toEqual(['begin', 'begin', 'end', 'end'])
     expect(opened.map(([, doc]) => doc)).toEqual(['doc-a', 'doc-b'])
     expect(opened[1]![2]).toBeGreaterThan(opened[0]![2])
+    expect(closed).toEqual([['dsh', ['doc-a', 'doc-b']]])
   })
 
   it('旧段 end 未完成时，同文稿新段 begin 等待；其他文稿不被拖住', async () => {
@@ -255,9 +258,13 @@ describe('AgentTurnLeaseCoordinator 多文稿与段代际', () => {
       if ((body as { action: string }).action === 'end') return new Promise<never>(() => undefined)
       return { active: true }
     })
+    const closed = vi.fn()
     const coordinator = new AgentTurnLeaseCoordinator(
       { fetchTurnSignal } as unknown as EngineService,
       1_000,
+      undefined,
+      undefined,
+      closed,
     )
     await coordinator.openTurn('dsh', 1, 'doc-a')
     await coordinator.touchDocument('dsh', 'doc-b')
@@ -270,5 +277,6 @@ describe('AgentTurnLeaseCoordinator 多文稿与段代际', () => {
     await closing
     expect(finished).toBe(true)
     expect(actions(fetchTurnSignal).filter((action) => action === 'end')).toHaveLength(2)
+    expect(closed).toHaveBeenCalledWith('dsh', ['doc-a', 'doc-b'])
   })
 })
