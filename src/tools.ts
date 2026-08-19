@@ -53,6 +53,7 @@ import {
   type DocStateSnapshot,
 } from './docState.js'
 import { sanitizeUserVisibleText } from './userVisibleText.js'
+import { renderedReviewSummary } from './reviewCount.js'
 
 interface ToolServices {
   ctx: Context
@@ -79,8 +80,8 @@ const REVIEW_PENDING_ERROR = '文稿正在审阅中。待审内容可能是你�
 const STR_REPLACE_PLAIN_TEXT_ERROR = 'old 必须是纯文本内容,不要带 ## 等 markdown 标记'
 const STR_REPLACE_LINES_NOTICE = '注意:strReplace 的 old 用纯文本,不要带行首 ## - 等标记。'
 const PM_INLINE_ATOM_PLACEHOLDER = '\uFFFC'
-const EMPTY_DRAFT_CORRECTION = '上一次只产出了标题、缺少正文。请重写整份文档,只输出包含完整正文块的 QingML;除 <title> 和 h1-h6 标题外,至少包含一个承载正文内容的顶层块。'
-const EMPTY_DRAFT_ERROR = '侧模型修正后仍只返回标题,缺少正文块,未提交文稿。'
+const EMPTY_DRAFT_CORRECTION = '上一次只产出了标题、缺少正文。请重写整份文档,只输出完整 QingML;除 <title> 和 h1-h6 标题外,至少包含一项正文内容。'
+const EMPTY_DRAFT_ERROR = '侧模型修正后仍只返回标题、缺少正文内容，未提交文稿。'
 const SOURCE_SYNTAX_LEAK_ERROR = '文稿中仍有无法识别的脚注或公式写法，未提交文稿。'
 // 局部 op 只接受纯文本/Markdown;QingML/HTML 原始标签会被当普通文字刻进正文(用户实测颜色事故)。
 const RAW_TAG_PATTERN = /<\/?\s*(article|title|h[1-6]|p|ul|ol|li|tasks?|blockquote|hr|pre|table|tr|td|th|callout|columns?|mermaid|drawio|math(?:-block)?|img|file|pennote|b|strong|i|em|u|s|del|code|a|mark|color|footnote|br|span|div)\b[^>]*>/i
@@ -243,13 +244,17 @@ function forceExplicitDraftTitle(qingml: string, title: string | undefined): str
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
   const tag = `<title>${escaped}</title>`
-  return /<title(?:\s[^>]*)?>[\s\S]*?<\/title>/i.test(qingml)
+  const withTitle = /<title(?:\s[^>]*)?>[\s\S]*?<\/title>/i.test(qingml)
     ? qingml.replace(/<title(?:\s[^>]*)?>[\s\S]*?<\/title>/i, tag)
     : `${tag}${qingml}`
+  const heading = `<h1>${escaped}</h1>`
+  return /<h1(?:\s[^>]*)?>[\s\S]*?<\/h1>/i.test(withTitle)
+    ? withTitle.replace(/<h1(?:\s[^>]*)?>[\s\S]*?<\/h1>/i, heading)
+    : withTitle.replace(tag, `${tag}${heading}`)
 }
 
 /** P14(RC13):每个工具返回带当前聚焦文稿,纠偏模型沿用旧 docRef。 */
-/** mode:"blocks" 用的宽松 PM 节点形状(只读 blockId/type/文本摘要,不承诺完整 schema)。 */
+/** mode:"blocks" 用的宽松 PM 节点形状；真实引擎标识只在本进程内映射。 */
 interface PmBlockNode {
   type?: string
   attrs?: { blockId?: string }
@@ -262,10 +267,94 @@ function pmNodeText(node: PmBlockNode): string {
   return (node.content ?? []).map(pmNodeText).join('')
 }
 
-function describePmBlock(node: PmBlockNode, depth: number): string {
+interface LocatedPmNode {
+  locator: string
+  node: PmBlockNode
+  depth: number
+}
+
+const LIST_NODE_TYPES = new Set(['orderedList', 'bulletList', 'taskList'])
+
+/**
+ * 给模型的是当前版本内稳定的短定位键 L1/L2…，真实标识不越过工具边界。
+ * 清单项递归编号，既覆盖嵌套清单，也避免把其内部承载文字的 paragraph 重复列出。
+ */
+function locatePmNodes(doc: PmDoc): LocatedPmNode[] {
+  const located: LocatedPmNode[] = []
+  const append = (node: PmBlockNode, depth: number): void => {
+    located.push({ locator: `L${located.length + 1}`, node, depth })
+    if (!LIST_NODE_TYPES.has(node.type ?? '')) return
+    for (const item of node.content ?? []) {
+      located.push({ locator: `L${located.length + 1}`, node: item, depth: depth + 1 })
+      for (const child of item.content ?? []) {
+        if (LIST_NODE_TYPES.has(child.type ?? '')) append(child, depth + 2)
+      }
+    }
+  }
+  for (const rawNode of doc.content ?? []) append(rawNode as unknown as PmBlockNode, 0)
+  return located
+}
+
+function paperKind(type: string | undefined): string {
+  switch (type) {
+    case 'heading': return '标题'
+    case 'paragraph': return '段落'
+    case 'orderedList': return '有序清单'
+    case 'bulletList': return '项目清单'
+    case 'taskList': return '任务清单'
+    case 'listItem': return '清单项'
+    case 'taskItem': return '任务项'
+    case 'table': return '表格'
+    case 'blockquote': return '引文'
+    case 'codeBlock': return '代码段'
+    case 'image': return '图片'
+    default: return '内容'
+  }
+}
+
+function describeLocatedNode(entry: LocatedPmNode): string {
+  const { node } = entry
   const summary = pmNodeText(node).replace(/\s+/g, ' ').trim()
   const clipped = summary.length > 40 ? `${summary.slice(0, 40)}…` : summary || '(无文本)'
-  return `${'  '.repeat(depth)}${node.attrs?.blockId ?? '(无块ID)'}｜${node.type ?? 'unknown'}｜${clipped}`
+  return `${'  '.repeat(entry.depth)}locator=${entry.locator}｜kind=${paperKind(node.type)}｜text=${clipped}`
+}
+
+type ModelEditProposalOp = ExternalEditProposalOp | {
+  kind: 'deleteBlock' | 'deleteListItem'
+  locator: string
+} | {
+  kind: 'insertAfterBlock'
+  locator: string
+  markdown: string
+} | (Omit<Extract<ExternalEditProposalOp, { kind: 'markText' }>, 'withinRef'> & {
+  withinLocator?: string
+})
+
+function resolveEditLocators(pmDoc: PmDoc, ops: readonly ModelEditProposalOp[]): ExternalEditProposalOp[] {
+  const idByLocator = new Map(locatePmNodes(pmDoc).flatMap(({ locator, node }) =>
+    typeof node.attrs?.blockId === 'string' && node.attrs.blockId
+      ? [[locator, node.attrs.blockId] as const]
+      : []))
+  const resolve = (locator: string): string => {
+    const blockId = idByLocator.get(locator)
+    if (!blockId) throw new Error(`定位键 ${locator} 已失效。请重新读取内容定位清单后再试。`)
+    return blockId
+  }
+  return ops.map((op): ExternalEditProposalOp => {
+    if (op.kind === 'deleteBlock' || op.kind === 'deleteListItem') {
+      if ('locator' in op) return { kind: op.kind, blockId: resolve(op.locator) }
+      return op
+    }
+    if (op.kind === 'insertAfterBlock') {
+      if ('locator' in op) return { kind: op.kind, blockId: resolve(op.locator), markdown: op.markdown }
+      return op
+    }
+    if (op.kind === 'markText' && 'withinLocator' in op && op.withinLocator) {
+      const { withinLocator, ...rest } = op
+      return { ...rest, withinRef: resolve(withinLocator) }
+    }
+    return op as ExternalEditProposalOp
+  })
 }
 
 const DOC_STATE_LABELS: Record<string, string> = {
@@ -338,11 +427,12 @@ export function registerTools(services: ToolServices): void {
   const { ctx } = runtime
   const reviewTurns = new ReviewTurnTracker()
   const writeTurns = new WriteTurnTracker()
-  installTurnTracking(ctx, reviewTurns, writeTurns, runtime)
+  const readTurns = new ReadTurnTracker()
+  installTurnTracking(ctx, reviewTurns, writeTurns, readTurns, runtime)
   ctx.effect(() => ctx.tools.register(writeDraftTool(runtime, writeTurns)))
   ctx.effect(() => ctx.tools.register(editDraftTool(runtime)))
   ctx.effect(() => ctx.tools.register(reviewCommitTool(runtime, reviewTurns)))
-  ctx.effect(() => ctx.tools.register(readDraftTool(runtime)))
+  ctx.effect(() => ctx.tools.register(readDraftTool(runtime, readTurns)))
   ctx.effect(() => ctx.tools.register(listDocsTool(runtime)))
   ctx.effect(() => ctx.tools.register(focusDocTool(runtime)))
 }
@@ -383,7 +473,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
           automaticConversions: { type: 'integer', required: true, description: '已自动整理为正确格式的脚注与公式数。' },
           lengthStatus: { type: 'string', enum: ['not-requested', 'met', 'unmet'], required: true, description: '显式篇幅要求的确定性验收结果。' },
           structureStatus: { type: 'string', enum: ['not-requested', 'met', 'unmet'], required: true, description: '显式段落数/提纲要求的确定性验收结果。' },
-          warning: { type: 'string', description: '落库块数与提交块数不符时的缺损警告。' },
+          warning: { type: 'string', description: '实际保留的内容项数与提交项数不符时的缺损警告。' },
         },
       },
       render: (_args, value) => value.status === 'review'
@@ -540,23 +630,22 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
             proposal.status === 'review'
               ? readReviewCandidate(services.engine, bound.engineSessionId)
               : Promise.resolve(null),
-            proposal.status === 'committed'
-              ? readPmDoc(services.engine, bound.engineSessionId)
-              : Promise.resolve(null),
+            readPmDoc(services.engine, bound.engineSessionId),
           ])
           const renderedQingml = reviewCandidate?.qingml ?? official.qingml ?? qingml
           const renderedPmDoc = reviewCandidate?.pmDoc ?? officialPmDoc
-          if (!renderedPmDoc) throw new Error('青简文稿暂时无法读取，请稍后重试。')
           const words = countDocVisibleChars(renderedPmDoc)
+          const reviewSummary = reviewCandidate
+            ? renderedReviewSummary(officialPmDoc, reviewCandidate.renderModel)
+            : null
+          const effectiveReview = Boolean(reviewSummary?.reviewingPatchIds.length)
           const wholeDocReview = reviewCandidate
-            ? isWholeDocReview(official, reviewCandidate.renderModel, true)
+            ? isWholeDocReview({ pmDoc: officialPmDoc }, reviewCandidate.renderModel, effectiveReview)
             : false
-          const reviewSuggestionIds = reviewCandidate
-            ? reviewingSuggestionIds(
-                reviewCandidate.renderModel,
-                proposal.status === 'review' ? proposal.patchIds : [],
-              )
-            : []
+          const reviewSuggestionIds = reviewSummary?.reviewingPatchIds ?? []
+          const reviewCount = reviewSummary
+            ? wholeDocReview ? 1 : reviewSummary.count
+            : 0
           const title = args.title?.trim() || official.title?.trim() || extractTitle(renderedQingml, bound.title)
           await services.bindings.updateTitle(dshSessionId, bound.engineSessionId, title)
           // committed 用权威落库稿，review 用 render-model 候选稿；两者都避开本地生成文本与
@@ -582,7 +671,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
               engineSessionId: bound.engineSessionId,
               generation,
               doc: official,
-              count: reviewSuggestionIds.length,
+              count: reviewCount,
               blocks: outline.blocks,
               words,
             })
@@ -600,7 +689,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
             structure: outline.structure,
             title,
             docVersion: official.docVersion,
-            ...(proposal.status === 'review' ? { patchCount: reviewSuggestionIds.length } : {}),
+            ...(proposal.status === 'review' ? { patchCount: reviewCount } : {}),
           }, true)
           const lengthStatus: 'not-requested' | 'met' | 'unmet' = requirements.length
             ? finalRequirementFailures.some((failure) => failure.startsWith('篇幅')) ? 'unmet' : 'met'
@@ -626,7 +715,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
             lengthStatus,
             structureStatus,
             ...(proposal.status === 'review'
-              ? { patchCount: reviewSuggestionIds.length, patchIds: reviewSuggestionIds }
+              ? { patchCount: reviewCount, patchIds: reviewSuggestionIds }
               : {}),
             outline: outline.headings.map((heading) => `${'  '.repeat(Math.max(0, heading.level - 1))}${heading.text}`),
           }
@@ -652,7 +741,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
 function editDraftTool(services: RuntimeToolServices) {
   return defineTool({
     name: 'qing_edit_draft',
-    description: '对已有青简文稿做结构化局部修改。改标题时,若正文有与旧稿名相同的大标题块,要同时用 setTitle 改稿名(元数据)、用 strReplace 改纸面标题;两者必须在同一次 ops 里一起提交,文字保持一致。正文没有与旧稿名相同的大标题块时,允许只用 setTitle。删除整段/整节/清单项用 deleteBlock/deleteListItem(先 qing_read_draft mode:"blocks" 取块 ID,严禁用 strReplace 置空留残壳);改一句、插入一段或追加一节用相应操作;高亮、文字颜色、加粗一句话等行内标记用 markText,严禁为加标记用 qing_write_draft 整篇重写。markText add 会替换命中内容已有的同类型不同属性标记,同类型同属性则幂等提示;remove 仅移除属性全等的标记,调用前必须先用 qing_read_draft(mode:"blocks") 或读稿确认现有标记的确切 attrs;代码块内文本不支持行内标记;命中列表项时审阅卡会按顶层块呈现为整列表替换。strReplace 的 old/new 必须是纯文本内容，不含 ##、-、** 等 Markdown 语法标记。只有用户明确表达「所有/全部/凡是/都」等全局意图时,才用单个 strReplace + all:true 替换全部命中;all:true 不得与 nth 同时使用。all 缺省时,old 多处命中且未指定 nth 仍会拒绝并要求先向用户确认。多处修改必须放进同一次调用的 ops 数组一次提交；逐条调用会因首条进入审阅态而被 REVIEW_PENDING 拒绝。insertAfterLine 用的行号来自你读稿那一刻的稿子;同一批 ops 里一旦有插入或删除,其后所有行号都会整体偏移,不要再沿用读稿时的旧行号。需要在插入点之后继续改时,改用 insertAfterBlock 这类块级锚点(不受行号偏移影响),或留到下一回合重读后再改。命中待办清单、表格、嵌套列表这类多行块时,优先用 insertAfterBlock 等项级/块级 op;例外:指向多行块的最后一行是合法的,语义是插到整块之后(不是块内)——想在清单尾部追加子项时别用它,那会插到清单外面。拿不准结构时先 qing_read_draft(mode:"blocks") 看清再选。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
+    description: '对已有青简文稿做结构化局部修改。改标题时,若正文有与旧稿名相同的纸面大标题,要同时用 setTitle 改稿名(元数据)、用 strReplace 改纸面标题;两者必须在同一次 ops 里一起提交,文字保持一致。正文没有同名纸面大标题时,允许只用 setTitle。删除整段/整节/清单项用 deleteBlock/deleteListItem,先 qing_read_draft mode:"blocks" 取得短定位键 locator,严禁用 strReplace 置空留残壳;真实引擎标识由工具内部映射,不要猜测或传入。改一句、插入一段或追加一节用相应操作;高亮、文字颜色、加粗一句话等行内标记用 markText。markText remove 前先读稿确认现有标记的确切 attrs;代码段内文本不支持行内标记。strReplace 的 old/new 必须是纯文本，不含 ##、-、** 等 Markdown 标记。只有用户明确表达「所有/全部/凡是/都」等全局意图时,才用单个 strReplace + all:true;all:true 不得与 nth 同时使用。多处修改必须放进同一次调用的 ops 数组原子提交。insertAfterLine 的行号来自读稿当刻;同批先增删内容会令后续旧行号失效。复杂清单或表格附近优先使用 mode:"blocks" 给出的 locator。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
     parameters: {
       docRef: { type: 'string', description: '要局部修改的青简会话 ID；省略时使用当前激活文稿。' },
       ops: {
@@ -736,7 +825,7 @@ function editDraftTool(services: RuntimeToolServices) {
                 op: { type: 'string', enum: ['add', 'remove'], required: true },
                 all: { type: 'boolean' },
                 isRegex: { type: 'boolean' },
-                withinRef: { type: 'string' },
+                withinLocator: { type: 'string', description: '可选的内容定位键；从 qing_read_draft mode:"blocks" 的 locator 字段取得。' },
               },
             },
             {
@@ -761,7 +850,7 @@ function editDraftTool(services: RuntimeToolServices) {
               additionalProperties: false,
               properties: {
                 kind: { type: 'string', const: 'deleteBlock', required: true },
-                blockId: { type: 'string', required: true, description: '要整块删除的块 ID(先用 qing_read_draft mode:"blocks" 获取)。删节/删段用它,严禁用 strReplace 置空留残壳。' },
+                locator: { type: 'string', required: true, description: '要整段或整节删除的短定位键，从 qing_read_draft mode:"blocks" 的 locator 字段取得。' },
               },
             },
             {
@@ -769,7 +858,7 @@ function editDraftTool(services: RuntimeToolServices) {
               additionalProperties: false,
               properties: {
                 kind: { type: 'string', const: 'deleteListItem', required: true },
-                blockId: { type: 'string', required: true, description: '要删除的清单项/任务项块 ID(qing_read_draft mode:"blocks" 获取);删掉最后一项时父清单自动清壳。' },
+                locator: { type: 'string', required: true, description: '要删除的清单项/任务项定位键，从 qing_read_draft mode:"blocks" 获取。' },
               },
             },
             {
@@ -777,7 +866,7 @@ function editDraftTool(services: RuntimeToolServices) {
               additionalProperties: false,
               properties: {
                 kind: { type: 'string', const: 'insertAfterBlock', required: true },
-                blockId: { type: 'string', required: true, description: '锚点块 ID(qing_read_draft mode:"blocks" 获取)。锚点为清单项→同清单同深度插入兄弟项(markdown 须恰 1 条同类列表项);锚点为顶层块→其后插入顶层块。清单内插入用它,不要用 insertAfterLine。' },
+                locator: { type: 'string', required: true, description: '插入位置的短定位键，从 qing_read_draft mode:"blocks" 获取。定位清单项时插入同层兄弟项；定位顶层内容时在其后插入。' },
                 markdown: { type: 'string', required: true, description: '要插入的 Markdown 内容;禁止 HTML/QingML 标签。' },
               },
             },
@@ -860,13 +949,18 @@ function editDraftTool(services: RuntimeToolServices) {
         await services.bindings.setActive(dshSessionId, engineSessionId)
         const before = await readDocWithLines(services.engine, engineSessionId)
         if (before.state === 'pendingReview') throw new Error(REVIEW_PENDING_ERROR)
-        const ops = args.ops as ExternalEditProposalOp[]
-        const titleOnly = ops.every((op) => op.kind === 'setTitle')
+        const modelOps = args.ops as ModelEditProposalOp[]
+        const titleOnly = modelOps.every((op) => op.kind === 'setTitle')
         if (before.state === 'empty' && !titleOnly) throw new Error('文稿尚无正文；请先用 qing_write_draft 起草完整文稿。改标题可单独用 setTitle。')
-        assertNoRawTags(ops)
-        const basePmDoc = ops.some((op) => op.kind === 'setTitle')
+        const needsLocatorMap = modelOps.some((op) =>
+          'locator' in op || (op.kind === 'markText' && 'withinLocator' in op && Boolean(op.withinLocator)))
+        const basePmDoc = modelOps.some((op) => op.kind === 'setTitle') || needsLocatorMap
           ? await readPmDoc(services.engine, engineSessionId)
           : undefined
+        const ops = needsLocatorMap
+          ? resolveEditLocators(basePmDoc!, modelOps)
+          : modelOps as ExternalEditProposalOp[]
+        assertNoRawTags(ops)
         if (basePmDoc) assertSynchronizedTitleChange(before.title, basePmDoc, ops)
         const prepared = await prepareEditOps(services.engine, engineSessionId, ops, basePmDoc)
         const proposal = await proposeEditOpsWithPlainTextRetry(
@@ -880,23 +974,22 @@ function editDraftTool(services: RuntimeToolServices) {
           proposal.status === 'review'
             ? readReviewCandidate(services.engine, engineSessionId)
             : Promise.resolve(null),
-          proposal.status === 'committed'
-            ? readPmDoc(services.engine, engineSessionId)
-            : Promise.resolve(null),
+          readPmDoc(services.engine, engineSessionId),
         ])
         const renderedQingml = reviewCandidate?.qingml ?? official.qingml
         const renderedPmDoc = reviewCandidate?.pmDoc ?? officialPmDoc
-        if (!renderedPmDoc) throw new Error('青简文稿暂时无法读取，请稍后重试。')
         const words = countDocVisibleChars(renderedPmDoc)
+        const reviewSummary = reviewCandidate
+          ? renderedReviewSummary(officialPmDoc, reviewCandidate.renderModel)
+          : null
+        const effectiveReview = Boolean(reviewSummary?.reviewingPatchIds.length)
         const wholeDocReview = reviewCandidate
-          ? isWholeDocReview(official, reviewCandidate.renderModel, true)
+          ? isWholeDocReview({ pmDoc: officialPmDoc }, reviewCandidate.renderModel, effectiveReview)
           : false
-        const reviewSuggestionIds = reviewCandidate
-          ? reviewingSuggestionIds(
-              reviewCandidate.renderModel,
-              proposal.status === 'review' ? proposal.patchIds : [],
-            )
-          : []
+        const reviewSuggestionIds = reviewSummary?.reviewingPatchIds ?? []
+        const reviewCount = reviewSummary
+          ? wholeDocReview ? 1 : reviewSummary.count
+          : 0
         const outline = outlineOf(renderedQingml, official.title)
         await services.bindings.updateTitle(dshSessionId, engineSessionId, outline.title)
         if (proposal.status === 'committed') {
@@ -912,7 +1005,7 @@ function editDraftTool(services: RuntimeToolServices) {
             type: 'doc-review-pending',
             engineSessionId,
             doc: official,
-            count: reviewSuggestionIds.length,
+            count: reviewCount,
             blocks: outline.blocks,
             words,
           })
@@ -920,8 +1013,8 @@ function editDraftTool(services: RuntimeToolServices) {
         }
         const countLine = editCountLine(prepared.opResults, prepared.affectedCount)
         void services.telemetry?.capture('draft_edited', {
-          ops_bucket: countBucket(ops.length),
-          op_kinds: [...new Set(ops.map((op) => op.kind))],
+          ops_bucket: countBucket(modelOps.length),
+          op_kinds: [...new Set(modelOps.map((op) => op.kind))],
           outcome: proposal.status,
         })
         rememberDocState(services, exec, {
@@ -931,12 +1024,12 @@ function editDraftTool(services: RuntimeToolServices) {
           structure: outline.structure,
           title: outline.title,
           docVersion: official.docVersion,
-          ...(proposal.status === 'review' ? { patchCount: reviewSuggestionIds.length } : {}),
+          ...(proposal.status === 'review' ? { patchCount: reviewCount } : {}),
         }, true)
         return {
           status: proposal.status,
           message: (proposal.status === 'review'
-            ? `${docStateLine('pendingReview', reviewSuggestionIds.length)}${countLine}\n内容构成：${outline.structure}。\n${REVIEW_END_MESSAGE}`
+            ? `${docStateLine('pendingReview', reviewCount)}${countLine}\n内容构成：${outline.structure}。\n${REVIEW_END_MESSAGE}`
             : `${docStateLine('editing')}\n局部修改已提交到《${outline.title}》。${countLine}\n内容构成：${outline.structure}。`) + focusSuffix(services, dshSessionId),
           engineSessionId,
           title: outline.title,
@@ -944,7 +1037,7 @@ function editDraftTool(services: RuntimeToolServices) {
           structure: outline.structure,
           words,
           docVersion: official.docVersion,
-          reviewCount: proposal.status === 'review' ? reviewSuggestionIds.length : 0,
+          reviewCount: proposal.status === 'review' ? reviewCount : 0,
           opResults: prepared.opResults,
           affectedCount: prepared.affectedCount,
           ...(proposal.status === 'review' ? { patchIds: reviewSuggestionIds } : {}),
@@ -1072,13 +1165,13 @@ function reviewCommitTool(services: RuntimeToolServices, reviewTurns: ReviewTurn
   })
 }
 
-function readDraftTool(services: RuntimeToolServices) {
+function readDraftTool(services: RuntimeToolServices, readTurns: ReadTurnTracker) {
   return defineTool({
     name: 'qing_read_draft',
-    description: '读取当前会话绑定的青简文稿。审阅态下 outline/full 默认读取尚未生效的待审候选；mode:"base" 才读取已提交基线。局部插入前用 mode:"lines" 取得已提交 Markdown 行号;删除块/清单项前用 mode:"blocks" 取得块 ID 清单。',
+    description: '读取当前会话绑定的青简文稿。审阅态下 outline/full 默认读取尚未生效的待审候选；mode:"base" 才读取已提交基线。局部插入前用 mode:"lines" 取得已提交 Markdown 行号；删除整段、整节或清单项前用 mode:"blocks" 取得短定位键。',
     parameters: {
       docRef: { type: 'string', description: '青简会话 ID；省略时读取当前激活文稿。' },
-      mode: { type: 'string', enum: ['outline', 'full', 'base', 'lines', 'blocks'], default: 'outline', description: 'outline 返回提纲；full 返回完整候选；base 返回已提交基线 QingML；lines 返回带行号的已提交 Markdown；blocks 返回已提交基线的块 ID 清单(deleteBlock/deleteListItem 用)。' },
+      mode: { type: 'string', enum: ['outline', 'full', 'base', 'lines', 'blocks'], default: 'outline', description: 'outline 返回提纲；full 返回完整候选；base 返回已提交基线 QingML；lines 返回带行号的已提交 Markdown；blocks 返回已提交内容的短定位键清单，供 deleteBlock/deleteListItem/insertAfterBlock 使用。' },
     },
     output: {
       schema: {
@@ -1116,19 +1209,28 @@ function readDraftTool(services: RuntimeToolServices) {
       const currentQingml = currentReviewCandidate?.qingml ?? doc.qingml
       const currentPmDoc = currentReviewCandidate?.pmDoc ?? basePmDoc
       const currentOutline = outlineOf(currentQingml, doc.title)
-      const currentPatchCount = currentReviewCandidate
-        ? reviewingSuggestionIds(currentReviewCandidate.renderModel).length
+      const currentReviewSummary = currentReviewCandidate
+        ? renderedReviewSummary(basePmDoc, currentReviewCandidate.renderModel)
+        : null
+      const currentWholeDocReview = currentReviewCandidate
+        ? isWholeDocReview(
+            { pmDoc: basePmDoc },
+            currentReviewCandidate.renderModel,
+            Boolean(currentReviewSummary?.reviewingPatchIds.length),
+          )
+        : false
+      const currentPatchCount = currentReviewSummary
+        ? currentWholeDocReview ? 1 : currentReviewSummary.count
         : undefined
+      const repeated = readTurns.has(exec, engineSessionId, mode, doc.docVersion)
       if (mode === 'blocks') {
         const outline = outlineOf(doc.qingml, doc.title)
-        const lines = ['以下为已提交基线的块 ID 清单(供 deleteBlock/deleteListItem 使用;缩进项为清单项)。']
-        for (const rawNode of basePmDoc.content ?? []) {
-          const node = rawNode as unknown as PmBlockNode
-          lines.push(describePmBlock(node, 0))
-          if (node.type === 'orderedList' || node.type === 'bulletList' || node.type === 'taskList') {
-            for (const item of node.content ?? []) lines.push(describePmBlock(item, 1))
-          }
-        }
+        const content = repeated
+          ? repeatedReadNotice(mode)
+          : [
+              '以下为已提交内容的机器定位清单；locator 只在当前版本有效，结构操作只传 locator，不要猜测真实标识。',
+              ...locatePmNodes(basePmDoc).map(describeLocatedNode),
+            ].join('\n')
         rememberDocState(services, exec, {
           state: doc.state,
           words: countDocVisibleChars(currentPmDoc),
@@ -1138,20 +1240,21 @@ function readDraftTool(services: RuntimeToolServices) {
           docVersion: doc.docVersion,
           ...(currentPatchCount !== undefined ? { patchCount: currentPatchCount } : {}),
         }, true)
+        readTurns.remember(exec, engineSessionId, mode, doc.docVersion)
         return {
           title: outline.title,
           words: countDocVisibleChars(basePmDoc),
           blocks: outline.blocks,
           structure: outline.structure,
           mode,
-          content: lines.join('\n'),
+          content,
           engineSessionId,
           state: doc.state,
           docVersion: doc.docVersion,
         }
       }
       if (mode === 'lines') {
-        const lined = await readDocWithLines(services.engine, engineSessionId)
+        const lined = repeated ? null : await readDocWithLines(services.engine, engineSessionId)
         const outline = outlineOf(doc.qingml, doc.title)
         const notice = `${STR_REPLACE_LINES_NOTICE}\n${doc.state === 'pendingReview'
           ? '以下行号对应已提交基线（不含待审候选）。\n'
@@ -1165,13 +1268,16 @@ function readDraftTool(services: RuntimeToolServices) {
           docVersion: doc.docVersion,
           ...(currentPatchCount !== undefined ? { patchCount: currentPatchCount } : {}),
         }, true)
+        readTurns.remember(exec, engineSessionId, mode, doc.docVersion)
         return {
           title: outline.title,
           words: countDocVisibleChars(basePmDoc),
           blocks: outline.blocks,
           structure: outline.structure,
           mode,
-          content: `${notice}${lined.markdownWithLineNumbers ?? lineNumbered(lined.markdown)}`,
+          content: repeated
+            ? repeatedReadNotice(mode)
+            : `${notice}${lined!.markdownWithLineNumbers ?? lineNumbered(lined!.markdown)}`,
           engineSessionId,
           state: doc.state,
           docVersion: doc.docVersion,
@@ -1186,9 +1292,11 @@ function readDraftTool(services: RuntimeToolServices) {
         : mode === 'base' && doc.state === 'pendingReview'
           ? '以下为已提交基线（不含待审候选）。\n'
           : ''
-      const content = mode === 'full' || mode === 'base'
-        ? `${notice}${candidate}`
-        : `${notice}${outline.headings.map((heading) => `${'#'.repeat(heading.level)} ${heading.text}${heading.firstSentence ? `\n${heading.firstSentence}` : ''}`).join('\n') || '暂无标题层级。'}`
+      const content = repeated
+        ? repeatedReadNotice(mode)
+        : mode === 'full' || mode === 'base'
+          ? `${notice}${candidate}`
+          : `${notice}${outline.headings.map((heading) => `${'#'.repeat(heading.level)} ${heading.text}${heading.firstSentence ? `\n${heading.firstSentence}` : ''}`).join('\n') || '暂无标题层级。'}`
       rememberDocState(services, exec, {
         state: doc.state,
         words: countDocVisibleChars(currentPmDoc),
@@ -1198,6 +1306,7 @@ function readDraftTool(services: RuntimeToolServices) {
         docVersion: doc.docVersion,
         ...(currentPatchCount !== undefined ? { patchCount: currentPatchCount } : {}),
       }, true)
+      readTurns.remember(exec, engineSessionId, mode, doc.docVersion)
       return {
         title: outline.title,
         words: countDocVisibleChars(candidatePmDoc),
@@ -1429,8 +1538,18 @@ export async function refreshDocState(
   const qingml = reviewCandidate?.qingml ?? doc.qingml
   const pmDoc = reviewCandidate?.pmDoc ?? basePmDoc
   const outline = outlineOf(qingml, doc.title ?? active.title)
-  const patchCount = reviewCandidate
-    ? reviewingSuggestionIds(reviewCandidate.renderModel).length
+  const reviewSummary = reviewCandidate
+    ? renderedReviewSummary(basePmDoc, reviewCandidate.renderModel)
+    : null
+  const wholeDocReview = reviewCandidate
+    ? isWholeDocReview(
+        { pmDoc: basePmDoc },
+        reviewCandidate.renderModel,
+        Boolean(reviewSummary?.reviewingPatchIds.length),
+      )
+    : false
+  const patchCount = reviewSummary
+    ? wholeDocReview ? 1 : reviewSummary.count
     : undefined
   return cache.update(dshSessionId, {
     state: doc.state,
@@ -1891,22 +2010,25 @@ async function readReviewCandidate(
   return { qingml: serializePmQingml(candidate), pmDoc: candidate, renderModel }
 }
 
-function reviewingSuggestionIds(
-  renderModel: ExternalReviewRenderModelResponse,
-  emptyModelFallback: readonly string[] = [],
-): string[] {
-  if (renderModel.suggestions.length === 0) return [...emptyModelFallback]
-  return renderModel.suggestions
-    .filter((suggestion) => suggestion.kind !== 'annotation' && suggestion.status === 'reviewing')
-    .map((suggestion) => suggestion.id)
-}
-
 function serializePmQingml(doc: PmDoc): string {
   return aiBlocksToQingml(pmToAiIr(doc).blocks)
 }
 
 function lineNumbered(markdown: string): string {
   return markdown.split('\n').map((line, index) => `${String(index + 1).padStart(4)} | ${line}`).join('\n')
+}
+
+function repeatedReadNotice(mode: 'outline' | 'full' | 'base' | 'lines' | 'blocks'): string {
+  const label = mode === 'outline'
+    ? '提纲'
+    : mode === 'full'
+      ? '完整文稿'
+      : mode === 'base'
+        ? '已提交文稿'
+        : mode === 'lines'
+          ? '行号内容'
+          : '内容定位清单'
+  return `本回合已读取过相同版本的${label}；请沿用上一次结果，不要重复读取。`
 }
 
 function sessionIdOf(exec: ToolRunContext): string {
@@ -2069,16 +2191,63 @@ class WriteTurnTracker {
   }
 }
 
+class ReadTurnTracker {
+  private readonly turns = new Map<string, number>()
+  private readonly reads = new Map<string, Set<string>>()
+
+  begin(agentId: string, turn: number): void {
+    if (this.turns.get(agentId) === turn) return
+    this.turns.set(agentId, turn)
+    this.reads.delete(agentId)
+  }
+
+  has(
+    exec: ToolRunContext,
+    engineSessionId: string,
+    mode: string,
+    docVersion: number,
+  ): boolean {
+    const agentId = sessionIdOf(exec)
+    // 独立工具调用没有 agent/pre-step，不能假定不同 rootCallId 属于同一回合。
+    if (!this.turns.has(agentId)) return false
+    return this.reads.get(agentId)?.has(this.key(engineSessionId, mode, docVersion)) ?? false
+  }
+
+  remember(
+    exec: ToolRunContext,
+    engineSessionId: string,
+    mode: string,
+    docVersion: number,
+  ): void {
+    const agentId = sessionIdOf(exec)
+    if (!this.turns.has(agentId)) return
+    const reads = this.reads.get(agentId) ?? new Set<string>()
+    reads.add(this.key(engineSessionId, mode, docVersion))
+    this.reads.set(agentId, reads)
+  }
+
+  dispose(agentId: string): void {
+    this.turns.delete(agentId)
+    this.reads.delete(agentId)
+  }
+
+  private key(engineSessionId: string, mode: string, docVersion: number): string {
+    return `${engineSessionId}\u0000${mode}\u0000${docVersion}`
+  }
+}
+
 function installTurnTracking(
   ctx: Context,
   reviewTurns: ReviewTurnTracker,
   writeTurns: WriteTurnTracker,
+  readTurns: ReadTurnTracker,
   services: RuntimeToolServices,
 ): void {
   ctx.effect(() => ctx.on('agent/pre-step', async (payload, next) => {
     const dshSessionId = String(payload.agent.id)
     reviewTurns.begin(dshSessionId, payload.turn)
     writeTurns.begin(dshSessionId, payload.turn)
+    readTurns.begin(dshSessionId, payload.turn)
     services.freshness.begin(dshSessionId, payload.turn)
     if (services.bindings.getActive(dshSessionId) && services.docStates.needsRefresh(dshSessionId)) {
       try {
@@ -2093,6 +2262,7 @@ function installTurnTracking(
     const dshSessionId = String(agent.id)
     reviewTurns.dispose(dshSessionId)
     writeTurns.dispose(dshSessionId)
+    readTurns.dispose(dshSessionId)
     services.freshness.dispose(dshSessionId)
     services.docStates.dispose(dshSessionId)
   }))

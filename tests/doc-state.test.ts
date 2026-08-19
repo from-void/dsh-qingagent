@@ -21,7 +21,8 @@ describe('DocStateCache', () => {
     })
 
     const text = formatDocState(snapshot)
-    expect(text).toBe('【文稿状态】已落库生效,无待审稿。\n《年度报告》｜3 章 12 块｜约 5824 字')
+    expect(text).toBe('【文稿状态】已落库生效,无待审稿。\n《年度报告》｜3 章 12 项内容｜约 5824 字')
+    expect(text).not.toContain('块')
     expect(text).not.toMatch(/pendingReview|docRef|blockId|qing-1|docVersion|正文内容/u)
     expect(cache.contextText('dsh-1')).toBe(text)
   })

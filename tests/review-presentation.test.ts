@@ -6,6 +6,7 @@ import type {
   PmDoc,
 } from '../src/contracts.js'
 import { buildReviewPresentationModel } from '../src/client/reviewPresentation.js'
+import { renderedReviewSummary } from '../src/reviewCount.js'
 
 const previewDoc = {
   type: 'doc', attrs: { schemaVersion: 1 },
@@ -58,5 +59,29 @@ describe('external review render-model → PatchDecorations 输入', () => {
     })
     expect(model?.droppedCount).toBe(0)
     expect(model?.conflictCount).toBe(0)
+  })
+
+  it('工具计数与面板实际 ReviewTarget 数一致，无法定位的 suggestion 不计入', () => {
+    const panelDoc = {
+      sessionId: 'qing-1', docVersion: 4, contentHash: 'hash-4', state: 'pendingReview',
+      agentBusy: false, title: '审阅稿', ts: '2026-08-15T02:00:00.000Z', charCount: 4, pmDoc: previewDoc,
+    } satisfies ExternalPmDocReadResponse
+    const unrenderable = {
+      ...suggestion,
+      id: 'suggestion-unrenderable',
+      anchor: { ...suggestion.anchor, blockId: 'missing-location', quote: '不存在的文字' },
+    } satisfies DocSuggestion
+    const renderModel = {
+      sessionId: 'qing-1', docVersion: 4, state: 'pendingReview', agentBusy: false,
+      baseVersion: 4, previewDoc, suggestions: [suggestion, unrenderable],
+    } satisfies ExternalReviewRenderModelResponse
+
+    const panelModel = buildReviewPresentationModel(panelDoc, renderModel)!
+    const toolSummary = renderedReviewSummary(panelDoc.pmDoc, renderModel)
+
+    expect(panelModel.visibleReviewTargets).toHaveLength(1)
+    expect(toolSummary.count).toBe(panelModel.visibleReviewTargets.length)
+    expect(toolSummary.patchIds).toEqual(['suggestion-1'])
+    expect(toolSummary.reviewingPatchIds).toEqual(['suggestion-1', 'suggestion-unrenderable'])
   })
 })

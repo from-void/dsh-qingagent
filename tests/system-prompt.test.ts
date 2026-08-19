@@ -23,7 +23,7 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
 
   it('目标不唯一时先澄清且只在用户明确全局词时批量执行', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('**宁可多问一次,不可猜着批量改**:定位不唯一时问用户的代价是一个回合,猜错的代价是整篇误改')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('目标定位不唯一时(多处命中、指代含糊、「那段/那块」无法唯一确定)必须先用原生 ask_user 让用户选')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('目标定位不唯一时(多处命中、指代含糊、「那段/那处」无法唯一确定)必须先用原生 ask_user 让用户选')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('严禁把模糊的单数指代自行提升为「按关键词全局处理」')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('只有用户明确说了「所有/凡是/都/全部」等全局词时才按批量执行')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('同一文字要全量替换时,只提交一个 strReplace 并设 all:true,不要逐处枚举')
@@ -44,10 +44,10 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
   it('面向用户隐藏工具、参数、版本与原始错误等内部术语', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【用户语言纪律】')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('禁止出现工具名(qing_write_draft/qing_edit_draft/qing_list_docs 等)')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('块 ID(ai-block-…)、vN 版本号、pendingReview 等内部枚举、HTTP 状态码与原始报错')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('内部定位键、vN 版本号、pendingReview 等内部枚举、HTTP 状态码与原始报错')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('以及「落库」「入库」「持久化」「候选」「基线」这类存储实现术语')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('说人话:「已经改好了」「已经生效了」「还没生效,等你确认」')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('qing 工具返回里的 vN 版本号、块 ID、【文稿状态】行、REVIEW_PENDING 等,是给你判断用的内部状态,不是给用户看的措辞')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('qing 工具返回里的 vN 版本号、定位键、【文稿状态】行、REVIEW_PENDING 等,是给你判断用的内部状态,不是给用户看的措辞')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('✗「已直接落库生效(v1)」→✓「已经写好了,右侧就能看到」')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('工具失败时只说用户能做什么,不转述原始错误')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('ask_user 的选项若指代修改前内容,生成时一律写「改动前的原文」,禁止写「v1 原文」或任何 vN')
@@ -55,13 +55,13 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
       .toBeLessThan(QINGAGENT_SYSTEM_PROMPT.indexOf('【局部修改纪律】'))
   })
 
-  it('区分工具块数与纸面自然段数', () => {
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('工具返回的「块」包含标题、列表、表格等非段落结构,不等于自然段')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('向用户描述篇幅结构时按纸面实际形态说(几段正文、几节、几个清单),不得把块数直译成段数')
+  it('区分内容项统计与纸面自然段数', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('工具返回的内容项统计包含标题、列表、表格等非段落结构,不等于自然段')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('向用户描述篇幅结构时按纸面实际形态说(几段正文、几节、几个清单),不得把内容项数直译成段数')
   })
 
   it('改标题时同步稿名和纸面大标题并覆盖无大标题分支', () => {
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('正文是否有与旧稿名相同的大标题块')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('正文是否有与旧稿名相同的纸面大标题')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('两者必须在同一次 ops 里提交且文字保持一致')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('没有则允许只用 setTitle 改稿名')
   })
@@ -81,7 +81,7 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
   it('每轮以中文用户话收尾，并要求审阅轮工具前导语也是完整句', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('每一轮的最后都必须有一句面向用户的中文话,说清这轮做了什么、下一步要他做什么')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('不允许以工具调用作为一轮的结尾,也不允许停在冒号或半句话上')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('只说定性结论(如「改好了/已提交待你确认」),不要报字数、块数、章节数')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('只说定性结论(如「改好了/已提交待你确认」),不要报字数、内容项数、章节数')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('收尾语只复述**已经确定发生的事**,措辞不得比原文更具体:用户或正文说「好多年」就说「好多年」,**不要替换成「十几年」这类你自己推断的数字或程度词**。')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('机制上你在工具调用之后不再有发言机会,由结果卡向用户说明')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('工具调用之前的那句话仍必须是完整的一句')
