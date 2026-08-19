@@ -181,11 +181,8 @@ export interface DraftMetrics {
 }
 
 export type BridgeEvent =
-  | { type: 'draft-started'; engineSessionId: string; generation: string }
-  | ({ type: 'draft-chunk'; engineSessionId: string; generation: string; chunkQingml: string; accumulatedBlocks: string[]; title: string } & DraftMetrics)
-  | { type: 'draft-failed'; engineSessionId: string; generation: string; message: string }
-  | ({ type: 'doc-committed'; engineSessionId: string; doc: ExternalDoc; generation?: string } & DraftMetrics)
-  | ({ type: 'doc-review-pending'; engineSessionId: string; doc: ExternalDoc; count: number; generation?: string } & DraftMetrics)
+  | ({ type: 'doc-committed'; engineSessionId: string; doc: ExternalDoc } & DraftMetrics)
+  | ({ type: 'doc-review-pending'; engineSessionId: string; doc: ExternalDoc; count: number } & DraftMetrics)
   | { type: 'binding-changed'; binding: SessionBinding }
   | { type: 'focus-changed'; engineSessionId: string }
   | { type: 'selection-changed'; selection: QingSelection | null }
@@ -284,9 +281,4 @@ export interface ExternalReviewCommitResponse {
   outcomeQueued: boolean
   outcome: ExternalReviewOutcome
   seq: number | null
-}
-
-export interface SideModelConfig {
-  provider: string
-  model: string
 }

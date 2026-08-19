@@ -30,6 +30,11 @@ export function updateAnnotationGroupDecorations(
   editor: Editor,
   groups: readonly AnnotationGroup[],
 ): void
+export function setNativePresentationDecorations(
+  editor: Editor,
+  markers: ReadonlyArray<unknown>,
+  charEnters?: ReadonlyArray<{ from: number; to: number }>,
+): void
 export interface PatchNavProps {
   remainingCount: number
   totalCount: number

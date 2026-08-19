@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
-import { createUserMessage, type FinishReason } from '@deepseek-ai/dsh-llm'
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import {
   aiBlocksToQingml,
@@ -20,18 +19,13 @@ import type {
   ExternalReviewCommitRequest,
   ExternalReviewCommitResponse,
   ExternalReviewRenderModelResponse,
-  SideModelConfig,
 } from './contracts.js'
 import { DRAFT_MARK_COLORS } from './contracts.js'
 import { EngineHttpError, EngineUnavailableError, type EngineService } from './engine.js'
 import {
-  QINGML_SYSTEM,
   completeTopLevelBlocks,
   convertQingmlSourceSyntax,
-  correctionPrompt,
-  countWords,
   extractTitle,
-  makeDraftPrompt,
   outlineOf,
   structureFactsOf,
 } from './qingml.js'
@@ -60,7 +54,6 @@ interface ToolServices {
   bindings: BindingStore
   bridge: BridgeHub
   telemetry?: TelemetryCapture
-  sideModel?: SideModelConfig
   docStates?: DocStateCache
   freshness?: FreshnessTracker
 }
@@ -76,13 +69,12 @@ const textBlock = (text: string) => [{ type: 'text' as const, text }]
 
 const REVIEW_END_MESSAGE = '改动已提交审阅，右侧面板等待用户裁决。本次工具调用结束——不要重写、不要读稿复核、不要自动裁决；收尾说明由工具卡向用户展示，本回合不再产生任何输出。'
 const REVIEW_REPEAT_ERROR = '本回合已裁决过一次，禁止连环裁决；等待用户指示'
-const WRITE_REPEAT_ERROR = '本回合已经成功生成过一版完整文稿，禁止再次整篇生成；等待用户下一轮指示。'
+const WRITE_REPEAT_ERROR = '本回合的完整文稿已经提交；只有首稿字数未达要求时可沿用同一文稿引用重交一次，第二次后必须等待用户下一轮指示。'
 const REVIEW_PENDING_ERROR = '文稿正在审阅中。待审内容可能是你此前轮次提交的,也可能来自其他会话——不要断言归属。先用 ask_user 向用户说明存在待审稿,经用户明确授权后才可处置;不得代为提交或放弃。'
 const STR_REPLACE_PLAIN_TEXT_ERROR = 'old 必须是纯文本内容,不要带 ## 等 markdown 标记'
 const STR_REPLACE_LINES_NOTICE = '注意:strReplace 的 old 用纯文本,不要带行首 ## - 等标记。'
 const PM_INLINE_ATOM_PLACEHOLDER = '\uFFFC'
-const EMPTY_DRAFT_CORRECTION = '上一次只产出了标题、缺少正文。请重写整份文档,只输出完整 QingML;除 <title> 和 h1-h6 标题外,至少包含一项正文内容。'
-const EMPTY_DRAFT_ERROR = '侧模型修正后仍只返回标题、缺少正文内容，未提交文稿。'
+const EMPTY_DRAFT_ERROR = '提交的 QingML 只有标题、缺少正文内容，未提交文稿。'
 const SOURCE_SYNTAX_LEAK_ERROR = '文稿中仍有无法识别的脚注或公式写法，未提交文稿。'
 // 局部 op 只接受纯文本/Markdown;QingML/HTML 原始标签会被当普通文字刻进正文(用户实测颜色事故)。
 const RAW_TAG_PATTERN = /<\/?\s*(article|title|h[1-6]|p|ul|ol|li|tasks?|blockquote|hr|pre|table|tr|td|th|callout|columns?|mermaid|drawio|math(?:-block)?|img|file|pennote|b|strong|i|em|u|s|del|code|a|mark|color|footnote|br|span|div)\b[^>]*>/i
@@ -106,15 +98,10 @@ interface DraftLengthRequirement {
 
 interface DraftRequirements {
   length?: DraftLengthRequirement
-  paragraphs?: number
-  outline?: string[]
 }
 
 interface DraftRequirementInput {
-  brief: string
-  title?: string
-  outline?: string[]
-  style?: string
+  requirements?: string
 }
 
 const CHINESE_DIGITS: Record<string, number> = {
@@ -151,9 +138,8 @@ function parseDraftNumber(raw: string): number | undefined {
 const DRAFT_NUMBER_SOURCE = String.raw`(?:\d[\d,，]*|[零〇一二两三四五六七八九十百千万]+)`
 
 /**
- * 「每节约 300 字」这类**分项**字数不是全文约束。模型把「1200 字分四节」自然写成
- * 「每节约 300 字」放进 brief 时,若按全文目标解析会推出 max=330,与真实下限 1200
- * 自相矛盾,导致写多少都不合格、自动重试永不闭合(真机 11 分钟未落稿)。
+ * 「每节约 300 字」这类**分项**字数不是全文约束。若把「1200 字分四节」中的
+ * 「每节约 300 字」当成全文目标，会推出 max=330，与真实下限 1200 自相矛盾。
  */
 const PER_UNIT_LOOKBEHIND = /每\s*(?:一)?\s*(?:小?节|段(?:落)?|章|部分|篇|页|条|项|个)[^，,。;；]{0,8}$/
 
@@ -162,7 +148,7 @@ function isPerUnitLength(text: string, matchIndex: number): boolean {
 }
 
 export function draftRequirementsOf(input: DraftRequirementInput): DraftRequirements {
-  const text = `${input.brief}\n${input.style ?? ''}`
+  const text = input.requirements ?? ''
   const length: DraftLengthRequirement = {}
   const consumed: Array<{ start: number; end: number }> = []
   let hasHardBoundary = false
@@ -230,59 +216,33 @@ export function draftRequirementsOf(input: DraftRequirementInput): DraftRequirem
     delete length.max
   }
 
-  const paragraphMatch = new RegExp(`(?:必须|务必|严格|正好|恰好|分成?|写成?|共|一共)?\\s*(${DRAFT_NUMBER_SOURCE})\\s*(?:个)?段(?:普通)?正文`).exec(text)
-    ?? new RegExp(`(?:必须|务必|严格|正好|恰好|分成?|写成?|共|一共)\\s*(${DRAFT_NUMBER_SOURCE})\\s*段`).exec(text)
-  const paragraphs = paragraphMatch ? parseDraftNumber(paragraphMatch[1]!) : undefined
-  const outline = input.outline?.map((heading) => heading.trim()).filter(Boolean)
   return {
     ...(length.min !== undefined || length.max !== undefined || length.target !== undefined ? { length } : {}),
-    ...(paragraphs !== undefined ? { paragraphs } : {}),
-    ...(outline?.length ? { outline } : {}),
   }
 }
 
-function draftRequirementFailures(qingml: string, requirements: DraftRequirements): string[] {
-  const failures: string[] = []
-  if (requirements.length) {
-    const words = countDocVisibleChars(compileQingmlDocument(qingml))
-    if (requirements.length.min !== undefined && words < requirements.length.min) {
-      failures.push(`篇幅仅 ${words} 字，少于 ${requirements.length.min} 字`)
-    }
-    if (requirements.length.max !== undefined && words > requirements.length.max) {
-      failures.push(`篇幅为 ${words} 字，超过 ${requirements.length.max} 字`)
-    }
-  }
-  if (requirements.paragraphs !== undefined) {
-    const paragraphs = completeTopLevelBlocks(qingml).blocks.filter((block) => /^<p(?:\s|>)/i.test(block)).length
-    if (paragraphs !== requirements.paragraphs) {
-      failures.push(`普通正文应为 ${requirements.paragraphs} 段，实际 ${paragraphs} 段`)
-    }
-  }
-  if (requirements.outline) {
-    const outline = outlineOf(qingml)
-    const headings = outline.headings.map((heading) => heading.text)
-    const withoutDocumentTitle = headings[0] === outline.title ? headings.slice(1) : headings
-    const matches = (candidate: readonly string[]) =>
-      candidate.length === requirements.outline!.length &&
-      candidate.every((heading, index) => heading === requirements.outline![index])
-    if (!matches(headings) && !matches(withoutDocumentTitle)) {
-      failures.push(`提纲应依次为「${requirements.outline.join('」「')}」，实际为「${withoutDocumentTitle.join('」「')}」`)
-    }
-  }
-  return failures
-}
-
-function draftTargetLength(qingml: string, requirements: DraftRequirements): {
-  target: number
-  actual: number
+interface DraftLengthReport {
   gap: number
-  met: boolean
-} | undefined {
-  const target = requirements.length?.target
-  if (target === undefined) return undefined
-  const actual = countDocVisibleChars(compileQingmlDocument(qingml))
-  const gap = actual - target
-  return { target, actual, gap, met: Math.abs(gap) <= Math.max(1, Math.round(target * 0.1)) }
+  status: 'met' | 'unmet' | 'target-missed'
+}
+
+function draftLengthReport(actual: number, requirements: DraftRequirements): DraftLengthReport | undefined {
+  const length = requirements.length
+  if (!length) return undefined
+  if (length.target !== undefined) {
+    const gap = actual - length.target
+    return {
+      gap,
+      status: Math.abs(gap) <= Math.max(1, Math.round(length.target * 0.1)) ? 'met' : 'target-missed',
+    }
+  }
+  if (length.min !== undefined && actual < length.min) {
+    return { gap: actual - length.min, status: 'unmet' }
+  }
+  if (length.max !== undefined && actual > length.max) {
+    return { gap: actual - length.max, status: 'unmet' }
+  }
+  return { gap: 0, status: 'met' }
 }
 
 function forceExplicitDraftTitle(qingml: string, title: string | undefined): string {
@@ -505,12 +465,11 @@ export function registerTools(services: ToolServices): void {
 function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTracker) {
   return defineTool({
     name: 'qing_write_draft',
-    description: '根据写作简报生成完整 QingML 文稿并提交到青简。省略 docRef 会新建文稿；改写已有文稿必须传当前会话内的 docRef。',
+    description: '把你在主对话中写好的完整 QingML 文稿提交到青简。省略 docRef 会新建文稿；改写已有文稿必须传当前会话内的 docRef。',
     parameters: {
-      brief: { type: 'string', required: true, description: '完整写作简报：目标、受众、要点、素材和约束。' },
-      title: { type: 'string', description: '可选标题；未给出时由侧模型拟定。' },
-      outline: { ...outlineSchema, description: '可选的明确提纲；每项是一条必须按原顺序保留的章节标题。' },
-      style: { type: 'string', description: '可选文风、篇幅与排版要求。' },
+      qingml: { type: 'string', required: true, description: '完整 QingML 全文；必须含最前面的 <title>、同名 <h1> 纸面大标题和全部正文。' },
+      title: { type: 'string', description: '用户明确指定的标题；传入后工具会让 <title> 与首个 <h1> 逐字一致。' },
+      requirements: { type: 'string', description: '仅在用户明确提出全文字数要求时，原样传入相关短句（如“约 1200 字”或“至少 800 字”），供工具报告差距；不要放正文。' },
       docRef: { type: 'string', description: '要整稿改写的青简会话 ID；省略即新建。' },
     },
     output: {
@@ -537,8 +496,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
           formulas: { type: 'integer', required: true, description: '文稿实际包含的公式数。' },
           automaticConversions: { type: 'integer', required: true, description: '已自动整理为正确格式的脚注与公式数。' },
           lengthStatus: { type: 'string', enum: ['not-requested', 'met', 'unmet', 'target-missed'], required: true, description: '显式篇幅要求的确定性验收结果。' },
-          lengthGap: { type: 'integer', description: '软目标的有符号差值：实际字数减目标字数。' },
-          structureStatus: { type: 'string', enum: ['not-requested', 'met', 'unmet'], required: true, description: '显式段落数/提纲要求的确定性验收结果。' },
+          lengthGap: { type: 'integer', description: '实际字数相对目标或最近边界的有符号差值；区间内为 0。' },
           warning: { type: 'string', description: '实际保留的内容项数与提交项数不符时的缺损警告。' },
         },
       },
@@ -552,7 +510,9 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
           `文稿引用：${value.engineSessionId}`,
           `全文约 ${value.words} 字。`,
           ...(typeof value.lengthGap === 'number'
-            ? [`目标 ${value.words - value.lengthGap} 字，当前 ${value.words} 字（差 ${value.lengthGap >= 0 ? '+' : ''}${value.lengthGap}）。`]
+            ? [value.lengthStatus === 'met'
+                ? `字数要求已满足（差距 ${value.lengthGap >= 0 ? '+' : ''}${value.lengthGap}）。`
+                : `字数要求未满足，当前相对目标或最近边界差 ${value.lengthGap >= 0 ? '+' : ''}${value.lengthGap}。`]
             : []),
           `内容构成：${value.structure}。`,
           `本稿含 ${value.footnotes} 处脚注、${value.formulas} 个公式，其中 ${value.automaticConversions} 处已自动整理为正确格式。`,
@@ -576,19 +536,27 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
       card: 'generic',
       title: args.docRef ? '正在改写青简文稿' : '正在起草青简文稿',
       kind: 'edit',
-      rawInput: { brief: args.brief, ...(args.title ? { title: args.title } : {}), ...(args.outline ? { outline: args.outline } : {}), ...(args.style ? { style: args.style } : {}) },
+      rawInput: { ...(args.title ? { title: args.title } : {}), ...(args.requirements ? { requirements: args.requirements } : {}) },
     }),
     presentResult: (_args, result) => result.isError
       ? failedResultPresentation('青简写作未完成', result.content)
       : { card: 'generic', title: '青简文稿已生成' },
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
-      let generation = randomUUID()
-      let retried = false
       try {
         await assertEngineOnline(services.engine)
-        writeTurns.assertNoSuccessfulWrite(exec)
+        writeTurns.assertWriteAllowed(exec, args.docRef)
         const requirements = draftRequirementsOf(args)
+        let qingml = args.qingml.trim()
+        if (!qingml) throw new Error('qingml 不能为空。请提交完整 QingML 全文。')
+        qingml = forceExplicitDraftTitle(qingml, args.title)
+        if (isBodylessDraft(qingml)) throw new Error(EMPTY_DRAFT_ERROR)
+        const sourceConversion = convertQingmlSourceSyntax(qingml)
+        qingml = sourceConversion.qingml
+        if (sourceConversion.leaks.length > 0) throw new Error(SOURCE_SYNTAX_LEAK_ERROR)
+        // 与最终报告共用唯一 QingML→PM 编译入口；引擎仍会在 qingmlDraft 通道做权威白名单校验。
+        compileQingmlDocument(qingml)
+
         let bound
         if (args.docRef) {
           if (!services.bindings.hasDoc(dshSessionId, args.docRef)) {
@@ -597,7 +565,10 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
           bound = services.bindings.listDocs(dshSessionId).find((doc) => doc.engineSessionId === args.docRef)!
           await services.bindings.setActive(dshSessionId, args.docRef)
         } else {
-          bound = await services.bindings.createDoc(dshSessionId, args.title?.trim() || '未命名文稿')
+          bound = await services.bindings.createDoc(
+            dshSessionId,
+            args.title?.trim() || extractTitle(qingml, '未命名文稿'),
+          )
         }
 
         // 改写时是显式写意图；新稿则在创建成功、拿到真实文稿 ID 后立即申领。
@@ -614,121 +585,13 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
         if (docBefore.state === 'pendingReview') {
           throw new Error(REVIEW_PENDING_ERROR)
         }
-        const initialPrompt = makeDraftPrompt({ brief: args.brief, title: args.title, outline: args.outline, style: args.style })
-        let qingml: string
-        let automaticConversions = 0
         let proposal: ExternalProposalResponse
         try {
-          qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, initialPrompt)
-          if (isBodylessDraft(qingml)) {
-            retried = true
-            const retryPrompt = makeDraftPrompt({
-              brief: args.brief,
-              title: args.title,
-              outline: args.outline,
-              style: args.style,
-              correction: `${EMPTY_DRAFT_CORRECTION}\n\n上一次输出:\n${qingml}`,
-            })
-            generation = randomUUID()
-            qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, retryPrompt)
-            if (isBodylessDraft(qingml)) throw new Error(EMPTY_DRAFT_ERROR)
-          }
-          qingml = forceExplicitDraftTitle(qingml, args.title)
-          let sourceConversion = convertQingmlSourceSyntax(qingml)
-          qingml = sourceConversion.qingml
-          automaticConversions = sourceConversion.converted
-          if (sourceConversion.leaks.length > 0) throw new Error(SOURCE_SYNTAX_LEAK_ERROR)
-          let requirementFailures = draftRequirementFailures(qingml, requirements)
-          if (requirementFailures.length > 0) {
-            retried = true
-            const retryPrompt = makeDraftPrompt({
-              brief: args.brief,
-              title: args.title,
-              outline: args.outline,
-              style: args.style,
-              correction: [
-                `上一次首稿未满足可确定检查的明确要求：${requirementFailures.join('；')}。`,
-                '请立即重写完整 QingML 并一次修正这些问题，只输出修正后的完整文稿。',
-                `上一次输出：\n${qingml}`,
-              ].join('\n'),
-            })
-            generation = randomUUID()
-            qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, retryPrompt)
-            if (isBodylessDraft(qingml)) throw new Error(EMPTY_DRAFT_ERROR)
-            qingml = forceExplicitDraftTitle(qingml, args.title)
-            sourceConversion = convertQingmlSourceSyntax(qingml)
-            qingml = sourceConversion.qingml
-            automaticConversions = sourceConversion.converted
-            if (sourceConversion.leaks.length > 0) throw new Error(SOURCE_SYNTAX_LEAK_ERROR)
-            requirementFailures = draftRequirementFailures(qingml, requirements)
-            if (requirementFailures.length > 0) {
-              throw new Error(`自动修正后仍未满足明确要求（${requirementFailures.join('；')}），未提交文稿。`)
-            }
-          }
-          // 这里是 propose 前本地编译 PM；引擎若丢弃非法块，最终字数可能微差，±10% 容差可接受。
-          const targetLength = draftTargetLength(qingml, requirements)
-          if (targetLength && !targetLength.met) {
-            // bare/约类软目标有独立的一次 correction：不进硬失败卡链，重写后即使仍有偏差也照常提交。
-            retried = true
-            const retryPrompt = makeDraftPrompt({
-              brief: args.brief,
-              title: args.title,
-              outline: args.outline,
-              style: args.style,
-              correction: [
-                `上一版的软目标为 ${targetLength.target} 字，按青简可见字数口径当前 ${targetLength.actual} 字（差 ${targetLength.gap >= 0 ? '+' : ''}${targetLength.gap}）。`,
-                '请只再重写一次完整 QingML，尽量进入目标 ±10%，同时保留其他结构与内容约束。',
-                `上一次输出：\n${qingml}`,
-              ].join('\n'),
-            })
-            generation = randomUUID()
-            qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, retryPrompt)
-            if (isBodylessDraft(qingml)) throw new Error(EMPTY_DRAFT_ERROR)
-            qingml = forceExplicitDraftTitle(qingml, args.title)
-            sourceConversion = convertQingmlSourceSyntax(qingml)
-            qingml = sourceConversion.qingml
-            automaticConversions = sourceConversion.converted
-            if (sourceConversion.leaks.length > 0) throw new Error(SOURCE_SYNTAX_LEAK_ERROR)
-            const nonTargetFailures = draftRequirementFailures(qingml, requirements)
-            if (nonTargetFailures.length > 0) {
-              throw new Error(`字数软修正后不再满足明确结构要求（${nonTargetFailures.join('；')}），未提交文稿。`)
-            }
-          }
-          try {
-            proposal = await propose(services, exec, bound.engineSessionId, docBefore.docVersion, qingml)
-          } catch (error) {
-            if (!(error instanceof EngineHttpError) || error.status !== 400 || !hasDiagnostic(error.body)) throw error
-            const retryPrompt = makeDraftPrompt({
-              brief: args.brief,
-              title: args.title,
-              outline: args.outline,
-              style: args.style,
-              correction: correctionPrompt(qingml, error.body.diagnostic),
-            })
-            generation = randomUUID()
-            qingml = await streamQingml(services, exec, dshSessionId, bound.engineSessionId, generation, retryPrompt)
-            if (isBodylessDraft(qingml)) throw new Error(EMPTY_DRAFT_ERROR)
-            qingml = forceExplicitDraftTitle(qingml, args.title)
-            sourceConversion = convertQingmlSourceSyntax(qingml)
-            qingml = sourceConversion.qingml
-            automaticConversions = sourceConversion.converted
-            if (sourceConversion.leaks.length > 0) throw new Error(SOURCE_SYNTAX_LEAK_ERROR)
-            const retryFailures = draftRequirementFailures(qingml, requirements)
-            if (retryFailures.length > 0) {
-              throw new Error(`格式修正后不再满足明确要求（${retryFailures.join('；')}），未提交文稿。`)
-            }
-            proposal = await propose(services, exec, bound.engineSessionId, docBefore.docVersion, qingml)
-          }
-          writeTurns.markSuccessful(exec)
+          proposal = await propose(services, exec, bound.engineSessionId, docBefore.docVersion, qingml)
+          // proposal 已成功就必须占用本回合额度；后续权威读回失败也不能把已发生的写当作未发生。
+          writeTurns.markSuccessful(exec, bound.engineSessionId)
         } catch (error) {
-          const safeError = sanitizeToolBoundaryError(error)
-          services.bridge.emit(dshSessionId, {
-            type: 'draft-failed',
-            engineSessionId: bound.engineSessionId,
-            generation,
-            message: readableError(safeError),
-          })
-          throw safeError
+          throw sanitizeToolBoundaryError(error)
         }
 
         try {
@@ -767,7 +630,6 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
           // 引擎实际接受结构不一致时的误报。
           const outline = outlineOf(renderedQingml, title)
           const structureFacts = structureFactsOf(renderedQingml)
-          const finalRequirementFailures = draftRequirementFailures(renderedQingml, requirements)
           const submittedBlocks = completeTopLevelBlocks(qingml).blocks
             .filter((block) => !/^<title(?:\s|>)/i.test(block)).length
           const lostBlocks = Math.max(0, submittedBlocks - outline.blocks)
@@ -775,7 +637,6 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
             services.bridge.emit(dshSessionId, {
               type: 'doc-committed',
               engineSessionId: bound.engineSessionId,
-              generation,
               doc: official,
               blocks: outline.blocks,
               words,
@@ -784,7 +645,6 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
             services.bridge.emit(dshSessionId, {
               type: 'doc-review-pending',
               engineSessionId: bound.engineSessionId,
-              generation,
               doc: official,
               count: reviewCount,
               blocks: outline.blocks,
@@ -795,7 +655,6 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
           void services.telemetry?.capture('draft_created', {
             words_bucket: wordsBucket(words),
             blocks_bucket: blocksBucket(outline.blocks),
-            retried,
           })
           rememberDocState(services, exec, bound.engineSessionId, {
             state: proposal.status === 'review' ? 'pendingReview' : 'editing',
@@ -806,15 +665,11 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
             docVersion: official.docVersion,
             ...(proposal.status === 'review' ? { patchCount: reviewCount } : {}),
           }, true)
-          const finalTargetLength = draftTargetLength(renderedQingml, requirements)
-          const lengthStatus: 'not-requested' | 'met' | 'unmet' | 'target-missed' = finalTargetLength
-            ? finalTargetLength.met ? 'met' : 'target-missed'
-            : requirements.length
-              ? finalRequirementFailures.some((failure) => failure.startsWith('篇幅')) ? 'unmet' : 'met'
-              : 'not-requested'
-          const structureStatus: 'not-requested' | 'met' | 'unmet' = requirements.outline || requirements.paragraphs !== undefined
-            ? finalRequirementFailures.some((failure) => !failure.startsWith('篇幅')) ? 'unmet' : 'met'
-            : 'not-requested'
+          const lengthReport = draftLengthReport(words, requirements)
+          const lengthStatus: 'not-requested' | 'met' | 'unmet' | 'target-missed' = lengthReport?.status ?? 'not-requested'
+          if (proposal.status === 'committed' && lengthReport && lengthReport.status !== 'met') {
+            writeTurns.allowLengthRetry(exec, bound.engineSessionId)
+          }
           return {
             title,
             blocks: outline.blocks,
@@ -829,24 +684,16 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
             wholeDocReview,
             footnotes: structureFacts.footnotes,
             formulas: structureFacts.formulas,
-            automaticConversions,
+            automaticConversions: sourceConversion.converted,
             lengthStatus,
-            ...(finalTargetLength ? { lengthGap: words - finalTargetLength.target } : {}),
-            structureStatus,
+            ...(lengthReport ? { lengthGap: lengthReport.gap } : {}),
             ...(proposal.status === 'review'
               ? { patchCount: reviewCount, patchIds: reviewSuggestionIds }
               : {}),
             outline: outline.headings.map((heading) => `${'  '.repeat(Math.max(0, heading.level - 1))}${heading.text}`),
           }
         } catch (error) {
-          const safeError = sanitizeToolBoundaryError(error)
-          services.bridge.emit(dshSessionId, {
-            type: 'draft-failed',
-            engineSessionId: bound.engineSessionId,
-            generation,
-            message: readableError(safeError),
-          })
-          throw safeError
+          throw sanitizeToolBoundaryError(error)
         }
       } catch (error) {
         throw sanitizeToolBoundaryError(error)
@@ -1774,67 +1621,6 @@ async function refreshAndPublishDocState(
   }
 }
 
-async function streamQingml(
-  services: ToolServices,
-  exec: ToolRunContext,
-  dshSessionId: string,
-  engineSessionId: string,
-  generation: string,
-  prompt: string,
-): Promise<string> {
-  services.bridge.emit(dshSessionId, { type: 'draft-started', engineSessionId, generation })
-  const provider = exec.agent?.options.provider ?? services.sideModel?.provider
-  const model = exec.agent?.options.model ?? services.sideModel?.model
-  if (!provider || !model) {
-    throw new Error('没有可用的侧模型。请为当前 Agent 选择 provider/model，或配置 qingagent.sideModel。')
-  }
-  let qingml = ''
-  let emitted = 0
-  let finish: FinishReason | undefined
-  const message = createUserMessage({
-    content: [{ type: 'text', text: prompt }],
-    source: { kind: 'plugin', plugin: 'dsh-qingagent' },
-  })
-  for await (const chunk of services.ctx.llm.stream({
-    provider,
-    model,
-    system: QINGML_SYSTEM,
-    messages: [message],
-    signal: exec.signal,
-    ...(exec.agent ? { sessionId: exec.agent.id } : {}),
-    temperature: 0.4,
-  })) {
-    if (chunk.type === 'text-delta') {
-      qingml += chunk.text
-      const completed = completeTopLevelBlocks(qingml).blocks
-      if (completed.length > emitted) {
-        const accumulated = completed.join('')
-        const contentBlocks = completed.filter((block) => !/^<title(?:\s|>)/i.test(block))
-        services.bridge.emit(dshSessionId, {
-          type: 'draft-chunk',
-          engineSessionId,
-          generation,
-          chunkQingml: completed.slice(emitted).join(''),
-          accumulatedBlocks: completed,
-          title: extractTitle(accumulated),
-          blocks: contentBlocks.length,
-          words: countWords(accumulated),
-        })
-        emitted = completed.length
-      }
-    } else if (chunk.type === 'finish') {
-      finish = chunk.reason
-    }
-  }
-  if (!finish || finish.kind === 'error' || finish.kind === 'aborted') {
-    const detail = finish && 'failure' in finish ? finish.failure.message : '模型流未正常结束'
-    throw new Error(`QingML 生成失败：${detail}`)
-  }
-  const output = qingml.trim()
-  if (!output) throw new Error('侧模型没有返回 QingML。')
-  return output
-}
-
 async function propose(
   services: RuntimeToolServices,
   exec: ToolRunContext,
@@ -2307,10 +2093,6 @@ async function assertEngineOnline(
   return status as typeof status & { state: 'online' }
 }
 
-function hasDiagnostic(body: unknown): body is { diagnostic: unknown } {
-  return typeof body === 'object' && body !== null && 'diagnostic' in body
-}
-
 function readableError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -2412,7 +2194,12 @@ class ReviewTurnTracker {
 
 class WriteTurnTracker {
   private readonly turns = new Map<string, number>()
-  private readonly successful = new Map<string, string>()
+  private readonly successful = new Map<string, {
+    key: string
+    engineSessionId: string
+    lengthRetryAllowed: boolean
+    lengthRetryConsumed: boolean
+  }>()
 
   begin(agentId: string, turn: number): void {
     if (this.turns.get(agentId) === turn) return
@@ -2425,15 +2212,44 @@ class WriteTurnTracker {
     this.successful.delete(agentId)
   }
 
-  assertNoSuccessfulWrite(exec: ToolRunContext): void {
+  assertWriteAllowed(exec: ToolRunContext, docRef?: string): void {
     const agentId = sessionIdOf(exec)
     const key = this.key(agentId, exec)
-    if (this.successful.get(agentId) === key) throw new Error(WRITE_REPEAT_ERROR)
+    const state = this.successful.get(agentId)
+    if (!state || state.key !== key) return
+    if (
+      state.lengthRetryAllowed
+      && !state.lengthRetryConsumed
+      && docRef === state.engineSessionId
+    ) {
+      state.lengthRetryConsumed = true
+      return
+    }
+    throw new Error(WRITE_REPEAT_ERROR)
   }
 
-  markSuccessful(exec: ToolRunContext): void {
+  markSuccessful(exec: ToolRunContext, engineSessionId: string): void {
     const agentId = sessionIdOf(exec)
-    this.successful.set(agentId, this.key(agentId, exec))
+    const key = this.key(agentId, exec)
+    const previous = this.successful.get(agentId)
+    this.successful.set(agentId, {
+      key,
+      engineSessionId,
+      lengthRetryAllowed: false,
+      lengthRetryConsumed: previous?.key === key ? previous.lengthRetryConsumed : false,
+    })
+  }
+
+  allowLengthRetry(exec: ToolRunContext, engineSessionId: string): void {
+    const agentId = sessionIdOf(exec)
+    const state = this.successful.get(agentId)
+    if (
+      state?.key === this.key(agentId, exec)
+      && state.engineSessionId === engineSessionId
+      && !state.lengthRetryConsumed
+    ) {
+      state.lengthRetryAllowed = true
+    }
   }
 
   private key(agentId: string, exec: ToolRunContext): string {

@@ -86,16 +86,6 @@ describe('client details 动态占槽', () => {
     expect(activeDetails.size).toBe(0)
 
     const source = FakeEventSource.instances[0]!
-    source.emit({ type: 'draft-started', engineSessionId: 'qing-m1', generation: 'draft-m1' })
-    source.emit({
-      type: 'draft-chunk', engineSessionId: 'qing-m1', generation: 'draft-m1', chunkQingml: '<p>半篇</p>',
-      accumulatedBlocks: ['<p>半篇</p>'], title: '测试稿', blocks: 1, words: 2,
-    })
-    expect(activeDetails.size).toBe(1)
-
-    source.emit({ type: 'draft-failed', engineSessionId: 'qing-m1', generation: 'draft-m1', message: '已中止' })
-    expect(activeDetails.size).toBe(0)
-
     source.emit({
       type: 'binding-changed',
       binding: {

@@ -17,7 +17,7 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【编辑作用域纪律】')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【叙述一致性红线】')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【结构摘要自检纪律】')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('软目标最多自动重写一次,仍有偏差也会提交')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不会因为字数不达标而中止提交，也不会内部重写')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('这是文末自动落款，会随字数和保存时间自动更新，属于固定装饰，无法编辑或关闭；正文本身不包含它')
   })
 
@@ -65,15 +65,16 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('没有则允许只用 setTitle 改稿名')
   })
 
-  it('明确提纲走独立 outline 通道', () => {
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('必须把各级标题逐项放进独立的 outline 参数,保持原顺序和标题文字')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不能只把提纲埋在 brief 里')
+  it('明确提纲直接写入 QingML 标题结构', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('将标题原文、原顺序直接写进 QingML 的 h2-h6')
+    expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('outline 参数')
+    expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('brief 里')
   })
 
   it('现状提问会刷新旧审阅态且作者快照免读', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('新的修改指令或任何关于文稿现状的提问(当前状态/结构/字数/改了什么/还剩什么没处理)时')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【作者免读】')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('committed 时直接按返回摘要汇报,不要再读稿复核')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('本回合刚提交的全文仍在你的上下文里，禁止调用 qing_read_draft 读稿复核')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('新回合遇到可能过期的状态线索时,先刷新权威状态再决定是否读稿')
     expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('任何新回合开始时一律先刷新')
   })
@@ -105,10 +106,10 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('需要动结构时仍按【全文重构纪律】处理')
   })
 
-  it('字数软修正收在工具内，不开放同回合第二次编辑', () => {
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('字数软目标的唯一次自动修正由 qing_write_draft 工具内部完成')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('不得在同回合再自驱读稿或追加修改')
-    expect(QINGAGENT_SYSTEM_PROMPT).not.toContain('首稿落库即发现低于硬要求时')
+  it('字数超差由主模型沿用同稿重交一次', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('沿用返回的同一 docRef 再提交一次，且只能一次')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('第二次仍有偏差就如实交付')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('工具绝不会在内部代你重写')
   })
 
   it('审核结果回流:全采纳一句话收尾', () => {

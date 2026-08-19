@@ -100,7 +100,7 @@ npx @deepseek-ai/dsh plugin --profile web add dsh-qingagent@latest
 
 | 工具 | 参数 | 作用 |
 |---|---|---|
-| `qing_write_draft` | `brief` 必填；`title?` `outline?` `style?` `docRef?` | 按简报和可选的显式提纲生成整篇 QingML。省略 `docRef` 为新建；给了本会话 `docRef` 即整篇重构（须用户明确授权） |
+| `qing_write_draft` | `qingml` 必填；`title?` `requirements?` `docRef?` | 把主模型已写好的完整 QingML 全文直接提交。字数要求只返回是否达标和差距，工具不内部重写；省略 `docRef` 为新建，给了本会话 `docRef` 即整篇重构（须用户明确授权） |
 | `qing_edit_draft` | `docRef?`；`ops[]` 必填 | 对已有文稿原子提交一组结构化局部编辑；审阅进行中拒绝再次编辑 |
 | `qing_read_draft` | `docRef?`；`mode` 默认 `outline` | 分级读取：`outline` 概要 / `full` 全文 / `base` 已提交基线 / `lines` 带行号 Markdown / `blocks` 块 ID 清单 |
 | `qing_review_commit` | `docRef?`；`action: accept_all \| reject_all` | 全量接受或拒绝待审稿；代码硬性限制每回合最多一次 |
@@ -157,7 +157,6 @@ npx @deepseek-ai/dsh plugin --profile web add dsh-qingagent@latest
 | `engineUrl` | `http://127.0.0.1:8080` | 仅作**回退**：读不到 `instance.json` 时使用；实例存在时以其端口为权威 |
 | `engineCommand` / `engineCwd` | 未设置 | 可选启动命令与工作目录，仅 `autoLaunch` 时执行 |
 | `autoLaunch` | `false` | 离线时 detached 拉起引擎；卸载插件不会杀掉用户的引擎 |
-| `sideModel.provider` / `.model` | 未设置 | 当前 Agent 未公开 provider/model 时的回退；整段可省略，写则两项必填 |
 | `workspaceProjection` | `true` | **保留字段**，当前无运行时效果 |
 
 ---
@@ -175,7 +174,7 @@ npx @deepseek-ai/dsh plugin --profile web add dsh-qingagent@latest
 
 ### 匿名使用统计
 
-插件默认开启匿名使用统计，事件由 DSH 的 Node 进程发送到自托管 Umami：`https://t.qingagent.com/api/send`。服务端会像普通网站服务一样看到请求 IP；插件不发送正文、标题、字数原值、写作简报、用户消息、会话 ID、文稿引用、文件路径、工作区 / profile 名或错误堆栈。
+插件默认开启匿名使用统计，事件由 DSH 的 Node 进程发送到自托管 Umami：`https://t.qingagent.com/api/send`。服务端会像普通网站服务一样看到请求 IP；插件不发送正文、标题、字数原值、用户消息、会话 ID、文稿引用、文件路径、工作区 / profile 名或错误堆栈。
 
 每条事件的公共属性仅有：随机生成并存于独立 `dsh_qingagent_telemetry` 存储域的匿名 `device_id`、`pluginVersion`、可取得时的 `dshVersion`、`platform`、`arch`、`nodeVersion`、`locale`。事件属性如下，所有计数只发分桶、不发原值：
 
@@ -183,7 +182,7 @@ npx @deepseek-ai/dsh plugin --profile web add dsh-qingagent@latest
 |---|---|
 | `plugin_activated` | 首次运行、装机龄分桶、引擎状态、是否写过 / 编辑过 / 审阅过 |
 | `panel_opened` | 打开来源（工具卡 / 手动 / 自动） |
-| `draft_created` | 字数分桶、块数分桶、是否触发空壳重试 |
+| `draft_created` | 字数分桶、块数分桶 |
 | `draft_edited` | 操作数分桶、去重后的操作类型、结果（已提交 / 待审） |
 | `edit_rejected` | 拒绝原因枚举 |
 | `review_settled` | 提交 / 放弃、补丁数分桶、是否发生 409 重试 |
