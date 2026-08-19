@@ -102,6 +102,7 @@ export interface ExternalAnnotation {
 export interface ExternalAnnotationIgnoreRequest {
   expectedDocVersion: number
   annotationIds: string[]
+  turnId?: string
 }
 export interface ExternalAnnotationIgnoreResponse {
   status: 'ignored'
@@ -116,6 +117,7 @@ export interface ExternalReviewVerdictRequest {
   expectedDocVersion: number
   patchId: string
   verdict: 'accepted' | 'rejected'
+  turnId?: string
 }
 
 export interface ExternalReviewVerdictResponse {
@@ -130,6 +132,7 @@ export interface ExternalReviewVerdictResponse {
 export interface ExternalReviewCommitPanelRequest {
   expectedDocVersion: number
   action: 'commit' | 'accept_all' | 'reject_all'
+  turnId?: string
 }
 
 export interface ExternalErrorResponse {
@@ -256,6 +259,7 @@ export type ExternalEditProposalOp =
 export interface ExternalReviewCommitRequest {
   expectedDocVersion: number
   action: 'accept_all' | 'reject_all'
+  turnId?: string
 }
 
 export interface ExternalReviewOutcomeHunk {

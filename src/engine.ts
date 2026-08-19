@@ -56,6 +56,13 @@ export class EngineHttpError extends Error {
   }
 }
 
+export function isMissingSessionError(error: unknown): boolean {
+  if (!(error instanceof EngineHttpError) || error.status !== 404) return false
+  const body = error.body
+  return typeof body === 'object' && body !== null
+    && (body as Record<string, unknown>).code === 'SESSION_NOT_FOUND'
+}
+
 interface EngineErrorBody {
   error?: unknown
   code?: unknown
@@ -65,6 +72,9 @@ interface EngineErrorBody {
 const CODE_MESSAGES: Record<string, string> = {
   REVIEW_PENDING: '审阅待处理',
   AGENT_BUSY: '青简正在处理其他任务',
+  BUSY_NATIVE: '青简客户端正在处理',
+  LEASE_HELD: '文稿已被其他写作回合锁定',
+  LOCK_LOST: '文稿编辑锁已失效',
   VERSION_CONFLICT: '文稿版本冲突',
   RATE_LIMITED: '请求过于频繁',
   SESSION_NOT_FOUND: '青简会话不存在',
@@ -80,6 +90,9 @@ const STATUS_MESSAGES: Record<number, string> = {
 const CODE_NEXT_STEPS: Record<string, string> = {
   REVIEW_PENDING: '待审稿归属不明,先向用户说明其存在;仅在用户明确授权后才可 qing_review_commit,不得代为处置',
   AGENT_BUSY: '请稍后重试一次；仍忙则告知用户等待',
+  BUSY_NATIVE: '请稍后再开始写作',
+  LEASE_HELD: '本回合停止写作，不要重发',
+  LOCK_LOST: '本回合停止写作，不要重发',
   VERSION_CONFLICT: '请重新读取文稿，基于最新版本重做操作，勿原样重发',
   RATE_LIMITED: '请降低请求频率，稍后再试',
   SESSION_NOT_FOUND: '请用 qing_list_docs 重新确认文稿引用，不要重试原引用',
@@ -369,6 +382,40 @@ export class EngineConnection {
     return body as T
   }
 
+  /**
+   * 回合租约信号的 10s 是端到端 deadline：包含 ensureReady/autoLaunch，且超时后
+   * 已取消的请求不会在引擎稍后就绪时补发，避免产生“幽灵 begin”。
+   */
+  async fetchTurnSignal<T>(path: string, body: unknown, timeoutMs = 10_000): Promise<T> {
+    if (this.config.autoLaunch && this.config.engineCommand) {
+      this.logger.debug('回合租约信号将经过 ensureReady，引擎离线时可能触发自启。')
+    }
+    const controller = new AbortController()
+    let rejectDeadline: ((reason: unknown) => void) | undefined
+    const deadline = new Promise<never>((_resolve, reject) => { rejectDeadline = reject })
+    const timer = setTimeout(() => {
+      const error = new Error('回合租约信号超时')
+      error.name = 'TimeoutError'
+      controller.abort(error)
+      rejectDeadline?.(error)
+    }, Math.max(1, timeoutMs))
+    timer.unref?.()
+    const request = this.fetchExternalResponse(path, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    }).then(async (response) => {
+      const responseBody = await response.json().catch(() => undefined) as unknown
+      if (!response.ok) throw new EngineHttpError(response.status, responseBody)
+      return responseBody as T
+    })
+    try {
+      return await Promise.race([request, deadline])
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   async fetchAsset(path: string, init: RequestInit = {}): Promise<Response> {
     return this.fetchReadyResponse((token) => this.authorizedFetch(path, init, token))
   }
@@ -441,6 +488,7 @@ export class EngineConnection {
   }
 
   private authorizedFetch(path: string, init: RequestInit, token: string): Promise<Response> {
+    if (init.signal?.aborted) return Promise.reject(init.signal.reason ?? new Error('请求已取消'))
     const headers = new Headers(init.headers)
     headers.set('Authorization', `Bearer ${token}`)
     // 来源归属:引擎按 x-qa-client 把外部改动记为 DeepSeek Harness(客户端展示专用图标)。
@@ -474,6 +522,9 @@ export class EngineService extends Service {
   launchInstalledClient(): Promise<boolean> { return this.connection.launchInstalledClient() }
   startMonitoring(): void { this.connection.startMonitoring() }
   fetchJson<T>(path: string, init?: RequestInit): Promise<T> { return this.connection.fetchJson<T>(path, init) }
+  fetchTurnSignal<T>(path: string, body: unknown, timeoutMs?: number): Promise<T> {
+    return this.connection.fetchTurnSignal<T>(path, body, timeoutMs)
+  }
   fetchAsset(path: string, init?: RequestInit): Promise<Response> { return this.connection.fetchAsset(path, init) }
   fetchInternal(path: string, init?: RequestInit): Promise<Response> { return this.connection.fetchInternal(path, init) }
 }

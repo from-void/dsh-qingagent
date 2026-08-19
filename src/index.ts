@@ -63,9 +63,9 @@ export function createBridgeDocStateObserver(
       docStates.markDirty(dshSessionId)
       const agent = ctx.agents.list().find((candidate) => String(candidate.id) === dshSessionId)
       try {
-        const current = await refreshDocState({ engine, bindings }, docStates, dshSessionId)
-        if (current) injectDocState(agent, formatDocState(current))
+        await refreshDocState({ engine, bindings }, docStates, dshSessionId)
       } catch {
+        // 主动 inject 只保留面板外部变更后的 stale 提醒；正常状态统一走 systemPrompt.context。
         injectDocState(agent, DOC_STATE_STALE_LINE)
       }
     },
@@ -168,6 +168,7 @@ export {
 } from './updateCheck.js'
 export { QINGJIAN_DOWNLOAD_URL, qingjianUnavailableMessage } from './onboarding.js'
 export { QINGML_SYSTEM, completeTopLevelBlocks, countWords, outlineOf } from './qingml.js'
+export { compileQingmlDocument } from './qingmlCompile.js'
 export { selectionSystemPrompt } from './selection.js'
 export {
   AgentIndex,

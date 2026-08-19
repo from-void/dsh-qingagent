@@ -41,6 +41,9 @@ describe('EngineConnection', () => {
     [409, { error: '还有修改未裁决', code: 'REVIEW_PENDING', nextStep: '先处理审阅' }, '审阅待处理：还有修改未裁决（先处理审阅）'],
     [409, { error: '还有修改未裁决', code: 'REVIEW_PENDING' }, '审阅待处理：还有修改未裁决（待审稿归属不明,先向用户说明其存在;仅在用户明确授权后才可 qing_review_commit,不得代为处置）'],
     [409, { error: 'AGENT_BUSY', code: 'AGENT_BUSY', nextStep: '稍后再试' }, '青简正在处理其他任务（稍后再试）'],
+    [409, { error: 'BUSY_NATIVE', code: 'BUSY_NATIVE' }, '青简客户端正在处理（请稍后再开始写作）'],
+    [409, { error: 'LEASE_HELD', code: 'LEASE_HELD' }, '文稿已被其他写作回合锁定（本回合停止写作，不要重发）'],
+    [409, { error: 'LOCK_LOST', code: 'LOCK_LOST' }, '文稿编辑锁已失效（本回合停止写作，不要重发）'],
     [409, { error: '版本已变化', code: 'VERSION_CONFLICT', nextStep: '重新读取文稿' }, '文稿版本冲突：版本已变化（重新读取文稿）'],
     [404, { error: 'missing' }, '青简会话或资源不存在：missing（请用 qing_list_docs 重新确认文稿引用，不要重试原引用）'],
     [429, { error: '队列已满', code: 'RATE_LIMITED', nextStep: '降低频率' }, '请求过于频繁：队列已满（降低频率）'],
@@ -241,6 +244,42 @@ describe('EngineConnection', () => {
 
     await expect(engine.status()).resolves.toMatchObject({ state: 'online', version: '1.0.0' })
     expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('turn-signal 的 deadline 包住 ensureReady，超时后引擎再就绪也不补发幽灵 begin', async () => {
+    vi.useFakeTimers()
+    try {
+      let releaseHealth!: (response: Response) => void
+      const health = new Promise<Response>((resolve) => { releaseHealth = resolve })
+      const urls: string[] = []
+      const fetchMock = vi.fn(async (input: string | URL | Request) => {
+        const url = String(input)
+        urls.push(url)
+        if (url.endsWith('/health')) return health
+        return Response.json({ active: true })
+      })
+      const engine = new EngineConnection(
+        { engineUrl: 'http://127.0.0.1:8080', autoLaunch: false },
+        logger,
+        undefined,
+        dependencies({ fetch: fetchMock }),
+      )
+
+      const pending = engine.fetchTurnSignal(
+        '/sessions/qing-a/turn-signal',
+        { action: 'begin', turnId: 'turn-a' },
+        100,
+      )
+      const rejected = expect(pending).rejects.toThrow('租约信号超时')
+      await vi.advanceTimersByTimeAsync(100)
+      await rejected
+      releaseHealth(Response.json({ version: '1.0.0', attachProtocolVersion: 1 }))
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(urls).toEqual(['http://127.0.0.1:8080/api/v1/external/health'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('引擎地址以 instance.json 的 port 为权威(客户端内置引擎端口随机,配置默认 8080 不再劫持)', async () => {

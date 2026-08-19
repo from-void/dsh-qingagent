@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import {
   AgentIndex,
   DOC_STATE_STALE_LINE,
   DocStateCache,
+  FreshnessTracker,
   formatDocState,
   injectDocState,
 } from '../src/docState.js'
@@ -80,5 +82,22 @@ describe('DocStateCache', () => {
     // 变回原文本也算变化,应当再发一次(否则模型会停留在旧状态)
     injectDocState(agent, same)
     expect(inject).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('FreshnessTracker 文稿维度', () => {
+  it('读 A 不能让编辑 B 过闸，新 generation 不复用旧 fresh 标记', () => {
+    const tracker = new FreshnessTracker()
+    const exec = { agent: { id: 'dsh-1' } } as unknown as ToolRunContext
+    tracker.begin('dsh-1', 1)
+    tracker.resetSegment('dsh-1', 'doc-a', 10)
+    tracker.resetSegment('dsh-1', 'doc-b', 11)
+    tracker.markFresh(exec, 'doc-a', 10)
+
+    expect(() => tracker.assertFresh(exec, 'doc-a', 10)).not.toThrow()
+    expect(() => tracker.assertFresh(exec, 'doc-b', 11)).toThrow('qing_read_draft')
+
+    tracker.resetSegment('dsh-1', 'doc-a', 12)
+    expect(() => tracker.assertFresh(exec, 'doc-a', 12)).toThrow('qing_read_draft')
   })
 })

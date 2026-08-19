@@ -62,32 +62,43 @@ export class DocStateCache {
   }
 }
 
-/** 与 agent/pre-step 的 turn 编号绑定；同一回合后续 step 保留 fresh。 */
+/** 与 agent/pre-step 的 turn 及文稿租约段绑定；A 稿的读取不能让 B 稿越过写前新鲜度门。 */
 export class FreshnessTracker {
   private readonly turns = new Map<string, number>()
-  private readonly fresh = new Set<string>()
+  private readonly documents = new Map<string, Map<string, { generation?: number; fresh: boolean }>>()
 
   begin(sessionId: string, turn: number): void {
     if (this.turns.get(sessionId) === turn) return
     this.turns.set(sessionId, turn)
-    this.fresh.delete(sessionId)
+    this.documents.delete(sessionId)
   }
 
-  markFresh(exec: ToolRunContext): void {
-    this.fresh.add(sessionIdOf(exec))
+  resetSegment(sessionId: string, engineSessionId: string, generation: number): void {
+    const documents = this.documents.get(sessionId) ?? new Map()
+    documents.set(engineSessionId, { generation, fresh: false })
+    this.documents.set(sessionId, documents)
   }
 
-  assertFresh(exec: ToolRunContext): void {
+  markFresh(exec: ToolRunContext, engineSessionId: string, generation?: number): void {
+    const sessionId = sessionIdOf(exec)
+    const documents = this.documents.get(sessionId) ?? new Map()
+    documents.set(engineSessionId, { generation, fresh: true })
+    this.documents.set(sessionId, documents)
+  }
+
+  assertFresh(exec: ToolRunContext, engineSessionId: string, generation?: number): void {
     const sessionId = sessionIdOf(exec)
     // 独立工具测试没有 agent loop 的 pre-step；真机每回合必先 begin。
-    if (this.turns.has(sessionId) && !this.fresh.has(sessionId)) {
+    if (!this.turns.has(sessionId)) return
+    const marker = this.documents.get(sessionId)?.get(engineSessionId)
+    if (!marker?.fresh || (generation !== undefined && marker.generation !== generation)) {
       throw new Error(FRESH_DRAFT_REQUIRED_ERROR)
     }
   }
 
   dispose(sessionId: string): void {
     this.turns.delete(sessionId)
-    this.fresh.delete(sessionId)
+    this.documents.delete(sessionId)
   }
 }
 
