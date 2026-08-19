@@ -181,7 +181,13 @@ export interface DraftMetrics {
 }
 
 export type BridgeEvent =
-  | ({ type: 'doc-committed'; engineSessionId: string; doc: ExternalDoc } & DraftMetrics)
+  | ({
+      type: 'doc-committed'
+      engineSessionId: string
+      doc: ExternalDoc
+      /** 仅 qing_write_draft 整稿直接提交时请求纸面逐字揭示。 */
+      revealWholeDraft?: true
+    } & DraftMetrics)
   | ({ type: 'doc-review-pending'; engineSessionId: string; doc: ExternalDoc; count: number } & DraftMetrics)
   | { type: 'binding-changed'; binding: SessionBinding }
   | { type: 'focus-changed'; engineSessionId: string }

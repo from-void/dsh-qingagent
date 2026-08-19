@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { QINGAGENT_SYSTEM_PROMPT } from '../src/system-prompt.js'
 
 describe('QINGAGENT_SYSTEM_PROMPT', () => {
+  it('全文只进入写稿参数，不在聊天中输出正文或 QingML', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('【正文输出纪律】严禁在聊天回复中输出文稿正文或 QingML——全文只放进 qing_write_draft 的 qingml 参数')
+  })
+
   it('以最近工具状态为权威并要求新指令先刷新审阅态', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('当前注入的【文稿状态】行或最近一次 qing 工具返回的【文稿状态】行(含 qing_list_docs 的状态列)为同级权威,且都优先于聊天记忆')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('当前 system context 中的【文稿状态】摘要或最近一次 qing 工具返回为权威')
@@ -108,8 +112,15 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
 
   it('字数超差由主模型沿用同稿重交一次', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('沿用返回的同一 docRef 再提交一次，且只能一次')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('qing_write_draft **必须**把原话中的相关短句传入 requirements，禁止只在脑内换算')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('首稿带有 requirements 时，重交必须继续按首稿的字数要求判断')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('第二次仍有偏差就如实交付')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('工具绝不会在内部代你重写')
+  })
+
+  it('已有文稿整篇重写前必须取得本回合全文', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('若全文不在本回合上下文中，必须先调用 qing_read_draft 读取全文再改写')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('禁止只凭大纲或记忆重写')
   })
 
   it('审核结果回流:全采纳一句话收尾', () => {
