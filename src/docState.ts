@@ -1,6 +1,9 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { FRESH_DRAFT_REQUIRED_ERROR } from './userVisibleText.js'
+
+export { FRESH_DRAFT_REQUIRED_ERROR } from './userVisibleText.js'
 
 export interface DocStateSnapshot {
   state: string
@@ -14,7 +17,6 @@ export interface DocStateSnapshot {
 }
 
 export const DOC_STATE_STALE_LINE = '【文稿状态】尚未刷新；回答字数、结构或状态前，先调用 qing_read_draft 读取当前文稿。'
-export const FRESH_DRAFT_REQUIRED_ERROR = '请先调用 qing_read_draft 读取当前文稿，再基于最新内容修改。'
 
 /** 所有工具返回与运行时注入共用同一套用户可理解的状态措辞。 */
 export function docStateLine(state: string, patchCount?: number): string {

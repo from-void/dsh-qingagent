@@ -159,6 +159,31 @@ describe('qing_* 未连接结构化报错', () => {
   })
 })
 
+describe('工具用户呈现出口', () => {
+  it('遍历全部工具的调用/失败呈现，不泄露内部定位术语或 ID', () => {
+    const fixture = harness([], async () => doc())
+    const samples: Array<[string, Record<string, unknown>]> = [
+      ['qing_write_draft', { brief: '写一篇短稿' }],
+      ['qing_edit_draft', { ops: [{ kind: 'strReplace', old: '旧', new: '新' }] }],
+      ['qing_review_commit', { action: 'accept_all' }],
+      ['qing_read_draft', { mode: 'outline' }],
+      ['qing_list_docs', { scope: 'session' }],
+      ['qing_focus_doc', { docRef: 'qing-1' }],
+    ]
+    for (const [name, args] of samples) {
+      const tool = fixture.tools.get(name)!
+      const presentation = [
+        tool.presentCall?.(args as never),
+        tool.presentResult?.(args as never, {
+          isError: true,
+          content: [{ type: 'text', text: 'Error: paragraph-block-9 的块 ID blockId_table-4 无效' }],
+        }),
+      ]
+      expect(JSON.stringify(presentation)).not.toMatch(/块|blockId|ai-block|paragraph-block-9|table-4/i)
+    }
+  })
+})
+
 function candidateDoc(heading: string, paragraph: string): PmDoc {
   return {
     type: 'doc',
@@ -179,6 +204,30 @@ function paragraphDoc(...paragraphs: string[]): PmDoc {
       attrs: { blockId: `paragraph-${index + 1}` },
       content: [{ type: 'text', text }],
     })),
+  } as PmDoc
+}
+
+function tableDoc(): PmDoc {
+  const cell = (type: 'tableHeader' | 'tableCell', text: string) => ({
+    type,
+    attrs: { colspan: 1, rowspan: 1, colwidth: null, backgroundColor: null },
+    content: [{
+      type: 'paragraph',
+      attrs: { blockId: `cell-${text}` },
+      content: [{ type: 'text', text }],
+    }],
+  })
+  return {
+    type: 'doc',
+    attrs: { schemaVersion: 1 },
+    content: [{
+      type: 'table',
+      attrs: { blockId: 'table-1' },
+      content: [
+        { type: 'tableRow', content: [cell('tableHeader', '事项'), cell('tableHeader', '状态')] },
+        { type: 'tableRow', content: [cell('tableCell', '布置'), cell('tableCell', '待办')] },
+      ],
+    }],
   } as PmDoc
 }
 
@@ -226,6 +275,31 @@ describe('qing_write_draft', () => {
     }, exec(undefined, 'fresh-edit', 'qing_edit_draft'))).resolves.toMatchObject({
       status: 'committed', docVersion: 2,
     })
+  })
+
+  it('同一回合首版成功后确定性拒绝第二次整篇生成', async () => {
+    let proposed = false
+    const fixture = harness([DRAFT_ONE, DRAFT_TWO], async (path) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return proposed ? doc({ docVersion: 1, state: 'editing', qingml: DRAFT_ONE, title: '测试稿' }) : doc()
+      }
+      if (path.endsWith('/proposals')) {
+        proposed = true
+        return { status: 'committed', docVersion: 1 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+    const preStep = fixture.listeners.get('agent/pre-step')!
+    await preStep({ agent: { id: 'dsh-1' }, turn: 9 }, async () => ({ kind: 'enter', messages: [] }))
+    const tool = fixture.tools.get('qing_write_draft')!
+
+    await expect(tool.execute({ brief: '写一篇短稿' }, exec(undefined, 'write-first', 'qing_write_draft')))
+      .resolves.toMatchObject({ status: 'committed' })
+    await expect(tool.execute({ brief: '再生成一版完整短稿' }, exec(undefined, 'write-second', 'qing_write_draft')))
+      .rejects.toThrow('本回合已经成功生成过一版完整文稿')
+
+    expect(fixture.stream).toHaveBeenCalledOnce()
+    expect(fixture.bindings.createDoc).toHaveBeenCalledOnce()
   })
 
   it('消费侧模型流、提交并以引擎读回的 official 文稿返回', async () => {
@@ -304,10 +378,11 @@ describe('qing_write_draft', () => {
   })
 
   it('显式 outline 通过独立通道原样进入侧模型请求', async () => {
+    const outlined = '<title>测试稿</title><h1>现状</h1><p>现状正文。</p><h1>方案</h1><p>方案正文。</p><h1>风险</h1><p>风险正文。</p>'
     let proposed = false
-    const fixture = harness([DRAFT_ONE], async (path) => {
+    const fixture = harness([DRAFT_ONE, outlined], async (path) => {
       if (path.endsWith('/doc?format=qingml')) {
-        return proposed ? doc({ docVersion: 1, state: 'editing', qingml: DRAFT_ONE, title: '测试稿' }) : doc()
+        return proposed ? doc({ docVersion: 1, state: 'editing', qingml: outlined, title: '测试稿' }) : doc()
       }
       if (path.endsWith('/proposals')) {
         proposed = true
@@ -324,6 +399,79 @@ describe('qing_write_draft', () => {
     const request = JSON.stringify(fixture.requests[0])
     expect(request).toContain('指定提纲（严格按此顺序和标题写作，不得增删、改名或调序）')
     expect(request).toContain('- 现状\\n- 方案\\n- 风险')
+    expect(fixture.stream).toHaveBeenCalledTimes(2)
+  })
+
+  it('明确篇幅和段落数不达标时只在工具内纠正一次，合格后才提交', async () => {
+    const invalid = '<title>短稿</title><p>这一段明显超过限定字数并且没有严格分成三段正文。</p>'
+    const corrected = '<title>短稿</title><p>甲。</p><p>乙。</p><p>丙。</p>'
+    let proposed = false
+    const fixture = harness([invalid, corrected], async (path, init) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return proposed ? doc({ docVersion: 1, state: 'editing', qingml: corrected, title: '短稿' }) : doc()
+      }
+      if (path.endsWith('/proposals')) {
+        proposed = true
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          ops: [{ kind: 'qingmlDraft', qingml: corrected }],
+        })
+        return { status: 'committed', docVersion: 1 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, paragraphDoc('甲。', '乙。', '丙。'))
+
+    const result = await fixture.tools.get('qing_write_draft')!.execute({
+      brief: '写成三段正文，不超过 10 字',
+      title: '短稿',
+    }, exec(undefined, 'write-requirements', 'qing_write_draft'))
+
+    expect(fixture.stream).toHaveBeenCalledTimes(2)
+    expect(JSON.stringify(fixture.requests[1])).toContain('上一次首稿未满足可确定检查的明确要求')
+    expect(result).toMatchObject({ lengthStatus: 'met', structureStatus: 'met' })
+  })
+
+  it('工具内纠正后仍不满足明确要求时不向引擎提交', async () => {
+    let proposals = 0
+    const invalid = '<title>长稿</title><p>这是一段明显超过限制的正文内容。</p>'
+    const fixture = harness([invalid, invalid], async (path) => {
+      if (path.endsWith('/doc?format=qingml')) return doc()
+      if (path.endsWith('/proposals')) proposals += 1
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    await expect(fixture.tools.get('qing_write_draft')!.execute({
+      brief: '不超过 5 字',
+    }, exec(undefined, 'write-requirements-fail', 'qing_write_draft')))
+      .rejects.toThrow('自动修正后仍未满足明确要求')
+    expect(proposals).toBe(0)
+  })
+
+  it('显式标题含内层书名号与标点时逐字写入提案并作为结果标题', async () => {
+    const exactTitle = '《读〈小城故事〉》？！'
+    const modelDraft = '<title>读小城故事——读后感</title><p>正文。</p>'
+    const storedDraft = `<title>${exactTitle}</title><p>正文。</p>`
+    let proposed = false
+    const fixture = harness([modelDraft], async (path, init) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return proposed ? doc({ docVersion: 1, state: 'editing', qingml: storedDraft, title: exactTitle }) : doc()
+      }
+      if (path.endsWith('/proposals')) {
+        proposed = true
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          ops: [{ kind: 'qingmlDraft', qingml: storedDraft }],
+        })
+        return { status: 'committed', docVersion: 1 }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, paragraphDoc('正文。'))
+
+    const result = await fixture.tools.get('qing_write_draft')!.execute({
+      brief: '写一篇读后感',
+      title: `  ${exactTitle}  `,
+    }, exec(undefined, 'write-exact-title', 'qing_write_draft'))
+
+    expect(result).toMatchObject({ title: exactTitle })
+    expect(fixture.bindings.updateTitle).toHaveBeenCalledWith('dsh-1', 'qing-1', exactTitle)
   })
 
   it('首次只有标题时换 generation 纠正一次,并用第二次 generation 发送终态', async () => {
@@ -555,6 +703,44 @@ describe('qing_write_draft', () => {
     expect(fixture.tools.get('qing_write_draft')!.output?.schema).toMatchObject({
       properties: { patchIds: { type: 'array', items: { type: 'string' } } },
     })
+  })
+
+  it('审阅计数忽略 proposal.count，以 render-model 可裁决 suggestion 为准', async () => {
+    let proposed = false
+    const reviewPmDoc = candidateDoc('候选标题', '候选正文。')
+    const fixture = harness([DRAFT_ONE], async (path) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return proposed
+          ? doc({ docVersion: 1, state: 'pendingReview', qingml: DRAFT_ONE, title: '测试稿' })
+          : doc()
+      }
+      if (path.endsWith('/proposals')) {
+        proposed = true
+        return { status: 'review', patchIds: ['proposal-a', 'proposal-b', 'proposal-c'], count: 9 }
+      }
+      if (path.endsWith('/review?format=render-model')) {
+        return {
+          sessionId: 'qing-1', docVersion: 1, state: 'pendingReview', agentBusy: false,
+          baseVersion: 1, wholeDocument: false, editedDoc: reviewPmDoc,
+          suggestions: [
+            { id: 'visible-a', kind: 'replace', status: 'reviewing', preview: { deleteText: '旧', insertText: '新' } },
+            { id: 'note-a', kind: 'annotation', status: 'reviewing', preview: { deleteText: '', insertText: '' } },
+            { id: 'settled-a', kind: 'replace', status: 'accepted', preview: { deleteText: '旧', insertText: '新' } },
+          ],
+        }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    const result = await fixture.tools.get('qing_write_draft')!.execute(
+      { brief: '整篇重写' },
+      exec(undefined, 'write-review-count', 'qing_write_draft'),
+    )
+
+    expect(result).toMatchObject({ status: 'review', patchCount: 1, patchIds: ['visible-a'] })
+    expect(fixture.events.at(-1)?.event).toMatchObject({ type: 'doc-review-pending', count: 1 })
+    expect(fixture.tools.get('qing_write_draft')!.output?.presentationMeta?.({}, result as never))
+      .toMatchObject({ patchCount: 1, patchIds: ['visible-a'] })
   })
 
   it('失败也清理 host 选段，并在失败卡提取首行原因摘要', async () => {
@@ -1107,6 +1293,102 @@ describe('qing_edit_draft', () => {
 
     expect(proposalCalls).toBe(1)
     expect(result).toMatchObject({ affectedCount: 1, opResults: [{ opIndex: 1, affectedCount: 1 }] })
+  })
+
+  it('替换全文最后一句的后半截时自动扩成完整末句，避免旧句前半残留', async () => {
+    const fullLastSentence = '全文最后一句的旧前半，它沉默地等着旧班车。'
+    const replacement = '全文最后一句已经完整替换。'
+    const current = `开场说明。${fullLastSentence}`
+    let proposalOps: unknown[] = []
+    const fixture = harness([], async (path, init) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: current, title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposalOps = (JSON.parse(String(init?.body)) as { ops: unknown[] }).ops
+        return { status: 'committed', docVersion: 3 }
+      }
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({ docVersion: 3, state: 'editing', qingml: `<p>开场说明。${replacement}</p>`, title: '测试稿' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, paragraphDoc(current))
+
+    await fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'strReplace', old: '它沉默地等着旧班车。', new: replacement }],
+    }, exec(undefined, 'edit-final-sentence', 'qing_edit_draft'))
+
+    expect(proposalOps).toEqual([{ kind: 'strReplace', old: fullLastSentence, new: replacement }])
+  })
+
+  it('跨段 Markdown 替换预先编译为稳定的插入加删除操作', async () => {
+    const currentPm = paragraphDoc('第一段旧文。', '第二段旧文。', '尾段。')
+    let proposalOps: unknown[] = []
+    const fixture = harness([], async (path, init) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '第一段旧文。\n\n第二段旧文。\n\n尾段。', title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposalOps = (JSON.parse(String(init?.body)) as { ops: unknown[] }).ops
+        return { status: 'committed', docVersion: 3 }
+      }
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({ docVersion: 3, state: 'editing', qingml: '<p>第一段新文。</p><p>第二段新文。</p><p>尾段。</p>', title: '测试稿' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, currentPm)
+
+    const result = await fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{
+        kind: 'strReplace',
+        old: '第一段旧文。\n\n第二段旧文。',
+        new: '第一段新文。\n\n第二段新文。',
+      }],
+    }, exec(undefined, 'edit-cross-paragraph', 'qing_edit_draft'))
+
+    expect(proposalOps).toEqual([
+      { kind: 'insertAfterBlock', blockId: 'paragraph-2', markdown: '第一段新文。\n\n第二段新文。' },
+      { kind: 'deleteBlock', blockId: 'paragraph-1' },
+      { kind: 'deleteBlock', blockId: 'paragraph-2' },
+    ])
+    expect(result).toMatchObject({ affectedCount: 1, opResults: [{ opIndex: 1, affectedCount: 1 }] })
+  })
+
+  it('整张 Markdown 表格替换预先编译为表格级插入加删除操作', async () => {
+    const oldTable = '| 事项 | 状态 |\n| --- | --- |\n| 布置 | 待办 |'
+    const newTable = '| 事项 | 状态 |\n| --- | --- |\n| 布置 | 完成 |'
+    let proposalOps: unknown[] = []
+    const fixture = harness([], async (path, init) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: oldTable, title: '测试稿',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        proposalOps = (JSON.parse(String(init?.body)) as { ops: unknown[] }).ops
+        return { status: 'committed', docVersion: 3 }
+      }
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({ docVersion: 3, state: 'editing', qingml: '<table><tr><th>事项</th><th>状态</th></tr><tr><td>布置</td><td>完成</td></tr></table>', title: '测试稿' })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, tableDoc())
+
+    await fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'strReplace', old: oldTable, new: newTable }],
+    }, exec(undefined, 'edit-table-markdown', 'qing_edit_draft'))
+
+    expect(proposalOps).toEqual([
+      { kind: 'insertAfterBlock', blockId: 'table-1', markdown: newTable },
+      { kind: 'deleteBlock', blockId: 'table-1' },
+    ])
   })
 
   it('同批任一 strReplace 多处命中且无 nth 时全部拒绝', async () => {

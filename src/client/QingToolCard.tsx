@@ -5,6 +5,11 @@ import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
 import { currentReviewStateFor, qingClientStore, type QingClientSnapshot } from './store.js'
 import { markPanelOpenSource } from './telemetry.js'
+import {
+  isFreshnessGateFailure,
+  sanitizeUserVisibleText,
+  toolContentText,
+} from '../userVisibleText.js'
 import styles from './QingWriteToolCard.module.css'
 
 /** 工具卡的具名文案与摘要装配;meta 来自各工具的 presentationMeta(#23)。 */
@@ -70,6 +75,9 @@ export function createQingToolCard(config: QingToolCardConfig) {
       snapshot,
       () => props.qingLayout.openDetails(),
     )
+
+    // 新鲜度闸门是模型自恢复协议，不是一次面向用户的编辑失败；结算后整卡消失。
+    if (failed && isFreshnessGateFailure(settledBlock?.content ?? [])) return null
 
     return (
       <div className={styles.toolCard} data-state={state}>
@@ -196,11 +204,9 @@ export const QingFocusToolCard = createQingToolCard({
 })
 
 export function failureSummary(content: readonly unknown[]): string {
-  const text = content.flatMap((block) => {
-    if (!block || typeof block !== 'object') return []
-    const value = block as { type?: unknown; text?: unknown }
-    return value.type === 'text' && typeof value.text === 'string' ? [value.text] : []
-  }).join('\n').split(/\r?\n/, 1)[0]?.replace(/^Error:\s*/i, '').trim() ?? ''
+  const text = sanitizeUserVisibleText(
+    toolContentText(content).split(/\r?\n/, 1)[0]?.replace(/^Error:\s*/i, '').trim() ?? '',
+  )
   if (/审阅|REVIEW_PENDING/i.test(text)) return '文稿审阅中'
   if (/AGENT_BUSY|正在处理其他任务|引擎忙/i.test(text)) return '引擎忙'
   return text.length > 48 ? `${text.slice(0, 47)}…` : text

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { QingEditToolCard } from '../src/client/QingToolCard.js'
 import { failureSummary, QingWriteToolCard } from '../src/client/QingWriteToolCard.js'
 import { qingClientStore } from '../src/client/store.js'
+import { FRESH_DRAFT_REQUIRED_ERROR, sanitizeUserVisibleText } from '../src/userVisibleText.js'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -83,6 +84,18 @@ describe('QingWriteToolCard theme styles', () => {
       .toBe('引擎忙')
   })
 
+  it('统一清洗所有已知内部定位说法和 ID', () => {
+    const samples = [
+      '删除块 ID paragraph-123 后失败',
+      'ai-block:heading_9 的块结构不合法',
+      '共 7 个块，详见 blockId_table-4',
+      '结构问答的前置话术仍出现块字',
+    ]
+    for (const sample of samples) {
+      expect(sanitizeUserVisibleText(sample)).not.toMatch(/块|blockId|ai-block|paragraph|heading_9|table-4/i)
+    }
+  })
+
   it('uses only dsh semantic variables instead of literal colors', () => {
     const style = document.createElement('style')
     style.textContent = stylesheet
@@ -114,6 +127,34 @@ describe('Qing write/edit tool card view navigation', () => {
     vi.stubGlobal('EventSource', FakeEventSource)
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
   }
+
+  it('新鲜度闸门失败整卡静默，真实编辑失败仍正常显示', () => {
+    stubBackgroundLoads()
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    const failedProps = (text: string) => ({
+      block: { kind: 'tool-result', isError: true, content: [{ type: 'text', text }] },
+      useSession: (selector: (session: { sessionId: string }) => unknown) => selector({ sessionId: 'freshness-card' }),
+      qingLayout: { openDetails: vi.fn() },
+    })
+
+    try {
+      act(() => root.render(
+        <QingEditToolCard {...failedProps(`Error: ${FRESH_DRAFT_REQUIRED_ERROR}`) as unknown as ComponentProps<typeof QingEditToolCard>} />,
+      ))
+      expect(host.textContent).toBe('')
+
+      act(() => root.render(
+        <QingEditToolCard {...failedProps('Error: 真实编辑失败，请稍后重试') as unknown as ComponentProps<typeof QingEditToolCard>} />,
+      ))
+      expect(host.textContent).toContain('修改未完成')
+      expect(host.textContent).toContain('真实编辑失败')
+    } finally {
+      act(() => root.unmount())
+      host.remove()
+    }
+  })
 
   it('meta 带 engineSessionId 时打开面板并聚焦对应文稿', () => {
     stubBackgroundLoads()

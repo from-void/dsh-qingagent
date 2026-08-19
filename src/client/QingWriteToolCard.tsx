@@ -5,6 +5,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
 import { currentReviewStateFor, qingClientStore } from './store.js'
 import { failureSummary, openToolCardDocument } from './QingToolCard.js'
+import { isFreshnessGateFailure } from '../userVisibleText.js'
 import styles from './QingWriteToolCard.module.css'
 
 export { failureSummary } from './QingToolCard.js'
@@ -60,6 +61,9 @@ export function QingWriteToolCard(props: QingWriteToolCardProps) {
     snapshot,
     () => props.qingLayout.openDetails(),
   )
+
+  // qing_write_draft(docRef) 同样受新鲜度闸门保护；只保留给模型的纠错反馈。
+  if (failed && isFreshnessGateFailure(settledBlock?.content ?? [])) return null
 
   return (
     <div className={styles.toolCard} data-state={state}>

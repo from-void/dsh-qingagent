@@ -763,10 +763,10 @@ export function QingDocPanel(props: QingDocPanelProps) {
       const fallback = fallbackOutcome()
       const outcome = authoritativeOutcome ?? fallback
       const hasAuthoritativeRejectedDetail = outcome.hunks.some((hunk) => hunk.verdict === 'rejected')
-      const hunks = !authoritativeOutcome || outcome.rejectedCount === 0 || hasAuthoritativeRejectedDetail
-        ? outcome.hunks
-        : fallback.hunks
-      const rejected = hunks.filter((hunk) => hunk.verdict === 'rejected')
+      // 回流载荷按最小披露构造：已采纳项只保留数量，正文永远不进入候选数组。
+      const rejected = (authoritativeOutcome && outcome.rejectedCount > 0 && !hasAuthoritativeRejectedDetail
+        ? fallback.hunks
+        : outcome.hunks).filter((hunk) => hunk.verdict === 'rejected')
       const plain = (text: string) => text.replace(/\s+/g, ' ').trim() || '(空)'
       const message = [
         `【审核结果】本轮审阅我已处理:采纳 ${outcome.acceptedCount} 处,拒绝 ${outcome.rejectedCount} 处。${outcome.rejectedCount === 0 ? '全部改动均已采纳。' : '被拒绝的修改已还原为原文:'}`,
@@ -900,10 +900,12 @@ export function QingDocPanel(props: QingDocPanelProps) {
     snapshot.reviewModel?.suggestions,
   ])
 
-  const remainingReviewCount = snapshot.reviewModel?.suggestions
+  const authoritativeReviewCount = snapshot.reviewModel?.suggestions
     .filter((suggestion) => suggestion.status === 'reviewing').length ?? 0
-  const unrenderableReviewOnly = remainingReviewCount > 0 &&
-    visibleReviewTargets.length === 0
+  // 数量口径与用户实际能逐项裁决的原生 ReviewTarget 完全一致；render-model 中被
+  // 丢弃/冲突而没有目标的 suggestion 不再冒充面板里的待裁决项。
+  const remainingReviewCount = visibleReviewTargets.length
+  const unrenderableReviewOnly = authoritativeReviewCount > 0 && remainingReviewCount === 0
   const reviewCount = reviewPresentation
     ? remainingReviewCount
     : snapshot.reviewCount ?? 0

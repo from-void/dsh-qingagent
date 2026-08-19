@@ -252,7 +252,7 @@ describe('QingDocPanel 保存生命周期', () => {
       document.querySelector('[data-qingagent-doc-panel]')?.getAttribute('data-qingdoc-mode'),
     ).toBe('readonly'))
     await vi.waitFor(() => expect(document.querySelector('.qingdoc-status')?.textContent)
-      .toBe('审阅中·1处'))
+      .toBe('审阅中·0处'))
     const preview = document.querySelector<HTMLElement>('[data-testid="mock-drawio-preview"]')!
 
     await act(async () => {
@@ -482,10 +482,19 @@ describe('QingDocPanel 保存生命周期', () => {
 
   it('全采纳结算也把权威计数回流到当前 DSH 对话', async () => {
     const qingSendMessage = vi.fn(async (_dshSessionId: string, _text: string) => undefined)
+    const acceptedBefore = '已采纳项的原文绝不能进入回流载荷'
+    const acceptedAfter = '已采纳项的改文也绝不能进入回流载荷'
     installBridgeFetch('dsh-review-accepted-outcome', ['qing-review'], {
       pendingReview: true,
       reviewSuggestionStatus: 'accepted',
-      reviewOutcome: { acceptedCount: 1, rejectedCount: 0, hunks: [] },
+      reviewOutcome: {
+        acceptedCount: 1,
+        rejectedCount: 0,
+        hunks: [{
+          verdict: 'accepted', blockSummary: '已采纳位置',
+          beforeText: acceptedBefore, afterText: acceptedAfter,
+        }],
+      },
     })
     renderPanel('dsh-review-accepted-outcome', qingSendMessage)
 
@@ -494,34 +503,47 @@ describe('QingDocPanel 保存生命周期', () => {
       'dsh-review-accepted-outcome',
       '【审核结果】本轮审阅我已处理:采纳 1 处,拒绝 0 处。全部改动均已采纳。',
     )
+    const message = qingSendMessage.mock.calls[0]?.[1] ?? ''
+    expect(message).not.toContain(acceptedBefore)
+    expect(message).not.toContain(acceptedAfter)
   })
 
   it('拒绝结算回流服务端给出的完整具体内容，不用本地预览也不截断', async () => {
     const qingSendMessage = vi.fn(async (_dshSessionId: string, _text: string) => undefined)
     const beforeText = '这是服务端确认应当保留的完整原文，长度明显超过四十个字符，用于证明结算回流不会再截断具体内容。'
     const afterText = '这是服务端确认已被拒绝的完整改文，长度同样超过四十个字符，用于证明载荷来自权威结算结果。'
+    const acceptedBefore = '另一处已经采纳的原文不应回流'
+    const acceptedAfter = '另一处已经采纳的改文不应回流'
     installBridgeFetch('dsh-review-rejected-outcome', ['qing-review'], {
       pendingReview: true,
       reviewSuggestionStatus: 'rejected',
       reviewBeforeText: '本地预览旧文',
       reviewAfterText: '本地预览改文',
       reviewOutcome: {
-        acceptedCount: 0,
+        acceptedCount: 1,
         rejectedCount: 1,
-        hunks: [{
-          verdict: 'rejected',
-          blockSummary: '第二节的结论段',
-          beforeText,
-          afterText,
-        }],
+        hunks: [
+          {
+            verdict: 'accepted', blockSummary: '第一节',
+            beforeText: acceptedBefore, afterText: acceptedAfter,
+          },
+          {
+            verdict: 'rejected',
+            blockSummary: '第二节的结论段',
+            beforeText,
+            afterText,
+          },
+        ],
       },
     })
     renderPanel('dsh-review-rejected-outcome', qingSendMessage)
 
     await vi.waitFor(() => expect(qingSendMessage).toHaveBeenCalledOnce())
     const message = qingSendMessage.mock.calls[0]?.[1] ?? ''
-    expect(message).toContain('采纳 0 处,拒绝 1 处')
+    expect(message).toContain('采纳 1 处,拒绝 1 处')
     expect(message).toContain(`拒绝「${afterText}」,保留原文「${beforeText}」`)
+    expect(message).not.toContain(acceptedBefore)
+    expect(message).not.toContain(acceptedAfter)
     expect(message).not.toContain('本地预览')
     expect(message).not.toContain('…')
   })
@@ -692,7 +714,7 @@ describe('QingDocPanel 保存生命周期', () => {
     await vi.waitFor(() => expect(patchNavHarness.props).not.toBeNull())
     expect(viewHarness.props?.onPatchVerdict).toBeTypeOf('function')
     expect(patchNavHarness.props).toMatchObject({
-      remainingCount: 1,
+      remainingCount: 0,
       totalCount: 0,
       unrenderableOnly: true,
     })

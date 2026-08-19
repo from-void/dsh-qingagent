@@ -106,11 +106,7 @@ function qingSourceBridge(): BuildPlugin {
         .replaceAll('"#view-workspace"', `"${QING_PANEL_SELECTOR}"`)
         .replaceAll("'#view-workspace'", `"${QING_PANEL_SELECTOR}"`)
 
-      if (
-        id.endsWith('/CodeBlockView.tsx') ||
-        id.endsWith('/MediaZoomFullscreen.tsx') ||
-        id.endsWith('/diagram/GraphDiagramView.tsx')
-      ) {
+      if (id.endsWith('/CodeBlockView.tsx')) {
         next = next.replace(
           /(,\n\s*)document\.body(,\n)/g,
           `$1(document.querySelector("${QING_PANEL_SELECTOR}") ?? document.body)$2`,
@@ -122,12 +118,8 @@ function qingSourceBridge(): BuildPlugin {
           `(document.querySelector("${QING_PANEL_SELECTOR}") ?? document.body).classList`,
         )
       }
-      if (id.endsWith('/drawioEditorLauncher.tsx')) {
-        next = next.replace(
-          'document.body.appendChild(host);',
-          `(document.querySelector("${QING_PANEL_SELECTOR}") ?? document.body).appendChild(host);`,
-        )
-      }
+      // 全屏媒体、Mermaid/图表与 drawio 必须保留上游的 body portal。把它们改挂到
+      // 面板会困在详情列自身的层叠上下文里，再大的子级 z-index 也压不过宿主输入区。
       if (id.endsWith('/DocColophon.tsx')) {
         sealDataUri ??= `data:image/png;base64,${(await readFile(sealAsset)).toString('base64')}`
         next = next.replace(
