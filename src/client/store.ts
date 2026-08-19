@@ -655,11 +655,13 @@ export class QingClientStore {
         blocks: event.blocks,
         words: event.words,
         reviewCount: undefined,
-        revealRequest: {
-          engineSessionId: event.engineSessionId,
-          docVersion: event.doc.docVersion,
-          nonce: ++entry.revealNonce,
-        },
+        revealRequest: event.revealWholeDraft
+          ? {
+              engineSessionId: event.engineSessionId,
+              docVersion: event.doc.docVersion,
+              nonce: ++entry.revealNonce,
+            }
+          : undefined,
         selection: undefined,
         error: undefined,
       })

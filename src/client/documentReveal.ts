@@ -19,6 +19,24 @@ export interface DocumentRevealFrame {
   charEnters: Array<{ from: number; to: number }>
 }
 
+export interface DocumentRevealProgress {
+  nonce: number
+  index: number
+}
+
+/**
+ * 渲染期同步选帧：新 reveal 请求尚未来得及进入 effect 时必须直接返回首帧，
+ * 不能暂退到完整文档，否则浏览器会闪出终稿。
+ */
+export function documentRevealFrameForRender(
+  frames: readonly DocumentRevealFrame[],
+  requestNonce: number,
+  progress: DocumentRevealProgress | null,
+): DocumentRevealFrame | null {
+  const index = progress?.nonce === requestNonce ? progress.index : 0
+  return frames[Math.min(index, Math.max(0, frames.length - 1))] ?? null
+}
+
 function textLength(node: JsonPmNode): number {
   if (typeof node.text === 'string') return Array.from(node.text).length
   return node.content?.reduce((total, child) => total + textLength(child), 0) ?? 0

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { PmDoc } from '../src/contracts.js'
-import { planDocumentReveal } from '../src/client/documentReveal.js'
+import {
+  documentRevealFrameForRender,
+  planDocumentReveal,
+} from '../src/client/documentReveal.js'
 import {
   DEFAULT_REVEAL_CHARS_PER_TICK,
   DEFAULT_REVEAL_CONCURRENCY,
@@ -48,5 +51,21 @@ describe('纸面 reveal 调度', () => {
     expect(frames[2]?.charEnters).toEqual([{ from: 2, to: 3 }])
     expect(frames.at(-1)?.pmDoc).toEqual(doc)
     expect(frames.at(-1)?.charEnters).toEqual([{ from: 5, to: 6 }])
+  })
+
+  it('新 reveal nonce 在 effect 尚未安装进度时同步使用首帧，绝不回退完整终稿', () => {
+    const doc = {
+      type: 'doc', attrs: { schemaVersion: 1 },
+      content: [{
+        type: 'paragraph', attrs: { blockId: 'a' },
+        content: [{ type: 'text', text: '完整终稿' }],
+      }],
+    } as PmDoc
+    const frames = planDocumentReveal(doc, 1, 1)
+
+    const first = documentRevealFrameForRender(frames, 2, { nonce: 1, index: frames.length - 1 })
+    expect(first).toEqual(frames[0])
+    expect(JSON.stringify(first?.pmDoc)).not.toContain('完整终稿')
+    expect(documentRevealFrameForRender(frames, 2, { nonce: 2, index: 1 })).toEqual(frames[1])
   })
 })

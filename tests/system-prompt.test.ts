@@ -108,8 +108,15 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
 
   it('字数超差由主模型沿用同稿重交一次', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('沿用返回的同一 docRef 再提交一次，且只能一次')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('qing_write_draft **必须**把原话中的相关短句传入 requirements，禁止只在脑内换算')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('首稿带有 requirements 时，重交必须继续按首稿的字数要求判断')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('第二次仍有偏差就如实交付')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('工具绝不会在内部代你重写')
+  })
+
+  it('已有文稿整篇重写前必须取得本回合全文', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('若全文不在本回合上下文中，必须先调用 qing_read_draft 读取全文再改写')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('禁止只凭大纲或记忆重写')
   })
 
   it('审核结果回流:全采纳一句话收尾', () => {

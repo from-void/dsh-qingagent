@@ -69,7 +69,7 @@ const textBlock = (text: string) => [{ type: 'text' as const, text }]
 
 const REVIEW_END_MESSAGE = '改动已提交审阅，右侧面板等待用户裁决。本次工具调用结束——不要重写、不要读稿复核、不要自动裁决；收尾说明由工具卡向用户展示，本回合不再产生任何输出。'
 const REVIEW_REPEAT_ERROR = '本回合已裁决过一次，禁止连环裁决；等待用户指示'
-const WRITE_REPEAT_ERROR = '本回合的完整文稿已经提交；只有首稿字数未达要求时可沿用同一文稿引用重交一次，第二次后必须等待用户下一轮指示。'
+const WRITE_REPEAT_ERROR = '本回合的完整文稿已经提交；首稿直接提交后只可沿用同一文稿引用重交一次，第二次后必须等待用户下一轮指示。'
 const REVIEW_PENDING_ERROR = '文稿正在审阅中。待审内容可能是你此前轮次提交的,也可能来自其他会话——不要断言归属。先用 ask_user 向用户说明存在待审稿,经用户明确授权后才可处置;不得代为提交或放弃。'
 const STR_REPLACE_PLAIN_TEXT_ERROR = 'old 必须是纯文本内容,不要带 ## 等 markdown 标记'
 const STR_REPLACE_LINES_NOTICE = '注意:strReplace 的 old 用纯文本,不要带行首 ## - 等标记。'
@@ -545,8 +545,8 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
       const dshSessionId = sessionIdOf(exec)
       try {
         await assertEngineOnline(services.engine)
-        writeTurns.assertWriteAllowed(exec, args.docRef)
-        const requirements = draftRequirementsOf(args)
+        const inheritedRequirements = writeTurns.assertWriteAllowed(exec, args.docRef)
+        const requirements = inheritedRequirements ?? draftRequirementsOf(args)
         let qingml = args.qingml.trim()
         if (!qingml) throw new Error('qingml 不能为空。请提交完整 QingML 全文。')
         qingml = forceExplicitDraftTitle(qingml, args.title)
@@ -589,7 +589,12 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
         try {
           proposal = await propose(services, exec, bound.engineSessionId, docBefore.docVersion, qingml)
           // proposal 已成功就必须占用本回合额度；后续权威读回失败也不能把已发生的写当作未发生。
-          writeTurns.markSuccessful(exec, bound.engineSessionId)
+          writeTurns.markSuccessful(
+            exec,
+            bound.engineSessionId,
+            requirements,
+            proposal.status === 'committed',
+          )
         } catch (error) {
           throw sanitizeToolBoundaryError(error)
         }
@@ -640,6 +645,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
               doc: official,
               blocks: outline.blocks,
               words,
+              revealWholeDraft: true,
             })
           } else {
             services.bridge.emit(dshSessionId, {
@@ -667,9 +673,6 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
           }, true)
           const lengthReport = draftLengthReport(words, requirements)
           const lengthStatus: 'not-requested' | 'met' | 'unmet' | 'target-missed' = lengthReport?.status ?? 'not-requested'
-          if (proposal.status === 'committed' && lengthReport && lengthReport.status !== 'met') {
-            writeTurns.allowLengthRetry(exec, bound.engineSessionId)
-          }
           return {
             title,
             blocks: outline.blocks,
@@ -2197,8 +2200,9 @@ class WriteTurnTracker {
   private readonly successful = new Map<string, {
     key: string
     engineSessionId: string
-    lengthRetryAllowed: boolean
-    lengthRetryConsumed: boolean
+    retryAllowed: boolean
+    retryConsumed: boolean
+    requirements: DraftRequirements
   }>()
 
   begin(agentId: string, turn: number): void {
@@ -2212,44 +2216,38 @@ class WriteTurnTracker {
     this.successful.delete(agentId)
   }
 
-  assertWriteAllowed(exec: ToolRunContext, docRef?: string): void {
+  assertWriteAllowed(exec: ToolRunContext, docRef?: string): DraftRequirements | undefined {
     const agentId = sessionIdOf(exec)
     const key = this.key(agentId, exec)
     const state = this.successful.get(agentId)
-    if (!state || state.key !== key) return
+    if (!state || state.key !== key) return undefined
     if (
-      state.lengthRetryAllowed
-      && !state.lengthRetryConsumed
+      state.retryAllowed
+      && !state.retryConsumed
       && docRef === state.engineSessionId
     ) {
-      state.lengthRetryConsumed = true
-      return
+      state.retryConsumed = true
+      return state.requirements
     }
     throw new Error(WRITE_REPEAT_ERROR)
   }
 
-  markSuccessful(exec: ToolRunContext, engineSessionId: string): void {
+  markSuccessful(
+    exec: ToolRunContext,
+    engineSessionId: string,
+    requirements: DraftRequirements,
+    retryAllowed: boolean,
+  ): void {
     const agentId = sessionIdOf(exec)
     const key = this.key(agentId, exec)
     const previous = this.successful.get(agentId)
     this.successful.set(agentId, {
       key,
       engineSessionId,
-      lengthRetryAllowed: false,
-      lengthRetryConsumed: previous?.key === key ? previous.lengthRetryConsumed : false,
+      retryAllowed,
+      retryConsumed: previous?.key === key ? previous.retryConsumed : false,
+      requirements: previous?.key === key ? previous.requirements : requirements,
     })
-  }
-
-  allowLengthRetry(exec: ToolRunContext, engineSessionId: string): void {
-    const agentId = sessionIdOf(exec)
-    const state = this.successful.get(agentId)
-    if (
-      state?.key === this.key(agentId, exec)
-      && state.engineSessionId === engineSessionId
-      && !state.lengthRetryConsumed
-    ) {
-      state.lengthRetryAllowed = true
-    }
   }
 
   private key(agentId: string, exec: ToolRunContext): string {

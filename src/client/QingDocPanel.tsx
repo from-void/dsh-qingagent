@@ -41,7 +41,12 @@ import {
 import { AssetBridgeProvider } from '../qingdoc/AssetBridgeProvider.js'
 import { ConfirmProvider } from '../qingdoc/shims/system.js'
 import { DocumentSaveCoordinator, type DocumentSaveState } from './documentSaveCoordinator.js'
-import { planDocumentReveal, type DocumentRevealFrame } from './documentReveal.js'
+import {
+  documentRevealFrameForRender,
+  planDocumentReveal,
+  type DocumentRevealFrame,
+  type DocumentRevealProgress,
+} from './documentReveal.js'
 import {
   DEFAULT_REVEAL_STEP_DELAY_MS,
   DEFAULT_REVEAL_TAIL_HOLD_MS,
@@ -103,9 +108,8 @@ export function QingDocPanel(props: QingDocPanelProps) {
   )
   const [toast, setToast] = useState<string | null>(null)
   const [showSavingStatus, setShowSavingStatus] = useState(false)
-  const [revealFrame, setRevealFrame] = useState<DocumentRevealFrame | null>(null)
-  const revealFrameRef = useRef(revealFrame)
-  revealFrameRef.current = revealFrame
+  const [revealProgress, setRevealProgress] = useState<DocumentRevealProgress | null>(null)
+  const revealFrameRef = useRef<DocumentRevealFrame | null>(null)
   const [activeReviewTargetId, setActiveReviewTargetId] = useState<string | null>(null)
   const [wholeDocVersion, setWholeDocVersion] = useState<'new' | 'old'>('new')
   const [reviewSubmitting, setReviewSubmitting] = useState(false)
@@ -381,7 +385,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
       window.removeEventListener('resize', measurePaper)
       window.clearInterval(driftTimer)
     }
-  }, [measurePaper, snapshot.panelDoc, snapshot.reviewModel, revealFrame, activeEngineSessionId])
+  }, [measurePaper, snapshot.panelDoc, snapshot.reviewModel, revealProgress, activeEngineSessionId])
 
   const panelDoc = snapshot.panelEngineSessionId === activeEngineSessionId
     ? snapshot.panelDoc
@@ -397,14 +401,26 @@ export function QingDocPanel(props: QingDocPanelProps) {
   pendingReviewRef.current = pendingReview
 
   const revealRequest = snapshot.revealRequest
-  const revealActive = Boolean(
+  const revealMatches = Boolean(
     revealRequest
     && revealRequest.engineSessionId === activeEngineSessionId
     && revealRequest.docVersion === panelDoc?.docVersion
     && !pendingReview,
   )
+  const prefersReducedRevealMotion = typeof window !== 'undefined'
+    && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
+  const revealActive = revealMatches && !prefersReducedRevealMotion
+  const revealFrames = useMemo(
+    () => revealActive && panelDoc?.pmDoc ? planDocumentReveal(panelDoc.pmDoc) : [],
+    [panelDoc?.docVersion, revealActive, revealRequest?.nonce],
+  )
+  // 新请求到达的这次 render 就同步选中首帧；不能等 effect，否则浏览器会先画出完整终稿。
+  const revealFrame = revealActive
+    ? documentRevealFrameForRender(revealFrames, revealRequest!.nonce, revealProgress)
+    : null
+  revealFrameRef.current = revealFrame
   useEffect(() => {
-    setRevealFrame(null)
+    setRevealProgress(null)
     if (
       !revealRequest
       || revealRequest.engineSessionId !== activeEngineSessionId
@@ -412,18 +428,18 @@ export function QingDocPanel(props: QingDocPanelProps) {
       || !panelDoc.pmDoc
       || pendingReview
     ) return
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    if (prefersReducedRevealMotion) {
       qingClientStore.finishReveal(sessionId, revealRequest.nonce)
       return
     }
-    const frames = planDocumentReveal(panelDoc.pmDoc)
+    const frames = revealFrames
     let index = 0
     let interval: number | undefined
     let tail: number | undefined
-    setRevealFrame(frames[0] ?? null)
+    setRevealProgress({ nonce: revealRequest.nonce, index: 0 })
     const finish = () => {
       tail = window.setTimeout(() => {
-        setRevealFrame(null)
+        setRevealProgress(null)
         const editor = tiptapEditorRef.current
         if (editor) setNativePresentationDecorations(editor, [], [])
         qingClientStore.finishReveal(sessionId, revealRequest.nonce)
@@ -434,7 +450,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
     } else {
       interval = window.setInterval(() => {
         index += 1
-        setRevealFrame(frames[index] ?? null)
+        setRevealProgress({ nonce: revealRequest.nonce, index })
         if (index >= frames.length - 1) {
           if (interval !== undefined) window.clearInterval(interval)
           interval = undefined
@@ -448,7 +464,15 @@ export function QingDocPanel(props: QingDocPanelProps) {
       const editor = tiptapEditorRef.current
       if (editor) setNativePresentationDecorations(editor, [], [])
     }
-  }, [activeEngineSessionId, panelDoc?.docVersion, pendingReview, revealRequest?.nonce, sessionId])
+  }, [
+    activeEngineSessionId,
+    panelDoc?.docVersion,
+    pendingReview,
+    prefersReducedRevealMotion,
+    revealFrames,
+    revealRequest?.nonce,
+    sessionId,
+  ])
 
   useLayoutEffect(() => {
     const editor = tiptapEditorRef.current
@@ -566,7 +590,9 @@ export function QingDocPanel(props: QingDocPanelProps) {
   const conflictStashDoc = activeConflict && activeEngineSessionId
     ? snapshot.conflictStash?.[activeEngineSessionId]
     : undefined
-  const surfacePmDoc = conflictStashDoc ?? revealFrame?.pmDoc ?? panelDoc?.pmDoc ?? EMPTY_PM_DOC
+  const surfacePmDoc = conflictStashDoc
+    ?? (revealActive ? revealFrame?.pmDoc ?? EMPTY_PM_DOC : panelDoc?.pmDoc)
+    ?? EMPTY_PM_DOC
   // 与产品 RightPane 的空稿 busy 分支同口径；reveal 首帧尚无实质文字时先保留原生加载态。
   const showEmptyBusyLoading = busy && !pmDocHasSubstantiveContent(surfacePmDoc)
   const surfaceVersion = pendingReview

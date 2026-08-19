@@ -440,6 +440,7 @@ describe('QingClientStore 生成终态', () => {
 
     FakeEventSource.instances.at(-1)?.emit({
       type: 'doc-committed', engineSessionId: 'qing-1',
+      revealWholeDraft: true,
       doc: {
         sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
         markdown: '乐观正文', qingml: '<p>乐观正文</p>', title: '新稿',
@@ -462,6 +463,44 @@ describe('QingClientStore 生成终态', () => {
       agentBusy: false, title: '新稿', ts: 't2', pmDoc: store.getSnapshot('dsh-optimistic').panelDoc?.pmDoc,
     }))
     await vi.waitFor(() => expect(store.getSnapshot('dsh-optimistic').panelLoading).toBe(false))
+    release()
+  })
+
+  it('普通 doc-committed 静默刷新，不创建整稿 reveal 请求', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/qingagent-bridge/state?')) return Response.json(bridgeState())
+      if (url.startsWith('/qingagent-bridge/doc-pm?')) {
+        return Response.json({
+          sessionId: 'qing-1', docVersion: 2, contentHash: 'hash-2', state: 'editing',
+          agentBusy: false, title: '局部编辑稿', ts: 't2',
+          pmDoc: { type: 'doc', attrs: { schemaVersion: 1 }, content: [] },
+        })
+      }
+      if (url.startsWith('/qingagent-bridge/review-render-model?')) {
+        return Response.json({
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          baseVersion: 2, suggestions: [],
+        })
+      }
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const store = new QingClientStore()
+    const release = store.retain('dsh-silent-commit')
+    await vi.waitFor(() => expect(store.getSnapshot('dsh-silent-commit').state).toBeDefined())
+
+    FakeEventSource.instances.at(-1)?.emit({
+      type: 'doc-committed', engineSessionId: 'qing-1',
+      doc: {
+        sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+        markdown: '局部修改', qingml: '<p>局部修改</p>', title: '局部编辑稿',
+      },
+      blocks: 1, words: 4,
+    })
+
+    expect(store.getSnapshot('dsh-silent-commit').revealRequest).toBeUndefined()
     release()
   })
 })

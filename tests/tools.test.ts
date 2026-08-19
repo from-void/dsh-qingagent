@@ -447,9 +447,10 @@ describe('qing_write_draft', () => {
       automaticConversions: 0,
     })
     expect(fixture.events.map(({ event }) => event.type)).toEqual(['doc-committed'])
+    expect(fixture.events[0]?.event).toMatchObject({ revealWholeDraft: true })
   })
 
-  it('字数不达标仍直接提交并只报告差距，允许同稿重交一次', async () => {
+  it('字数不达标仍直接提交并只报告差距，重交省略 requirements 时继承首稿合同', async () => {
     const qingml = '<title>测试稿</title><h1>测试稿</h1><p>短稿。</p>'
     const pmDoc = compileQingmlDocument(qingml)
     const actual = countDocVisibleChars(pmDoc)
@@ -476,9 +477,41 @@ describe('qing_write_draft', () => {
         lengthGap: actual - 100,
         words: actual,
       })
+    await expect(tool.execute({ qingml, docRef: 'qing-1' }, context))
+      .resolves.toMatchObject({
+        status: 'committed',
+        lengthStatus: 'target-missed',
+        lengthGap: actual - 100,
+      })
     await expect(tool.execute({ qingml, requirements: '约 100 字', docRef: 'qing-1' }, context))
-      .resolves.toMatchObject({ status: 'committed', lengthStatus: 'target-missed' })
-    await expect(tool.execute({ qingml, requirements: '约 100 字', docRef: 'qing-1' }, context))
+      .rejects.toThrow('第二次后必须等待用户下一轮')
+    expect(version).toBe(2)
+  })
+
+  it('首稿没有 requirements 也无条件允许同回合同稿整稿重交一次', async () => {
+    const qingml = '<title>测试稿</title><h1>测试稿</h1><p>无需字数合同。</p>'
+    const pmDoc = compileQingmlDocument(qingml)
+    let version = 0
+    const fixture = harness(async (path) => {
+      if (path.endsWith('/doc?format=qingml')) {
+        return version === 0
+          ? doc()
+          : doc({ docVersion: version, state: 'editing', qingml, title: '测试稿' })
+      }
+      if (path.endsWith('/proposals')) {
+        version += 1
+        return { status: 'committed', docVersion: version }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, pmDoc)
+    const tool = fixture.tools.get('qing_write_draft')!
+    const context = exec(undefined, 'unconditional-retry', 'qing_write_draft')
+
+    await expect(tool.execute({ qingml }, context))
+      .resolves.toMatchObject({ status: 'committed', lengthStatus: 'not-requested' })
+    await expect(tool.execute({ qingml, docRef: 'qing-1' }, context))
+      .resolves.toMatchObject({ status: 'committed', lengthStatus: 'not-requested' })
+    await expect(tool.execute({ qingml, docRef: 'qing-1' }, context))
       .rejects.toThrow('第二次后必须等待用户下一轮')
     expect(version).toBe(2)
   })
