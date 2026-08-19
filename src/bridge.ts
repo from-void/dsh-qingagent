@@ -831,6 +831,9 @@ export class BridgeHub {
           { method: 'POST', body: JSON.stringify(body) },
         )
         await this.documentChanged(dshSessionId, engineSessionId)
+        // 面板审阅发生在 agent 租约已经关闭之后，不会再自然收到租约的 turn-ended。
+        // 主动推同一刷新信号，让所有发起方都从权威 /doc 清掉 busy/state 缓存。
+        this.emit(dshSessionId, { type: 'turn-ended', engineSessionIds: [engineSessionId] })
         writeJson(response, 200, reviewed)
         return
       }
