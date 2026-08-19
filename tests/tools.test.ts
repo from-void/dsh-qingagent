@@ -2011,10 +2011,11 @@ describe('写稿字数需求解析', () => {
     expect(r.length?.max === undefined || r.length.max >= 1200).toBe(true)
   })
 
-  it('只给「约 N 字」时仍按 ±10% 成带', () => {
+  it('「约 N 字」只作软目标,不产生硬性上下限', () => {
     const r = requirementsOf('写一篇约 800 字的散文。')
-    expect(r.length?.min).toBe(720)
-    expect(r.length?.max).toBe(881) // 800*1.1 的浮点结果,沿用既有行为
+    expect(r.length?.target).toBe(800)
+    expect(r.length?.min).toBeUndefined()
+    expect(r.length?.max).toBeUndefined()
   })
 
   it('上下限自相矛盾时丢掉上限,不把矛盾交给重试', () => {

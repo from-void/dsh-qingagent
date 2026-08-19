@@ -180,13 +180,11 @@ export function draftRequirementsOf(input: DraftRequirementInput): DraftRequirem
   if (approximate && !isPerUnitLength(text, approximate.index)) {
     const target = parseDraftNumber(approximate[1] ?? approximate[2] ?? '')
     // 「约 N 字」只是软目标:已有显式下限/上限时不得用它反过来收窄,否则两者一冲突就永远不合格。
-    if (target !== undefined && length.min === undefined && length.max === undefined) {
-      length.target = target
-      length.min = Math.floor(target * 0.9)
-      length.max = Math.ceil(target * 1.1)
-    } else if (target !== undefined) {
-      length.target = target
-    }
+    // 「约/上下/左右 N 字」是**软目标**:插件没有客户端那种并发赛马挑版的条件,
+    // 一旦按 ±10% 变成硬性拒绝,首稿几乎每次都要甩两三张失败卡再自愈(真机 v2 三席全中)。
+    // 因此只记 target 供模型参考,不产生 min/max —— 硬失败只留给用户给了明确边界的情形
+    // (不少于 / 不超过 / N-M 字区间)。
+    if (target !== undefined) length.target = target
   }
   // 兜底:上下限自相矛盾时,显式下限优先,丢掉不可能满足的上限,绝不把矛盾交给重试循环。
   if (length.min !== undefined && length.max !== undefined && length.min > length.max) {
