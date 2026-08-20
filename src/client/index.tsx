@@ -17,9 +17,7 @@ import {
 import { qingClientStore } from './store.js'
 import {
   insertSelectionReference,
-  QING_SELECTION_REFERENCE_SOURCE,
   qingSelectionReferenceSource,
-  selectionReferenceText,
 } from './selectionReference.js'
 import {
   insertAnnotationReference,
@@ -77,8 +75,6 @@ export function apply(ctx: ClientContext): void {
     let selectionScope: ReturnType<typeof createScope> | undefined
     let unsubscribeInput: (() => void) | undefined
     let pendingSelectionKey: string | undefined
-    // bail 同步发布 input state 引发的重入窗口内一律短路(occurrence 尚未可见,不能据其放行)。
-    let selectionInsertInFlight = false
 
     // 值键而非对象引用:bridge 状态重放会产出新对象,引用比较挡不住同一选段重触发(实测双 chip)。
     const selectionKey = (s: NonNullable<ReturnType<typeof qingClientStore.getSnapshot>['selection']>) =>
@@ -91,6 +87,10 @@ export function apply(ctx: ClientContext): void {
         : undefined
       if (!sessionId || !selection || !selectionScope) return
       const key = selectionKey(selection)
+      // 哨兵防 bridge 重放双触发。同一选段仅在用户【显式移除 chip】后放行重插(移除回调清哨兵);
+      // 发送、投影中间删字同样会让 occurrence 消失,但那不是重插时机——按 occurrence 存活放行
+      // 会让 chip 在发送后复活/残片旁重复(评测 r1 席3)。
+      if (key === pendingSelectionKey) return
       const snapshot = qingClientStore.getSnapshot(sessionId)
       const activeTitle = snapshot.activeEngineSessionId === selection.engineSessionId
         ? snapshot.activeDoc?.title
@@ -98,29 +98,10 @@ export function apply(ctx: ClientContext): void {
       const title = activeTitle ?? snapshot.state?.binding.docs.find(
         (doc) => doc.engineSessionId === selection.engineSessionId,
       )?.title
-      if (key === pendingSelectionKey) {
-        if (selectionInsertInFlight) return
-        // 哨兵只防 bridge 重放双触发;chip 被用户移除(occurrence 已不在草稿)后,同一选段
-        // 必须放行重插,否则「移除后无法再次引用」(评测 S3-R1-06)。
-        const ref = selectionReferenceText(selection, title)
-        const occurrences = selectionScope.ctx.conversation.input.for(selectionScope.ctx)
-          .state.getSnapshot().occurrences
-        const stillPresent = occurrences?.some((occurrence) =>
-          occurrence.source === QING_SELECTION_REFERENCE_SOURCE && occurrence.ref === ref)
-        if (stillPresent) return
-        pendingSelectionKey = undefined
-      }
 
       // 先设重入哨兵：bail 同步发布 input state，state subscriber 会在事件返回前回调。
       pendingSelectionKey = key
-      selectionInsertInFlight = true
-      let inserted = false
-      try {
-        inserted = insertSelectionReference(selectionScope.ctx, selection, title)
-      } finally {
-        selectionInsertInFlight = false
-      }
-      if (!inserted) {
+      if (!insertSelectionReference(selectionScope.ctx, selection, title)) {
         // adjudicating/submitting 等瞬态会拒绝插入；保留 bridge selection，等待 input
         // phase 或 store 下一次发布后重试。
         pendingSelectionKey = undefined
@@ -247,10 +228,15 @@ export function apply(ctx: ClientContext): void {
         const uninstallChips = installChipPresentation({
           getInputState: () => inputState.getSnapshot() as unknown as ChipInputState | undefined,
           subscribeInputState: (listener) => inputState.subscribe(listener),
-          removeOccurrence: (occurrenceId) => removeOccurrenceFromDraft(
-            scopeCtx as unknown as Parameters<typeof removeOccurrenceFromDraft>[0],
-            occurrenceId,
-          ),
+          removeOccurrence: (occurrenceId) => {
+            const removed = removeOccurrenceFromDraft(
+              scopeCtx as unknown as Parameters<typeof removeOccurrenceFromDraft>[0],
+              occurrenceId,
+            )
+            // 显式移除是「同一选段允许重新引用」的唯一放行时机(评测 S3-R1-06)。
+            if (removed) pendingSelectionKey = undefined
+            return removed
+          },
           replaceOccurrenceRef: (occurrenceId, newRef) => replaceOccurrenceRef(
             scopeCtx as unknown as Parameters<typeof replaceOccurrenceRef>[0],
             occurrenceId,

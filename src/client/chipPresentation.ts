@@ -118,11 +118,26 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
       .sort((a, b) => a.offset - b.offset)
     const chips = collectChipElements()
     const desired = new Map<HTMLElement, { kind: 'selection' | 'annotation'; occurrenceId: number }>()
-    const count = Math.min(chips.length, occurrences.length)
-    for (let index = 0; index < count; index += 1) {
-      const kind = occurrenceKind(occurrences[index]!)
-      if (kind) {
-        desired.set(chips[index]!, { kind, occurrenceId: occurrences[index]!.occurrenceId })
+    // 宿主新版镜像层自带 data-occurrence(真机实证):有则精确配对,残缺投影/乱序时不会错标;
+    // 旧版缺该属性时退回按 DOM 序与 offset 序对齐。
+    const byHostOcc = new Map<string, HTMLElement>()
+    for (const el of chips) {
+      const hostOcc = el.getAttribute('data-occurrence')
+      if (hostOcc !== null) byHostOcc.set(hostOcc, el)
+    }
+    if (byHostOcc.size > 0) {
+      for (const occurrence of occurrences) {
+        const el = byHostOcc.get(String(occurrence.occurrenceId))
+        const kind = el ? occurrenceKind(occurrence) : undefined
+        if (el && kind) desired.set(el, { kind, occurrenceId: occurrence.occurrenceId })
+      }
+    } else {
+      const count = Math.min(chips.length, occurrences.length)
+      for (let index = 0; index < count; index += 1) {
+        const kind = occurrenceKind(occurrences[index]!)
+        if (kind) {
+          desired.set(chips[index]!, { kind, occurrenceId: occurrences[index]!.occurrenceId })
+        }
       }
     }
     for (const el of document.querySelectorAll(`[${CHIP_ATTR}]`)) {
