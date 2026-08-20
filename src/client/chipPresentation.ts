@@ -250,7 +250,9 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     let editArea: HTMLTextAreaElement | undefined
     if (kind === 'selection') {
       const body = document.createElement('div')
-      body.textContent = occurrence.ref
+      // ref 形如「[选段]《文稿名》:「引文」」;面板 header 已展示文稿名,正文只放引文全文。
+      const quoteMatch = /「([\s\S]*)」\s*$/.exec(occurrence.ref)
+      body.textContent = quoteMatch?.[1] ?? occurrence.ref
       body.style.cssText = [
         'max-height:200px', 'overflow:auto', 'margin-bottom:10px',
         'white-space:pre-wrap', 'word-break:break-word', 'opacity:.9',

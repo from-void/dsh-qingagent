@@ -132,7 +132,7 @@ const EMPTY: QingClientSnapshot = {
 
 const PANEL_CLOSED_KEY_PREFIX = 'qingagent.panelClosed.'
 const BRIDGE_RECONNECTING_ERROR = '与青简桥的实时连接暂时中断，浏览器会自动重连。'
-export const PANEL_BUSY_REFRESH_DELAY_MS = 90_000
+export const PANEL_BUSY_REFRESH_DELAY_MS = 15_000
 
 function readStoredPanelClosed(sessionId: string): boolean {
   try {
@@ -841,17 +841,15 @@ export class QingClientStore {
       this.clearBusyFallback(entry, true)
       entry.busyFallbackEngineSessionId = engineSessionId
     }
-    if (
-      entry.busyFallbackTimer
-      || entry.busyFallbackAttemptedEngineSessionId === engineSessionId
-    ) return
+    if (entry.busyFallbackTimer) return
+    // 持续兜底:忙态每 15 秒重拉一次,直到忙态解除(refreshPanel→update 会重新进入本函数续排)。
+    // 原「每稿仅一次」的设计在长回合+事件丢失(SSE 断连错过 turn-ended)时会把面板永锁在假忙态。
     entry.busyFallbackTimer = setTimeout(() => {
       entry.busyFallbackTimer = undefined
       if (entry.refs === 0 || busyPanelEngineSessionId(entry.snapshot) !== engineSessionId) {
         this.syncBusyFallback(entry)
         return
       }
-      entry.busyFallbackAttemptedEngineSessionId = engineSessionId
       void this.refreshPanel(entry.sessionId, engineSessionId).catch(() => undefined)
     }, PANEL_BUSY_REFRESH_DELAY_MS)
     entry.busyFallbackTimer.unref?.()

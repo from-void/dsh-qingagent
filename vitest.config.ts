@@ -71,16 +71,9 @@ export default defineConfig({
         return code.replace('import { chatInputBus } from "../../../system";\n', '')
       }
       if (id.endsWith('/ImageView.tsx')) {
+        // 新版真源自带 renderedSrc = desktopDataUrl(src)(桌面数据 URL);插件语境资产走 bridge。
         return `import { useAssetBridgeSource } from ${JSON.stringify(assetBridgeProvider)};\n${code}`
-          .replace(
-            'const src = String(node.attrs.src ?? "");',
-            'const src = String(node.attrs.src ?? "");\n  const renderedSrc = useAssetBridgeSource(src);',
-          )
-          .replace(
-            '  const normalizedAlign = normalizeImageAlign(align);',
-            '  const renderedSrc = useAssetBridgeSource(src);\n  const normalizedAlign = normalizeImageAlign(align);',
-          )
-          .replaceAll('src={src}', 'src={renderedSrc}')
+          .replaceAll('const renderedSrc = desktopDataUrl(src);', 'const renderedSrc = useAssetBridgeSource(src);')
       }
       return null
     },

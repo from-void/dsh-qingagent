@@ -132,7 +132,7 @@ function buildModel() {
     agentBusy: false, title: '审阅稿', ts: '2026-08-18T02:00:00.000Z', charCount: 6, pmDoc: baseDoc,
   } satisfies ExternalPmDocReadResponse
   const renderModel = {
-    sessionId: 'qing-p74', docVersion: 1, state: 'pendingReview', agentBusy: false,
+    sessionId: 'qing-p74', docVersion: 1, state: 'pendingReview', agentBusy: false, annotations: [],
     baseVersion: 1, previewDoc: baseDoc, suggestions: hunks.map(suggestionFromHunk),
   } satisfies ExternalReviewRenderModelResponse
   const model = buildReviewPresentationModel(panelDoc, renderModel)

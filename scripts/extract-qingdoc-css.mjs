@@ -34,9 +34,9 @@ const sources = [
   // 清单写到 35；基线第 36 行才是 .font-mono 的闭合花括号，随段补齐以保持合法 CSS。
   ['packages/ui-kit/src/base.css', [[5, 36]]],
   ['packages/ui-kit/src/components.css', [[181, 274]]],
-  ['apps/web/src/app.css', [[1, 15], [293, 515]]],
+  ['apps/web/src/app.css', [[1, 15], [252, 474]]],
   ['apps/web/src/pages/workspace/workspace.css', [[169, 169], [197, 214], [294, 376], [1120, 1157], [1289, 3652]]],
-  ['apps/web/src/pages/workspace/workspace-ink-skin.css', [[20, 60], [119, 204], [592, 682], [1111, 1220], [1527, 1667], [1669, 1802], [1863, 2071], [2093, 2151], [2558, 2682], [3193, 3508]]],
+  ['apps/web/src/pages/workspace/workspace-ink-skin.css', [[20, 60], [119, 204], [592, 682], [1111, 1220], [1527, 1667], [1669, 1802], [1863, 2074], [2096, 2154], [2570, 2694], [3215, 3530]]],
   ['apps/web/src/pages/workspace/workspace-responsive.css', [[1, 30]]],
   // DocumentSnapshotView 的可达组件 CSS。与上方产品样式一样逐文件/逐行钉扎；
   // 这些文件含图片/图表工具栏、全屏预览与 drawio/图表 portal，漏掉会继承 dsh 字号和层级。

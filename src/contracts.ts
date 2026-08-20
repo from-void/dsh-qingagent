@@ -76,8 +76,6 @@ export type ExternalDocReplaceResponse = OptionalCharCount<QingExternalDocReplac
  */
 export type ExternalReviewRenderModelResponse = QingExternalReviewRenderModelResponse & {
   changeRatio?: number
-  /** 新版 external render-model 直接携带批注；旧引擎缺失时客户端按空数组兼容。 */
-  annotations?: ExternalAnnotation[]
 }
 /** ExternalApi.ts 已声明但 contract-ts/index.ts 尚未公开导出的批注 wire DTO。 */
 export interface ExternalAnnotation {

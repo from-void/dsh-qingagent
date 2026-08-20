@@ -236,7 +236,9 @@ describe('hover 面板与 ✕ 角标', () => {
 
     expect(panel()!.textContent).toContain('选段内容')
     expect(panel()!.textContent).toContain('《泊船瓜洲》')
-    expect(panel()!.textContent).toContain('[选段]《泊船瓜洲》:「春风又绿江南岸」')
+    // 面板正文只展示引文全文(文稿名已在 header),避免 [选段] 包装被气泡装饰器二次装饰。
+    expect(panel()!.textContent).toContain('春风又绿江南岸')
+    expect(panel()!.textContent).not.toContain('[选段]')
     expect(panel()!.querySelector('textarea')).toBeNull()
     expect(panel()!.textContent).toContain('移除')
     expect(panel()!.textContent).not.toContain('确认')

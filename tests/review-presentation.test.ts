@@ -42,7 +42,7 @@ describe('external review render-model → PatchDecorations 输入', () => {
       agentBusy: false, title: '审阅稿', ts: '2026-08-15T02:00:00.000Z', charCount: 4, pmDoc: previewDoc,
     } satisfies ExternalPmDocReadResponse
     const renderModel = {
-      sessionId: 'qing-1', docVersion: 4, state: 'pendingReview', agentBusy: false,
+      sessionId: 'qing-1', docVersion: 4, state: 'pendingReview', agentBusy: false, annotations: [],
       baseVersion: 4, previewDoc, suggestions: [suggestion],
     } satisfies ExternalReviewRenderModelResponse
 
@@ -72,7 +72,7 @@ describe('external review render-model → PatchDecorations 输入', () => {
       anchor: { ...suggestion.anchor, blockId: 'missing-location', quote: '不存在的文字' },
     } satisfies DocSuggestion
     const renderModel = {
-      sessionId: 'qing-1', docVersion: 4, state: 'pendingReview', agentBusy: false,
+      sessionId: 'qing-1', docVersion: 4, state: 'pendingReview', agentBusy: false, annotations: [],
       baseVersion: 4, previewDoc, suggestions: [suggestion, unrenderable],
     } satisfies ExternalReviewRenderModelResponse
 

@@ -325,7 +325,7 @@ describe('QingDocPanel 保存生命周期', () => {
       }
       if (url.startsWith('/qingagent-bridge/review-render-model?')) {
         return Response.json({
-          sessionId: activeEngineSessionId, docVersion: 2, state: 'editing', agentBusy: false,
+          sessionId: activeEngineSessionId, docVersion: 2, state: 'editing', agentBusy: false, annotations: [],
           baseVersion: 2, suggestions: [],
         })
       }
@@ -1014,7 +1014,7 @@ describe('QingDocPanel 整篇审阅', () => {
         state: 'pendingReview', agentBusy: false, title: '整篇审', ts: 't0', charCount: 4, pmDoc: WHOLE_BASE_PM,
       } satisfies ExternalPmDocReadResponse,
       {
-        sessionId: 'qing-review', docVersion: 3, state: 'pendingReview', agentBusy: false,
+        sessionId: 'qing-review', docVersion: 3, state: 'pendingReview', agentBusy: false, annotations: [],
         baseVersion: 3, previewDoc: WHOLE_BASE_PM, editedDoc: WHOLE_EDITED_PM,
         suggestions: [reviewSuggestion('reviewing', '旧版全文', '新版全文')],
       } satisfies ExternalReviewRenderModelResponse,
@@ -1212,7 +1212,7 @@ describe('QingDocPanel 文稿缺失状态', () => {
         const engineSessionId = new URL(url, 'http://local').searchParams.get('engineSessionId')!
         return Response.json({
           sessionId: engineSessionId, docVersion: engineSessionId === 'qing-missing' ? 4 : 2,
-          state: 'editing', agentBusy: false,
+          state: 'editing', agentBusy: false, annotations: [],
           baseVersion: 2, suggestions: [],
         })
       }
@@ -1435,7 +1435,7 @@ function installToolWriteBridgeFetch(
     }
     if (url.startsWith('/qingagent-bridge/review-render-model?')) {
       return Response.json({
-        sessionId: 'qing-1', docVersion: serverVersion, state: 'editing', agentBusy: false,
+        sessionId: 'qing-1', docVersion: serverVersion, state: 'editing', agentBusy: false, annotations: [],
         baseVersion: serverVersion, suggestions: [],
       })
     }
@@ -1564,7 +1564,7 @@ function installBridgeFetch(
           : ['patch-reviewed']
       return Response.json({
         sessionId: engineSessionIds[0], docVersion: serverDocVersion,
-        state: serverPendingReview ? 'pendingReview' : 'editing', agentBusy: false,
+        state: serverPendingReview ? 'pendingReview' : 'editing', agentBusy: false, annotations: [],
         baseVersion: 3, previewDoc: options.reviewBasePm ?? EMPTY_PM,
         ...(options.reviewEditedPm ? { editedDoc: options.reviewEditedPm } : {}),
         ...(options.changeRatio === undefined ? {} : { changeRatio: options.changeRatio }),

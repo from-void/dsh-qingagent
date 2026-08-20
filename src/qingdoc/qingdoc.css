@@ -497,7 +497,7 @@
   --desk-vignette: radial-gradient(150% 130% at 50% 42%, transparent 0%, transparent 48%, rgba(8, 13, 19, 0.42) 100%);
 }
 
-/* source: apps/web/src/app.css:293-515 */
+/* source: apps/web/src/app.css:252-474 */
 [data-qingagent-doc-panel] .ws-folder-modal-overlay {
   position: fixed;
   inset: 0;
@@ -3855,7 +3855,7 @@
   --bg-canvas: var(--bg-paper-deep);
 }
 
-/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:1863-2071 */
+/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:1863-2074 */
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-export-anchor {
   position: relative;
   pointer-events: auto;
@@ -3946,6 +3946,9 @@
 }
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-lexicon-close {
   position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   top: 15px;
   right: 18px;
   width: 28px;
@@ -4067,7 +4070,7 @@
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .annotation-anchor-active[data-annotation-overlap="true"] { background:color-mix(in srgb,var(--mark) 16%,transparent); }
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .annotation-anchor-accepted { text-decoration-line:underline; text-decoration-style:wavy; text-decoration-color:var(--ink-4); text-decoration-thickness:1px; text-underline-offset:3px; background:transparent; }
 
-/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:2093-2151 */
+/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:2096-2154 */
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-lexicon-open:hover .ws-lexicon-chevron { color: var(--mark); transform: translateX(2px); }
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-lexicon-actions {
   display: flex;
@@ -4128,7 +4131,7 @@
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-deai-detail .ws-lexicon-instruction input:focus { border-color: var(--mark); }
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-deai-detail .ws-lexicon-instruction textarea { min-height: 260px; }
 
-/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:2558-2682 */
+/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:2570-2694 */
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-export-menu {
   position: absolute;
   top: calc(100% + 7px);
@@ -4255,7 +4258,7 @@
   }
 }
 
-/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:3193-3508 */
+/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:3215-3530 */
 /* 审阅态 diff 当前定位只保留 workspace.css 的绿色加深;不再加赭金描边 / 外发光。 */
 
 /* —— 文末落款:正文末尾续奶白纸,竖排两列「作于{干支年月初几} | 成文{中文数字}字+印章」——

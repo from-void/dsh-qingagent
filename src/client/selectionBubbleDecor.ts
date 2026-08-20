@@ -110,11 +110,11 @@ function decorateWithin(root: Node): void {
   if (!(root instanceof Element)) return
   if (root.closest(`[${DECORATED}]`)) return
   // 只碰对话消息区文本;输入框(textarea/镜像层)与纸面绝不装饰。
-  if (root.closest('textarea, [data-qingagent-doc-panel]')) return
+  if (root.closest('textarea, [data-qingagent-doc-panel], [data-qing-chip-panel]')) return
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) => {
       const parent = node.parentElement
-      if (!parent || parent.closest(`[${DECORATED}], textarea, [data-qingagent-doc-panel], [class*="mirror"], [class*="backdrop"]`)) {
+      if (!parent || parent.closest(`[${DECORATED}], textarea, [data-qingagent-doc-panel], [data-qing-chip-panel], [class*="mirror"], [class*="backdrop"]`)) {
         return NodeFilter.FILTER_REJECT
       }
       const data = (node as Text).data

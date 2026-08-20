@@ -30,7 +30,7 @@ function reviewModel(
     sessionId: 'qing-review',
     docVersion: 1,
     state: 'pendingReview',
-    agentBusy: false,
+    agentBusy: false, annotations: [],
     baseVersion: 1,
     suggestions: [],
     previewDoc: BASE_DOC,
