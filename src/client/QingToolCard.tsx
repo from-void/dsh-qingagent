@@ -42,6 +42,7 @@ export interface ToolCardMeta {
   mode?: string
   wholeDocReview?: boolean
   patchIds?: string[]
+  summaries?: string[]
 }
 
 interface InjectedProps {
@@ -188,6 +189,16 @@ export const QingFocusToolCard = createQingToolCard({
   doneTitle: (meta) => (meta.adopted ? '已收养文库文稿' : '已切换预览'),
   failedTitle: '切换预览未完成',
   summary: (meta) => titled(meta),
+})
+
+export const QingAnnotateToolCard = createQingToolCard({
+  runningTitle: '正在生成审查批注',
+  doneTitle: (meta) => `审查批注已生成 · ${meta.count ?? 0} 处`,
+  failedTitle: '审查批注未完成',
+  summary: (meta) => titled(meta),
+  // 事件快照:冻结本次生成的各批注摘要,不随后续裁决变化。
+  narrative: (meta) => (meta.summaries ?? []).slice(0, 5).join(' · ')
+    + ((meta.summaries?.length ?? 0) > 5 ? ` · 等 ${meta.summaries!.length} 处` : ''),
 })
 
 export function failureSummary(content: readonly unknown[]): string {

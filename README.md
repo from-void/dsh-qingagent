@@ -11,7 +11,7 @@
 [![npm](https://img.shields.io/npm/v/dsh-qingagent)](https://www.npmjs.com/package/dsh-qingagent)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
-[青简主仓](https://github.com/void2anything/qingagent) · [官网 qingagent.com](https://qingagent.com) · [English](./README.en.md)
+[青简主仓](https://github.com/void2anything/qingagent) · [官网 qingagent.com](https://qingagent.com) · [需求广场](https://qingagent.com/feedback/plugin) · [English](./README.en.md)
 
 <img src="docs/assets/dsh-demo.gif" alt="在 DSH 里一句话起草，右侧宣纸面板同步成文" width="880">
 
@@ -50,7 +50,7 @@ DeepSeek Harness（DSH）是 DeepSeek 开源的「一切皆插件」Agent 框架
 
 ## 与青简主仓的关系
 
-本插件是 [**青简 qingagent**](https://github.com/void2anything/qingagent) 的 DSH 前端，不是独立产品。
+本插件是 [**青简 QingAgent**](https://github.com/void2anything/qingagent) 的 DSH 前端，不是独立产品。
 
 **因为插件本身的复杂度——纸面渲染与文稿引擎深度耦合、文档与版本存在本机数据库——目前必须先安装青简桌面客户端，插件才能工作。** 客户端承载文稿引擎与本机库；插件负责把它接进 DSH 的对话与界面。
 
@@ -252,8 +252,9 @@ npm test        # 仅单测
 
 ## 联系作者
 
-- 使用问题、bug、需求：[GitHub Issues](https://github.com/void2anything/dsh-qingagent/issues)
-- 青简本体问题：[青简主仓 Issues](https://github.com/void2anything/qingagent/issues)
+- 使用问题、bug：[GitHub Issues](https://github.com/void2anything/dsh-qingagent/issues)
+- 提需求、投票：[需求广场 · DSH 插件](https://qingagent.com/feedback/plugin)——呼声高的优先做
+- 青简本体问题：[青简主仓 Issues](https://github.com/void2anything/qingagent/issues)｜[需求广场 · 桌面客户端](https://qingagent.com/feedback/client)
 
 <!-- TODO: 作者联系方式待补 -->
 

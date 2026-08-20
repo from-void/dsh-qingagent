@@ -7,6 +7,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import { QingDocPanel } from './QingDocPanel.js'
 import { QingWriteToolCard } from './QingWriteToolCard.js'
 import {
+  QingAnnotateToolCard,
   QingEditToolCard,
   QingFocusToolCard,
   QingListDocsToolCard,
@@ -16,7 +17,9 @@ import {
 import { qingClientStore } from './store.js'
 import {
   insertSelectionReference,
+  QING_SELECTION_REFERENCE_SOURCE,
   qingSelectionReferenceSource,
+  selectionReferenceText,
 } from './selectionReference.js'
 import {
   insertAnnotationReference,
@@ -74,6 +77,8 @@ export function apply(ctx: ClientContext): void {
     let selectionScope: ReturnType<typeof createScope> | undefined
     let unsubscribeInput: (() => void) | undefined
     let pendingSelectionKey: string | undefined
+    // bail 同步发布 input state 引发的重入窗口内一律短路(occurrence 尚未可见,不能据其放行)。
+    let selectionInsertInFlight = false
 
     // 值键而非对象引用:bridge 状态重放会产出新对象,引用比较挡不住同一选段重触发(实测双 chip)。
     const selectionKey = (s: NonNullable<ReturnType<typeof qingClientStore.getSnapshot>['selection']>) =>
@@ -86,10 +91,6 @@ export function apply(ctx: ClientContext): void {
         : undefined
       if (!sessionId || !selection || !selectionScope) return
       const key = selectionKey(selection)
-      if (key === pendingSelectionKey) return
-
-      // 先设重入哨兵：bail 同步发布 input state，state subscriber 会在事件返回前回调。
-      pendingSelectionKey = key
       const snapshot = qingClientStore.getSnapshot(sessionId)
       const activeTitle = snapshot.activeEngineSessionId === selection.engineSessionId
         ? snapshot.activeDoc?.title
@@ -97,7 +98,29 @@ export function apply(ctx: ClientContext): void {
       const title = activeTitle ?? snapshot.state?.binding.docs.find(
         (doc) => doc.engineSessionId === selection.engineSessionId,
       )?.title
-      if (!insertSelectionReference(selectionScope.ctx, selection, title)) {
+      if (key === pendingSelectionKey) {
+        if (selectionInsertInFlight) return
+        // 哨兵只防 bridge 重放双触发;chip 被用户移除(occurrence 已不在草稿)后,同一选段
+        // 必须放行重插,否则「移除后无法再次引用」(评测 S3-R1-06)。
+        const ref = selectionReferenceText(selection, title)
+        const occurrences = selectionScope.ctx.conversation.input.for(selectionScope.ctx)
+          .state.getSnapshot().occurrences
+        const stillPresent = occurrences?.some((occurrence) =>
+          occurrence.source === QING_SELECTION_REFERENCE_SOURCE && occurrence.ref === ref)
+        if (stillPresent) return
+        pendingSelectionKey = undefined
+      }
+
+      // 先设重入哨兵：bail 同步发布 input state，state subscriber 会在事件返回前回调。
+      pendingSelectionKey = key
+      selectionInsertInFlight = true
+      let inserted = false
+      try {
+        inserted = insertSelectionReference(selectionScope.ctx, selection, title)
+      } finally {
+        selectionInsertInFlight = false
+      }
+      if (!inserted) {
         // adjudicating/submitting 等瞬态会拒绝插入；保留 bridge selection，等待 input
         // phase 或 store 下一次发布后重试。
         pendingSelectionKey = undefined
@@ -280,6 +303,11 @@ export function apply(ctx: ClientContext): void {
     key: 'qing_review_commit',
     inject: () => ({ qingLayout: layout }),
   }, QingReviewCommitToolCard))
+  slots.inject('tool.call.toolview', () => slots.register({
+    name: 'tool.call.toolview',
+    key: 'qing_annotate',
+    inject: () => ({ qingLayout: layout }),
+  }, QingAnnotateToolCard))
   slots.inject('tool.call.toolview', () => slots.register({
     name: 'tool.call.toolview',
     key: 'qing_read_draft',

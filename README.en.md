@@ -1,17 +1,17 @@
 <div align="center">
 
-<img src="docs/assets/logo.svg" alt="qingagent" width="112">
+<img src="docs/assets/logo.svg" alt="QingAgent 青简" width="112">
 
 # dsh-qingagent
 
-**qingagent inside DeepSeek Harness**
+**QingAgent inside DeepSeek Harness**
 
-A plugin built to the DSH spec: one command to install or remove, and you can write and review documents with qingagent right inside DSH.
+A plugin built to the DSH spec: one command to install or remove, and you can write and review documents with QingAgent right inside DSH.
 
 [![npm](https://img.shields.io/npm/v/dsh-qingagent)](https://www.npmjs.com/package/dsh-qingagent)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
-[qingagent repo](https://github.com/void2anything/qingagent) · [qingagent.com](https://qingagent.com) · [中文](./README.md)
+[QingAgent repo](https://github.com/void2anything/qingagent) · [qingagent.com](https://qingagent.com) · [Feature board](https://qingagent.com/feedback/plugin) · [中文](./README.md)
 
 <img src="docs/assets/dsh-demo.gif" alt="Drafting in DSH with the paper panel filling in on the right" width="880">
 
@@ -23,38 +23,38 @@ A plugin built to the DSH spec: one command to install or remove, and you can wr
 
 DeepSeek Harness (DSH) is DeepSeek's open-source "everything is a plugin" agent framework. Install dsh-qingagent and DSH gains a pen:
 
-Describe what you want in the conversation, and the agent drafts, edits and submits reviews through the qingagent engine. A **paper panel** grows on the right — rendering from the same source as the qingagent desktop app: serif type, warm paper, square corners, with formulas, Mermaid, draw.io, tables, footnotes and a seal-stamped colophon.
+Describe what you want in the conversation, and the agent drafts, edits and submits reviews through the QingAgent engine. A **paper panel** grows on the right — rendering from the same source as the QingAgent desktop app: serif type, warm paper, square corners, with formulas, Mermaid, draw.io, tables, footnotes and a seal-stamped colophon.
 
 **The chat keeps a summary; the manuscript is the real thing.**
 
 ### What you can do
 
-- **Draft from one sentence**: the agent writes the finished piece into the paper panel; while the page is still empty you get qingagent's own "qing character diffusion" loading animation;
+- **Draft from one sentence**: the agent writes the finished piece into the paper panel; while the page is still empty you get QingAgent's own "qing character diffusion" loading animation;
 - **Per-change verdicts**: every AI edit is a candidate — walk through them on the page, accept or reject, commit to land. When the change ratio is high it switches to a full-document old/new comparison;
 - **Annotation carousel**: review annotations sit in place on the page and can be flipped through one by one;
 - **Selection chips**: select text on the page and it becomes a "selection" chip in the input box — multiple chips supported, hover for the full quote, and sent messages render them as chips too;
 - **Review and export live on the page**: export to PDF / Word / HTML / Markdown / TXT and download directly;
 - **Several drafts per session**: `qing_list_docs` / `qing_focus_doc` switch the preview on the right;
-- **"Open in qingagent"**: a deep link launches the desktop client so you can keep editing — same local library.
+- **"Open in QingAgent"**: a deep link launches the desktop client so you can keep editing — same local library.
 
 ### In action: writing a piece with diagrams, tables and formulas inside DSH
 
 | | |
 |---|---|
 | <img src="docs/assets/dsh-diagram.webp" alt="A Mermaid flowchart in the paper panel next to the DSH conversation"> | <img src="docs/assets/dsh-table-math.webp" alt="Tables with inline and block formulas"> |
-| **Chat on the left, manuscript on the right** — state the requirement once and the agent writes through the qingagent engine while the paper panel fills in; Mermaid diagrams carry "visual edit / edit Mermaid" buttons and drawio drawings open on double-click | **Full typesetting** — tables, inline and block math (KaTeX), task lists and code blocks, rendered exactly as in the qingagent desktop app |
-| <img src="docs/assets/dsh-review.webp" alt="Per-change verdicts in review mode"> | <img src="docs/assets/dsh-onboarding.webp" alt="Onboarding card when qingagent is not connected"> |
-| **Per-change verdicts** — the header shows "reviewing · N changes", additions and deletions are marked in the text, and the bottom bar offers previous / next / commit / discard all | **Three-state onboarding** — not installed, installed but not running, or handshake failed, each with the right guidance; once qingagent is up the plugin recovers without restarting DSH |
+| **Chat on the left, manuscript on the right** — state the requirement once and the agent writes through the QingAgent engine while the paper panel fills in; Mermaid diagrams carry "visual edit / edit Mermaid" buttons and drawio drawings open on double-click | **Full typesetting** — tables, inline and block math (KaTeX), task lists and code blocks, rendered exactly as in the QingAgent desktop app |
+| <img src="docs/assets/dsh-review.webp" alt="Per-change verdicts in review mode"> | <img src="docs/assets/dsh-onboarding.webp" alt="Onboarding card when QingAgent is not connected"> |
+| **Per-change verdicts** — the header shows "reviewing · N changes", additions and deletions are marked in the text, and the bottom bar offers previous / next / commit / discard all | **Three-state onboarding** — not installed, installed but not running, or handshake failed, each with the right guidance; once QingAgent is up the plugin recovers without restarting DSH |
 
 ---
 
-## Relationship with the qingagent repo
+## Relationship with the QingAgent repo
 
-This plugin is the DSH frontend of [**qingagent**](https://github.com/void2anything/qingagent), not a standalone product.
+This plugin is the DSH frontend of [**QingAgent**](https://github.com/void2anything/qingagent), not a standalone product.
 
-**Because of the plugin's own complexity — the paper rendering is deeply coupled with the manuscript engine, and documents and versions live in a local database — the qingagent desktop client must be installed first for the plugin to work.** The client hosts the engine and the local library; the plugin wires it into DSH's conversation and UI.
+**Because of the plugin's own complexity — the paper rendering is deeply coupled with the manuscript engine, and documents and versions live in a local database — the QingAgent desktop client must be installed first for the plugin to work.** The client hosts the engine and the local library; the plugin wires it into DSH's conversation and UI.
 
-That coupling buys you something: **a draft written in DSH can be opened and edited in the qingagent client**, and vice versa — one local library, not two copies.
+That coupling buys you something: **a draft written in DSH can be opened and edited in the QingAgent client**, and vice versa — one local library, not two copies.
 
 ---
 
@@ -66,7 +66,7 @@ That coupling buys you something: **a draft written in DSH can be opened and edi
 npx @deepseek-ai/dsh web
 ```
 
-**② Install the qingagent plugin**
+**② Install the QingAgent plugin**
 
 ```bash
 npx @deepseek-ai/dsh plugin --profile web add dsh-qingagent@latest
@@ -74,11 +74,11 @@ npx @deepseek-ai/dsh plugin --profile web add dsh-qingagent@latest
 
 Restart `dsh web` afterwards.
 
-**③ Download and launch qingagent once**
+**③ Download and launch QingAgent once**
 
-Get it from [qingagent.com](https://qingagent.com/#download) or [qingagent Releases](https://github.com/void2anything/qingagent/releases). Launching it once starts the engine and writes credentials to `~/.qingagent/instance.json`; the plugin connects automatically.
+Get it from [qingagent.com](https://qingagent.com/#download) or [QingAgent Releases](https://github.com/void2anything/qingagent/releases). Launching it once starts the engine and writes credentials to `~/.qingagent/instance.json`; the plugin connects automatically.
 
-> If qingagent is missing or not running, the panel shows an onboarding card: **not installed** → download instructions; **installed but not running** → a one-click "Launch qingagent"; **handshake failed** → the specific reason (a corrupted `instance.json`, for example). Once qingagent is up the plugin recovers on its own — no need to restart DSH.
+> If QingAgent is missing or not running, the panel shows an onboarding card: **not installed** → download instructions; **installed but not running** → a one-click "Launch QingAgent"; **handshake failed** → the specific reason (a corrupted `instance.json`, for example). Once QingAgent is up the plugin recovers on its own — no need to restart DSH.
 
 Requirements: DSH `0.1.0-rc.6` as the baseline (peer dependency `^0.1.0-rc.6`), with a profile that already composes the storage hub, storage-domain and a KV backend (usually `@deepseek-ai/dsh-storage-json`).
 
@@ -86,7 +86,7 @@ Requirements: DSH `0.1.0-rc.6` as the baseline (peer dependency `^0.1.0-rc.6`), 
 
 ## Supported setups
 
-**Officially supported: dsh running on Windows with the Windows qingagent desktop client, same machine and same user.**
+**Officially supported: dsh running on Windows with the Windows QingAgent desktop client, same machine and same user.**
 
 The implementation also includes macOS client detection (`mdfind` with an Applications-directory fallback), but it has not been fully validated — issues welcome.
 
@@ -104,7 +104,7 @@ The implementation also includes macOS client detection (`mdfind` with an Applic
 | `qing_edit_draft` | `docRef?`; `ops[]` required | Atomically submit a batch of structured local edits; refused while a review is in progress |
 | `qing_read_draft` | `docRef?`; `mode` defaults to `outline` | Tiered reads: `outline` / `full` / `base` (committed baseline) / `lines` (numbered Markdown) / `blocks` (block ids) |
 | `qing_review_commit` | `docRef?`; `action: accept_all \| reject_all` | Accept or reject the pending review wholesale; hard-limited to one call per turn |
-| `qing_list_docs` | `scope: session \| library` | List drafts bound to this session; `library` lists recent documents from the whole qingagent library (max 50) |
+| `qing_list_docs` | `scope: session \| library` | List drafts bound to this session; `library` lists recent documents from the whole QingAgent library (max 50) |
 | `qing_focus_doc` | `docRef` required | Switch the paper panel; unbound documents can be adopted by engine id or an exact unique title |
 
 The eight `qing_edit_draft` operations:
@@ -124,16 +124,16 @@ The eight `qing_edit_draft` operations:
 
 ### The paper panel (client)
 
-qingagent's web editor is compiled straight into the plugin from the `vendor/qingagent` submodule, so the look matches the desktop app:
+QingAgent's web editor is compiled straight into the plugin from the `vendor/qingagent` submodule, so the look matches the desktop app:
 
 - **Per-change verdicts**: `DocumentSnapshotView` takes the patch set; the PatchNav at the bottom handles previous/next, reject-all and settlement. After settlement a structured review-result message flows back **only when something was rejected**;
 - **Whole-document review**: a high change ratio switches to old/new navigation with "apply new" / "revert to old";
-- **Annotation carousel**: external annotations become the product's `AnnotationGroup`, decorated into ProseMirror and rendered with qingagent's native carousel; annotations hide themselves while body patches are under review;
+- **Annotation carousel**: external annotations become the product's `AnnotationGroup`, decorated into ProseMirror and rendered with QingAgent's native carousel; annotations hide themselves while body patches are under review;
 - **Selection chips**: the selected text plus block coordinates go through the bridge and become an input-box reference — multiple, de-duplicated, with full quotes on hover;
 - **Diagrams and export**: double-click a draw.io block to open the offline editor and write back; export supports PDF / DOCX / HTML / Markdown / TXT;
 - **Deep link**: `qingjian://open?engineSessionId=<id>` launches the desktop client.
 
-**Attribution**: every external write from this plugin is tagged `x-qa-client: deepseek` and shows up as a "DeepSeek Harness" source inside qingagent.
+**Attribution**: every external write from this plugin is tagged `x-qa-client: deepseek` and shows up as a "DeepSeek Harness" source inside QingAgent.
 
 ---
 
@@ -167,7 +167,7 @@ qingagent's web editor is compiled straight into the plugin from the `vendor/qin
 - **The bridge is loopback-only**: `/qingagent-bridge/*` and `/drawio` reject non-loopback addresses before any business logic (IPv4, IPv6 and IPv4-mapped loopback accepted).
 - **Session isolation**: document reads/writes, assets, exports and reviews are all checked against the `dshSessionId + engineSessionId` binding. `focus` with `adopt:true` is the explicit adoption exception, which probes the engine document before joining it to the session.
 - **Style isolation**: dynamically imported vendor CSS is wrapped in `@scope`, while the mechanically extracted `qingdoc.css` is rewritten with a `[data-qingagent-doc-panel]` selector prefix — neither leaks into the host UI.
-- **QingML rendering**: production rendering goes through qingagent's `qingmlParse` with an explicit tag allowlist, allowlists for links and images, and a final Zod schema check before anything enters ProseMirror; `script` and `style` are dropped.
+- **QingML rendering**: production rendering goes through QingAgent's `qingmlParse` with an explicit tag allowlist, allowlists for links and images, and a final Zod schema check before anything enters ProseMirror; `script` and `style` are dropped.
 - **draw.io assets**: GET/HEAD only, directory traversal blocked, CSP and `SAMEORIGIN` on HTML; iframe messages validate both `event.source` and a same-origin origin.
 
 Binding data lives in the `dsh_qingagent` v1 domain of `@deepseek-ai/dsh-storage-domain`.
@@ -194,10 +194,10 @@ The `dsh.bundle.patch` entry in `package.json` merges the in-repo `cordis.patch.
 
 ### Build-time dependency: the vendor/qingagent submodule
 
-The paper rendering reuses qingagent's `apps/web` sources and CSS, read at build time from `QING_ROOT`:
+The paper rendering reuses QingAgent's `apps/web` sources and CSS, read at build time from `QING_ROOT`:
 
 - default `vendor/qingagent` (a submodule pinned to a verified commit);
-- `QING_ROOT=/path/to/qingagent` overrides it (point it at your own qingagent worktree during development);
+- `QING_ROOT=/path/to/qingagent` overrides it (point it at your own QingAgent worktree during development);
 - the offline draw.io runtime is published from there too, with `QINGAGENT_DRAWIO_ROOT` as a separate override.
 
 CSS is extracted mechanically by "file + line range" (`scripts/extract-qingdoc-css.mjs`). `npm run check:qingdoc-css` does a byte-level comparison and is wired into `check` and `prepack`: **run it right after upgrading the submodule** — drifting line numbers cut the extraction in the wrong place and produce a broken build. A red check means do not publish; realign the pinned ranges, then run the full check.
@@ -218,14 +218,15 @@ Contract tests lock down: the 800px page width, serif type, square corners and w
 Scan to join the WeChat user group — report problems, request features, follow updates:
 
 <!-- TODO: WeChat group QR code pending -->
-<!-- <img src="docs/assets/wechat-group.png" alt="qingagent user group" width="220"> -->
+<!-- <img src="docs/assets/wechat-group.png" alt="QingAgent user group" width="220"> -->
 
 ---
 
 ## Contact
 
-- Usage questions, bugs, feature requests: [GitHub Issues](https://github.com/void2anything/dsh-qingagent/issues)
-- Issues with qingagent itself: [qingagent Issues](https://github.com/void2anything/qingagent/issues)
+- Usage questions and bugs: [GitHub Issues](https://github.com/void2anything/dsh-qingagent/issues)
+- Feature requests and upvotes: [Feature board · DSH plugin](https://qingagent.com/feedback/plugin) — the most requested ones get built first
+- Issues with QingAgent itself: [QingAgent Issues](https://github.com/void2anything/qingagent/issues) | [Feature board · desktop client](https://qingagent.com/feedback/client)
 
 <!-- TODO: author contact pending -->
 
@@ -233,4 +234,4 @@ Scan to join the WeChat user group — report problems, request features, follow
 
 ## License
 
-[Apache-2.0](./LICENSE) for this repository. The `vendor/qingagent` submodule is [qingagent](https://github.com/void2anything/qingagent), MIT.
+[Apache-2.0](./LICENSE) for this repository. The `vendor/qingagent` submodule is [QingAgent](https://github.com/void2anything/qingagent), MIT.
