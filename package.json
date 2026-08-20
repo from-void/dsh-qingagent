@@ -1,6 +1,6 @@
 {
   "name": "dsh-qingagent",
-  "version": "0.1.39",
+  "version": "0.1.40",
   "description": "DeepSeek Harness × 青简写作桥：QingML 起草工具与右侧宣纸预览。",
   "type": "module",
   "main": "lib/index.js",
