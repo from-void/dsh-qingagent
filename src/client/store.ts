@@ -46,6 +46,9 @@ export interface QingClientSnapshot {
   /** 冲突稿本地内容快照(切走前抓取,切回恢复;评测 P11「切换往返丢内容落 v0 空白」,K3 定案)。 */
   conflictStash?: Record<string, PmDoc>
   selection?: QingSelection
+  /** 仅当 selection 来自用户显式 setSelection 时为 true;SSE 回声与 loadState 重放为 false。
+   *  插入门只放行 fresh 选段——否则陈旧单槽经 loadState 回灌会让已移除的 chip 复活。 */
+  selectionFresh?: boolean
   error?: string
 }
 
@@ -313,13 +316,21 @@ export class QingClientStore {
       body: JSON.stringify({ dshSessionId: sessionId, engineSessionId, quote, anchor }),
     })
     const entry = this.entry(sessionId)
-    this.update(entry, { ...entry.snapshot, selection: result.selection })
+    this.update(entry, { ...entry.snapshot, selection: result.selection, selectionFresh: true })
     return result.selection
+  }
+
+  /** 插入门消费 fresh:成功插入后调用,防同一显式选段被后续状态发布重复插入。 */
+  consumeSelectionFresh(sessionId: string): void {
+    const entry = this.entry(sessionId)
+    if (entry.snapshot.selectionFresh) {
+      this.update(entry, { ...entry.snapshot, selectionFresh: false })
+    }
   }
 
   async clearSelection(sessionId: string): Promise<void> {
     const entry = this.entry(sessionId)
-    this.update(entry, { ...entry.snapshot, selection: undefined })
+    this.update(entry, { ...entry.snapshot, selection: undefined, selectionFresh: false })
     const query = new URLSearchParams({ dshSessionId: sessionId })
     await bridgeJson<{ ok: true }>(`/qingagent-bridge/selection?${query}`, { method: 'DELETE' })
   }
@@ -681,6 +692,7 @@ export class QingClientStore {
             }
           : undefined,
         selection: undefined,
+        selectionFresh: false,
         error: undefined,
       })
       if (hadSelection) {
@@ -736,7 +748,7 @@ export class QingClientStore {
       return
     }
     if (event.type === 'selection-changed') {
-      this.update(entry, { ...entry.snapshot, selection: event.selection ?? undefined })
+      this.update(entry, { ...entry.snapshot, selection: event.selection ?? undefined, selectionFresh: false })
       return
     }
     if (event.type === 'binding-changed') {
@@ -775,6 +787,7 @@ export class QingClientStore {
           activeEngineSessionId,
           activeDoc: state.activeDoc,
           selection: state.selection,
+          selectionFresh: false,
           ...(entry.snapshot.revealRequest?.engineSessionId === activeEngineSessionId
             ? {}
             : { revealRequest: undefined }),

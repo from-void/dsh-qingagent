@@ -136,9 +136,22 @@ describe('client details 动态占槽', () => {
       },
       engine: { state: 'online', engineUrl: 'http://127.0.0.1:8080' },
     }
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => (
-      init?.method === 'DELETE' ? Response.json({ ok: true }) : Response.json(initialState)
-    ))
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'DELETE') return Response.json({ ok: true })
+      // 显式 setSelection:回显 selection(fresh 语义的唯一入口)。
+      if (String(input).includes('/qingagent-bridge/selection') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as {
+          engineSessionId: string; quote: string; anchor: unknown
+        }
+        return Response.json({ selection: {
+          dshSessionId: sessionId,
+          engineSessionId: body.engineSessionId,
+          quote: body.quote,
+          anchor: body.anchor,
+        } })
+      }
+      return Response.json(initialState)
+    })
     vi.stubGlobal('fetch', fetchMock)
 
     let draft = '请分别润色：'
@@ -230,9 +243,16 @@ describe('client details 动态占槽', () => {
       },
     ]
 
+    // 新语义:SSE 回声/重放(selection-changed)不再触发插入——只有显式 setSelection(fresh)才插。
     source.emit({ type: 'selection-changed', selection: selections[0]! })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(payloads).toHaveLength(0)
+
+    await qingClientStore.setSelection(
+      sessionId, selections[0]!.engineSessionId, selections[0]!.quote, selections[0]!.anchor)
     await vi.waitFor(() => expect(payloads).toHaveLength(1))
-    source.emit({ type: 'selection-changed', selection: selections[1]! })
+    await qingClientStore.setSelection(
+      sessionId, selections[1]!.engineSessionId, selections[1]!.quote, selections[1]!.anchor)
     await vi.waitFor(() => expect(payloads).toHaveLength(2))
 
     expect(payloads.map((payload) => payload.span)).toEqual([

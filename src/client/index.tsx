@@ -74,24 +74,18 @@ export function apply(ctx: ClientContext): void {
     let unsubscribeStore: (() => void) | undefined
     let selectionScope: ReturnType<typeof createScope> | undefined
     let unsubscribeInput: (() => void) | undefined
-    let pendingSelectionKey: string | undefined
-
-    // 值键而非对象引用:bridge 状态重放会产出新对象,引用比较挡不住同一选段重触发(实测双 chip)。
-    const selectionKey = (s: NonNullable<ReturnType<typeof qingClientStore.getSnapshot>['selection']>) =>
-      `${s.engineSessionId}|${s.anchor.blockId}|${s.anchor.from}|${s.anchor.to}|${s.quote}`
+    let selectionInsertInFlight = false
 
     const syncSelectionReference = () => {
       const sessionId = currentSessionId
-      const selection = sessionId
-        ? qingClientStore.getSnapshot(sessionId).selection
-        : undefined
-      if (!sessionId || !selection || !selectionScope) return
-      const key = selectionKey(selection)
-      // 哨兵防 bridge 重放双触发。同一选段仅在用户【显式移除 chip】后放行重插(移除回调清哨兵);
-      // 发送、投影中间删字同样会让 occurrence 消失,但那不是重插时机——按 occurrence 存活放行
-      // 会让 chip 在发送后复活/残片旁重复(评测 r1 席3)。
-      if (key === pendingSelectionKey) return
+      if (!sessionId || !selectionScope) return
       const snapshot = qingClientStore.getSnapshot(sessionId)
+      const selection = snapshot.selection
+      // 插入门:只响应用户显式 setSelection(fresh)。SSE 回声、loadState 重放的陈旧单槽
+      // 一律不插——否则已被 ✕ 移除的选段会在下一次状态回灌时复活(评测 r1 席3 2.5)。
+      if (!selection || snapshot.selectionFresh !== true) return
+      // bail 同步发布 input state 会在插入返回前重入本函数;fresh 尚未消费,用进行中闸挡住。
+      if (selectionInsertInFlight) return
       const activeTitle = snapshot.activeEngineSessionId === selection.engineSessionId
         ? snapshot.activeDoc?.title
         : undefined
@@ -99,14 +93,19 @@ export function apply(ctx: ClientContext): void {
         (doc) => doc.engineSessionId === selection.engineSessionId,
       )?.title
 
-      // 先设重入哨兵：bail 同步发布 input state，state subscriber 会在事件返回前回调。
-      pendingSelectionKey = key
-      if (!insertSelectionReference(selectionScope.ctx, selection, title)) {
-        // adjudicating/submitting 等瞬态会拒绝插入；保留 bridge selection，等待 input
-        // phase 或 store 下一次发布后重试。
-        pendingSelectionKey = undefined
+      let inserted = false
+      selectionInsertInFlight = true
+      try {
+        // 未移除时重复引用同一选段由 insertSelectionReference 的 occurrence 幂等挡住。
+        inserted = insertSelectionReference(selectionScope.ctx, selection, title)
+      } finally {
+        selectionInsertInFlight = false
+      }
+      if (!inserted) {
+        // adjudicating/submitting 等瞬态拒绝:保留 fresh 与 bridge selection,等下次发布重试。
         return
       }
+      qingClientStore.consumeSelectionFresh(sessionId)
 
       // bridge selection 只是 ingress 单槽；成功铸成 composer occurrence 后立即清掉。
       // 这样用户删除原生 chip 就确实放弃该选段，后端动态提示也不会残留。
@@ -207,7 +206,7 @@ export function apply(ctx: ClientContext): void {
       selectionScope = undefined
       releaseSession = undefined
       disposePanel = undefined
-      pendingSelectionKey = undefined
+      selectionInsertInFlight = false
       currentSessionId = nextSessionId === undefined ? undefined : String(nextSessionId)
       if (currentSessionId) {
         unsubscribeStore = qingClientStore.subscribe(currentSessionId, () => {
@@ -228,15 +227,10 @@ export function apply(ctx: ClientContext): void {
         const uninstallChips = installChipPresentation({
           getInputState: () => inputState.getSnapshot() as unknown as ChipInputState | undefined,
           subscribeInputState: (listener) => inputState.subscribe(listener),
-          removeOccurrence: (occurrenceId) => {
-            const removed = removeOccurrenceFromDraft(
-              scopeCtx as unknown as Parameters<typeof removeOccurrenceFromDraft>[0],
-              occurrenceId,
-            )
-            // 显式移除是「同一选段允许重新引用」的唯一放行时机(评测 S3-R1-06)。
-            if (removed) pendingSelectionKey = undefined
-            return removed
-          },
+          removeOccurrence: (occurrenceId) => removeOccurrenceFromDraft(
+            scopeCtx as unknown as Parameters<typeof removeOccurrenceFromDraft>[0],
+            occurrenceId,
+          ),
           replaceOccurrenceRef: (occurrenceId, newRef) => replaceOccurrenceRef(
             scopeCtx as unknown as Parameters<typeof replaceOccurrenceRef>[0],
             occurrenceId,
