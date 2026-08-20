@@ -59,7 +59,7 @@ afterEach(() => {
 })
 
 describe('QingClientStore 生成终态', () => {
-  it('沿用 engine-status SSE 显示未连接面板，并在恢复后自动让位', async () => {
+  it('engine online 且无文稿时仍保留面板，显式关闭后才注销', async () => {
     vi.stubGlobal('EventSource', FakeEventSource)
     let stateReads = 0
     const fetchMock = vi.fn(async () => {
@@ -85,6 +85,9 @@ describe('QingClientStore 生成终态', () => {
 
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     await vi.waitFor(() => expect(store.getSnapshot('dsh-offline').state?.engine.state).toBe('online'))
+    expect(store.hasPanelContent('dsh-offline')).toBe(true)
+
+    store.closePanel('dsh-offline')
     expect(store.hasPanelContent('dsh-offline')).toBe(false)
     release()
   })

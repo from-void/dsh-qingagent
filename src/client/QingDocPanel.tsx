@@ -58,7 +58,7 @@ import { installDetailsColumnWidth } from './detailsWidth.js'
 import { decideIncomingPanelDocument } from './incomingPanelDocument.js'
 import { QINGJIAN_ICON_DATA_URI } from './qingjianIcon.js'
 import { QingBrandBadge } from './QingBrandBadge.js'
-import { QingConnectionGuide } from './QingConnectionGuide.js'
+import { QingConnectedEmptyState, QingConnectionGuide } from './QingConnectionGuide.js'
 import { ensureQingdocRuntimeCss } from './runtimeCss.js'
 import { BridgeHttpError, currentPanelReviewStateFor, qingClientStore } from './store.js'
 import type { QingLibraryDoc } from './store.js'
@@ -1148,14 +1148,22 @@ export function QingDocPanel(props: QingDocPanelProps) {
   } as CSSProperties
 
   const engineStatus = snapshot.state?.engine
-  if (engineStatus && engineStatus.state !== 'online') {
+  const connectedEmpty = engineStatus?.state === 'online' && snapshot.bindingCount === 0
+  if (engineStatus && (engineStatus.state !== 'online' || connectedEmpty)) {
+    const connectionLabel = connectedEmpty
+      ? '已连接'
+      : engineStatus.state === 'starting'
+        ? '正在启动'
+        : engineStatus.state === 'handshake-failed'
+          ? '握手失败'
+          : '未连接'
     return (
       <section
         ref={rootRef}
         data-qingagent-doc-panel
-        data-qingagent-connection-state={engineStatus.state}
+        data-qingagent-connection-state={connectedEmpty ? 'online-empty' : engineStatus.state}
         style={rootStyle}
-        aria-label="青简连接引导"
+        aria-label={connectedEmpty ? '青简已连接' : '青简连接引导'}
       >
         <div
           className="qingdoc-details-resizer"
@@ -1169,23 +1177,31 @@ export function QingDocPanel(props: QingDocPanelProps) {
         <header className="qingdoc-stage-controls">
           <div className="qingdoc-heading">
             <QingBrandBadge />
-            <span className="qingdoc-status" role="status">
-              {engineStatus.state === 'starting' ? '正在启动' : engineStatus.state === 'handshake-failed' ? '握手失败' : '未连接'}
-            </span>
+            <span className="qingdoc-status" role="status">{connectionLabel}</span>
           </div>
           <div className="qingdoc-host-actions">
             <button
               className="qingdoc-close"
               type="button"
               onClick={() => { void handleClose() }}
-              aria-label="关闭青简连接引导"
+              aria-label={connectedEmpty ? '关闭青简空文稿引导' : '关闭青简连接引导'}
             >×</button>
           </div>
         </header>
-        <QingConnectionGuide status={engineStatus} />
+        {connectedEmpty ? <QingConnectedEmptyState /> : <QingConnectionGuide status={engineStatus} />}
       </section>
     )
   }
+
+  const editorLockTitle = panelDoc && !docMissing
+    ? busy
+      ? '青简正在写作，请稍候'
+      : pendingReview
+        ? '审阅中 · 请先在右侧逐处确认'
+        : saveLocked
+          ? statusLabel || undefined
+          : undefined
+    : undefined
 
   return (
     <ConfirmProvider>
@@ -1258,7 +1274,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
         </div>
       </header>
       <div className="ws-body">
-        <main className="ws-right">
+        <main
+          className="ws-right"
+          title={editorLockTitle}
+          style={editorLockTitle ? { cursor: 'not-allowed' } : undefined}
+        >
           {docMissing ? (
             <div className="qingdoc-doc-missing" role="status">
               <svg className="qingdoc-doc-missing-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">

@@ -6,6 +6,18 @@ export interface QingConnectionGuideProps {
   status: EngineStatusSnapshot
 }
 
+export function QingConnectedEmptyState() {
+  return (
+    <main className={styles.viewport} data-qing-connected-empty>
+      <article className={styles.card} aria-labelledby="qing-connected-empty-title">
+        <p className={styles.eyebrow}>已连接 · 还没有文稿</p>
+        <h2 className={styles.title} id="qing-connected-empty-title">告诉青简，你想写什么</h2>
+        <p className={styles.lead}>直接在左侧输入框说出写作需求，第一篇文稿会在这里出现。</p>
+      </article>
+    </main>
+  )
+}
+
 export function QingConnectionGuide({ status }: QingConnectionGuideProps) {
   const handshakeFailed = status.state === 'handshake-failed'
   const starting = status.state === 'starting'
