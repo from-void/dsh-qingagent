@@ -95,6 +95,7 @@ export function QingBrandBadge() {
   }, [closeUpdate, updateOpen])
 
   const hasUnseenUpdate = Boolean(update?.hasUpdate && update.latest !== seenVersion)
+  const currentVersion = update?.current.trim()
 
   const openUpdate = () => {
     if (!update?.hasUpdate) return
@@ -181,6 +182,9 @@ export function QingBrandBadge() {
             </svg>
             <span>觉得不错？给个 Star</span>
           </a>
+          {currentVersion ? (
+            <span className="qingbrand-item-hint qingbrand-version">{`v${currentVersion}`}</span>
+          ) : null}
         </div>
       ) : null}
       {updateOpen && update && panelRoot ? createPortal(

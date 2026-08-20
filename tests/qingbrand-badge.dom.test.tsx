@@ -3,6 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import packageJson from '../package.json'
 import { QingBrandBadge } from '../src/client/QingBrandBadge.js'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -21,6 +22,38 @@ afterEach(() => {
 })
 
 describe('青简顶栏品牌卡', () => {
+  it('展开品牌卡时在 Star 行下方显示当前插件版本', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      current: packageJson.version, latest: packageJson.version, hasUpdate: false,
+    })))
+    renderBadge()
+
+    act(() => host!.querySelector<HTMLButtonElement>('.qingbrand-trigger')!.focus())
+
+    const version = await vi.waitFor(() => {
+      const element = host!.querySelector<HTMLElement>('.qingbrand-version')
+      expect(element).not.toBeNull()
+      return element!
+    })
+    const star = host!.querySelector<HTMLElement>('.qingbrand-star')!
+    expect(version.textContent).toContain(packageJson.version)
+    expect(version.classList).toContain('qingbrand-item-hint')
+    expect(star.compareDocumentPosition(version) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(host!.querySelector('.qingbrand-update-trigger')).toBeNull()
+  })
+
+  it('当前插件版本缺失时不显示版本行', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      latest: packageJson.version, hasUpdate: false,
+    })))
+    renderBadge()
+
+    act(() => host!.querySelector<HTMLButtonElement>('.qingbrand-trigger')!.focus())
+
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce())
+    expect(host!.querySelector('.qingbrand-version')).toBeNull()
+  })
+
   it('常驻展示并排反馈入口，有未读更新时显示角标并打开更新浮层', async () => {
     const writeText = vi.fn(async () => undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })
