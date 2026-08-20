@@ -1976,6 +1976,11 @@ export function QingDocFunctions(props: QingDocFunctionsProps) {
           loadLexicons={loadLexicons}
           saveLexiconSelection={saveLexiconSelection}
           sourceMaterialAvailable={reviewLaunchType === 'source' ? sourceMaterialAvailable : undefined}
+          onAddMaterial={() => {
+            // 素材管理是青简客户端的能力边界:引导到客户端本文稿,添加后回来重新发起。
+            window.open(`qingjian://open?engineSessionId=${encodeURIComponent(props.engineSessionId)}`, '_self')
+            props.onToast('已请求在青简中打开本文稿:请用输入框旁「素材」添加素材,完成后回到这里重新发起核查')
+          }}
           onClose={() => setReviewLaunchType(null)}
           onConfirm={(template, supplement, lexicons) => {
             const type = reviewLaunchType

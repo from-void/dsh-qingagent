@@ -281,3 +281,13 @@ describe('occurrence 草稿操作', () => {
     expect(harness.getState().draft).toBe('前@旧标签 后')
   })
 })
+
+
+describe('dedupeAnnotationLabel', () => {
+  it('同标签冲突时缀·N 保证投影唯一;无冲突原样返回', async () => {
+    const { dedupeAnnotationLabel } = await import('../src/client/annotationReference.js')
+    expect(dedupeAnnotationLabel('按批注修改:活动时间…', [])).toBe('按批注修改:活动时间…')
+    expect(dedupeAnnotationLabel('按批注修改:活动时间…', ['按批注修改:活动时间…'])).toBe('按批注修改:活动时间…·2')
+    expect(dedupeAnnotationLabel('按批注修改:活动时间…', ['按批注修改:活动时间…', '按批注修改:活动时间…·2'])).toBe('按批注修改:活动时间…·3')
+  })
+})

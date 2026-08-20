@@ -28,11 +28,21 @@ export function annotationReferenceLabel(instruction: string): string {
   return previewLabel(`按批注修改:${summary}`)
 }
 
-function createAnnotationReference(instruction: string): ReferenceInsert {
+/** 同标签会让草稿投影文本完全一致,替换某枚时 setDraft 的 diff 无法区分删的是哪一枚,
+ *  会把相邻 occurrence 的载荷串绑/吞掉(评测 r2 席3)。冲突时给 label 缀「·N」保证投影唯一。 */
+export function dedupeAnnotationLabel(label: string, takenLabels: readonly string[]): string {
+  if (!takenLabels.includes(label)) return label
+  for (let n = 2; ; n += 1) {
+    const candidate = `${label}·${n}`
+    if (!takenLabels.includes(candidate)) return candidate
+  }
+}
+
+function createAnnotationReference(instruction: string, takenLabels: readonly string[]): ReferenceInsert {
   return {
     source: QING_ANNOTATION_REFERENCE_SOURCE,
     ref: instruction,
-    label: annotationReferenceLabel(instruction),
+    label: dedupeAnnotationLabel(annotationReferenceLabel(instruction), takenLabels),
     clipboardText: instruction,
   }
 }
@@ -44,8 +54,9 @@ export function insertAnnotationReference(
 ): boolean {
   const snapshot = actx.conversation.input.for(actx).state.getSnapshot()
   const offset = snapshot.draft.length
+  const takenLabels = (snapshot.occurrences ?? []).map((occurrence) => occurrence.label)
   return actx.bail(actx, 'slash/input-insert-reference', {
-    reference: createAnnotationReference(instruction),
+    reference: createAnnotationReference(instruction, takenLabels),
     span: {
       start: offset,
       end: offset,
@@ -112,15 +123,16 @@ export function removeOccurrenceFromDraft(
 function replacementReference(
   source: string,
   newRef: string,
+  takenLabels: readonly string[],
 ): ReferenceInsert | undefined {
   if (source === QING_ANNOTATION_REFERENCE_SOURCE) {
-    return createAnnotationReference(newRef)
+    return createAnnotationReference(newRef, takenLabels)
   }
   if (source === QING_SELECTION_REFERENCE_SOURCE) {
     return {
       source,
       ref: newRef,
-      label: selectionReferenceLabel(newRef),
+      label: dedupeAnnotationLabel(selectionReferenceLabel(newRef), takenLabels),
       clipboardText: newRef,
     }
   }
@@ -144,7 +156,11 @@ export function replaceOccurrenceRef(
     candidate.occurrenceId === occurrenceId)
   const projection = findOccurrenceProjection(before, occurrenceId)
   if (!occurrence || !projection) return false
-  const reference = replacementReference(occurrence.source, newRef)
+  // 去重池排除被替换者自身:其余 occurrence 的 label 都不得与新 label 撞车(投影唯一性)。
+  const takenLabels = before.occurrences
+    .filter((candidate) => candidate.occurrenceId !== occurrenceId)
+    .map((candidate) => candidate.label)
+  const reference = replacementReference(occurrence.source, newRef, takenLabels)
   if (!reference) return false
 
   const withoutOccurrence = before.draft.slice(0, projection.start)
