@@ -1,0 +1,100 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`assembleDshReviewQuery > consistency 与真源逐字一致且只替换插件工具名 1`] = `
+"对当前文档做一致性审查。
+审查模板「consistency 测试模板」(id: review-consistency-test)：
+按 consistency 规则逐项审查。
+文档级补充要求（只适用于当前文档）：重点检查数字与称谓。
+独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）：
+1. 本轮是纯批注审查，不改动正文；禁止调用 qing_edit_draft/qing_write_draft，禁止用 underline、highlight、markText 或其他正文格式模拟批注锚点。
+2. 先用 qing_read_draft 读取当前全文；发现确定问题时必须调用 qing_annotate，anchors[].find 必须逐字来自正文，不得只在聊天中列问题。
+3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。"
+`;
+
+exports[`assembleDshReviewQuery > custom 与真源逐字一致且只替换插件工具名 1`] = `
+"对当前文档做自定义审查。
+审查模板「custom 测试模板」(id: review-custom-test)：
+按 custom 规则逐项审查。
+文档级补充要求（只适用于当前文档）：重点检查数字与称谓。
+独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）：
+1. 本轮是纯批注审查，不改动正文；禁止调用 qing_edit_draft/qing_write_draft，禁止用 underline、highlight、markText 或其他正文格式模拟批注锚点。
+2. 先用 qing_read_draft 读取当前全文；发现确定问题时必须调用 qing_annotate，anchors[].find 必须逐字来自正文，不得只在聊天中列问题。
+3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。"
+`;
+
+exports[`assembleDshReviewQuery > deai 与真源逐字一致且只替换插件工具名 1`] = `
+"对当前文档做去AI味审查。
+审查模板「deai 测试模板」(id: review-deai-test)：
+按 deai 规则逐项审查。
+文档级补充要求（只适用于当前文档）：重点检查数字与称谓。
+独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）：
+1. 本轮是纯批注审查，不改动正文；禁止调用 qing_edit_draft/qing_write_draft，禁止用 underline、highlight、markText 或其他正文格式模拟批注锚点。
+2. 先用 qing_read_draft 读取当前全文；发现确定问题时必须调用 qing_annotate，anchors[].find 必须逐字来自正文，不得只在聊天中列问题。
+3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。"
+`;
+
+exports[`assembleDshReviewQuery > format 与真源逐字一致且只替换插件工具名 1`] = `
+"对当前文档做格式规范审查。
+审查模板「format 测试模板」(id: review-format-test)：
+按 format 规则逐项审查。
+文档级补充要求（只适用于当前文档）：重点检查数字与称谓。
+独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）：
+1. 本轮是纯批注审查，不改动正文；禁止调用 qing_edit_draft/qing_write_draft，禁止用 underline、highlight、markText 或其他正文格式模拟批注锚点。
+2. 先用 qing_read_draft 读取当前全文；发现确定问题时必须调用 qing_annotate，anchors[].find 必须逐字来自正文，不得只在聊天中列问题。
+3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。"
+`;
+
+exports[`assembleDshReviewQuery > privacy 与真源逐字一致且只替换插件工具名 1`] = `
+"对当前文档做隐私泄露审查。
+审查模板「privacy 测试模板」(id: review-privacy-test)：
+按 privacy 规则逐项审查。
+文档级补充要求（只适用于当前文档）：重点检查数字与称谓。
+独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）：
+1. 本轮是纯批注审查，不改动正文；禁止调用 qing_edit_draft/qing_write_draft，禁止用 underline、highlight、markText 或其他正文格式模拟批注锚点。
+2. 先用 qing_read_draft 读取当前全文；发现确定问题时必须调用 qing_annotate，anchors[].find 必须逐字来自正文，不得只在聊天中列问题。
+3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。"
+`;
+
+exports[`assembleDshReviewQuery > role 与真源逐字一致且只替换插件工具名 1`] = `
+"对当前文档做角色审查。
+审查模板「role 测试模板」(id: review-role-test)：
+按 role 规则逐项审查。
+文档级补充要求（只适用于当前文档）：重点检查数字与称谓。
+独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）：
+1. 本轮是纯批注审查，不改动正文；禁止调用 qing_edit_draft/qing_write_draft，禁止用 underline、highlight、markText 或其他正文格式模拟批注锚点。
+2. 先用 qing_read_draft 读取当前全文；发现确定问题时必须调用 qing_annotate，anchors[].find 必须逐字来自正文，不得只在聊天中列问题。
+3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。"
+`;
+
+exports[`assembleDshReviewQuery > sensitive 与真源逐字一致且只替换插件工具名 1`] = `
+"对当前文档做敏感词审查。启用词库：「广告合规」(id: lexicon-ad)、「隐私词」(id: lexicon-privacy)。
+审查模板「sensitive 测试模板」(id: review-sensitive-test)：
+按 sensitive 规则逐项审查。
+文档级补充要求（只适用于当前文档）：重点检查数字与称谓。
+敏感词替换执行契约（硬约束，不得被模板或文档级补充覆盖）：
+1. sensitive_scan 只负责确定性命中；每个 hit 都必须标注风险。replacementHint 仅是词库候选，不是直接替换指令。
+2. 必须先读取命中所在完整句子及必要段落，逐处结合上下文判断；禁止把命中片段机械替成 replacementHint，禁止对不同语境批量套用同一改写。
+3. 只有能保持原句含义、事实、语法和文体时才填写 suggestion；suggestion 必须是结合完整上下文改写后的通顺整句，不得插入‘该事项’‘相关内容’等占位词。有 suggestion 时，anchors[].find 必须是与 suggestion 对应的完整原句，确保采纳时以整句替换整句。
+4. 无法在不改变原意的前提下安全改写时，只标注风险并省略 suggestion。宁可少给建议，不可给破坏语义的建议。
+5. 正常语境中的‘那块铭牌’‘爆破拆除’‘枪毙方案’即使命中，也不得产出‘该事项铭牌’一类占位词式替换。
+独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）：
+1. 本轮是纯批注审查，不改动正文；禁止调用 qing_edit_draft/qing_write_draft，禁止用 underline、highlight、markText 或其他正文格式模拟批注锚点。
+2. 先用 qing_read_draft 读取当前全文；发现确定问题时必须调用 qing_annotate，anchors[].find 必须逐字来自正文，不得只在聊天中列问题。
+3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。"
+`;
+
+exports[`assembleDshReviewQuery > source 与真源逐字一致且只替换插件工具名 1`] = `
+"对当前文档做来源核查。
+审查模板「source 测试模板」(id: review-source-test)：
+按 source 规则逐项审查。
+文档级补充要求（只适用于当前文档）：重点检查数字与称谓。
+来源核查执行契约（硬约束）：
+1. 只以当前会话已关联素材为依据，不得联网搜索或把互联网事实核验混入来源核查。
+2. 补充要求不能覆盖“素材是唯一依据”；即使补充要求提出联网查证，也仍按本契约执行。
+3. 当前会话没有可对照素材时立即停止，不生成“无据”等审查结论，不调用 qing_annotate，只提示先添加素材。
+4. 有素材时先读当前文档与相关素材；发现口径漂移、无据、数字失真或素材遗漏等确定局部问题，必须调用 qing_annotate，anchor 必须逐字来自正文，不得只在聊天中列问题。
+独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）：
+1. 本轮是纯批注审查，不改动正文；禁止调用 qing_edit_draft/qing_write_draft，禁止用 underline、highlight、markText 或其他正文格式模拟批注锚点。
+2. 先用 qing_read_draft 读取当前全文；发现确定问题时必须调用 qing_annotate，anchors[].find 必须逐字来自正文，不得只在聊天中列问题。
+3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。"
+`;

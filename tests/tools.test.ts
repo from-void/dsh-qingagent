@@ -10,6 +10,7 @@ import { QINGJIAN_DOWNLOAD_URL } from '../src/onboarding.js'
 import { draftRequirementsOf, registerTools } from '../src/tools.js'
 import { compileQingmlDocument } from '../src/qingmlCompile.js'
 import type { TelemetryCapture } from '../src/telemetry.js'
+import { REVIEW_TURN_EDIT_ERROR, reviewTurnCoordinatorFor } from '../src/reviewTurn.js'
 
 const DRAFT_ONE = '<title>测试稿</title><h1>开篇</h1><p>第一版正文。</p>'
 const DRAFT_TWO = '<title>测试稿</title><h1>开篇</h1><p>修正后的正文。</p>'
@@ -273,6 +274,228 @@ describe('agent 文稿回合租约', () => {
 
     expect(proposalBody).toBeUndefined()
     expect(signalActions(fixture.engine).map(({ action }) => action)).toEqual(['begin'])
+  })
+})
+
+describe('审查回合与 qing_annotate', () => {
+  const editingDoc = (docVersion = 1) => doc({
+    docVersion,
+    state: 'editing',
+    qingml: DRAFT_ONE,
+    markdown: '# 开篇\n\n第一版正文。',
+    title: '测试稿',
+  })
+  const groups = [{
+    summary: '句式生硬',
+    note: '这句话读起来不自然。',
+    severity: 'warn' as const,
+    suggestion: '修正后的正文。',
+    anchors: [{ find: '第一版正文。' }],
+  }]
+
+  function markReview(fixture: ReturnType<typeof harness>, type = 'deai' as const): void {
+    reviewTurnCoordinatorFor(fixture.engine).markPending('dsh-1', {
+      type,
+      templateId: 'review-deai-default',
+      templateName: '自然表达',
+    })
+  }
+
+  it('打标后在 pre-step 激活，写工具按固定文案拒绝，stopping 清理终态', async () => {
+    const fixture = harness(async (path) => {
+      if (path.endsWith('/doc?format=qingml')) return editingDoc()
+      throw new Error(`unexpected path: ${path}`)
+    })
+    const state = reviewTurnCoordinatorFor(fixture.engine)
+    markReview(fixture)
+
+    await fixture.listeners.get('agent/pre-step')!(
+      { agent: { id: 'dsh-1' }, turn: 61 },
+      async () => ({ kind: 'enter', messages: [] }),
+    )
+    expect(state.getActive('dsh-1')).toMatchObject({ type: 'deai', turnId: 61 })
+    await expect(fixture.tools.get('qing_write_draft')!.execute(
+      { qingml: DRAFT_TWO },
+      exec(undefined, 'review-write', 'qing_write_draft'),
+    )).rejects.toThrow(REVIEW_TURN_EDIT_ERROR)
+    await expect(fixture.tools.get('qing_edit_draft')!.execute(
+      { ops: [{ kind: 'setTitle', title: '新标题' }] },
+      exec(undefined, 'review-edit', 'qing_edit_draft'),
+    )).rejects.toThrow(REVIEW_TURN_EDIT_ERROR)
+
+    await fixture.listeners.get('agent/turn-stopping')!({ agent: { id: 'dsh-1' }, turn: 61 })
+    expect(state.getActive('dsh-1')).toBeUndefined()
+    expect(signalActions(fixture.engine).map(({ action }) => action)).toEqual(['begin', 'end'])
+  })
+
+  it('审查 agent/error 是终态并立即释放租约，普通回合语义不变', async () => {
+    const fixture = harness(async (path) => {
+      if (path.endsWith('/doc?format=qingml')) return editingDoc()
+      throw new Error(`unexpected path: ${path}`)
+    })
+    const state = reviewTurnCoordinatorFor(fixture.engine)
+    markReview(fixture)
+    await fixture.listeners.get('agent/pre-step')!(
+      { agent: { id: 'dsh-1' }, turn: 62 },
+      async () => ({ kind: 'enter', messages: [] }),
+    )
+    await fixture.listeners.get('agent/error')!({ agent: { id: 'dsh-1' }, turn: 62, error: new Error('boom') })
+    expect(state.getActive('dsh-1')).toBeUndefined()
+    expect(signalActions(fixture.engine).map(({ action }) => action)).toEqual(['begin', 'end'])
+  })
+
+  it('本回合未读稿时拒绝生成批注，不访问批注写接口', async () => {
+    const fixture = harness(async (path) => {
+      if (path.endsWith('/doc?format=qingml')) return editingDoc()
+      throw new Error(`unexpected path: ${path}`)
+    })
+    markReview(fixture)
+    await fixture.listeners.get('agent/pre-step')!(
+      { agent: { id: 'dsh-1' }, turn: 63 },
+      async () => ({ kind: 'enter', messages: [] }),
+    )
+
+    await expect(fixture.tools.get('qing_annotate')!.execute(
+      { groups },
+      exec(undefined, 'annotate-unread', 'qing_annotate'),
+    )).rejects.toThrow('qing_read_draft')
+    expect(vi.mocked(fixture.engine.fetchJson).mock.calls.some(([path]) => path.endsWith('/review/annotations'))).toBe(false)
+  })
+
+  it('预申领 BUSY_NATIVE 不阻断审查读取，落批注前重新申领成功', async () => {
+    vi.useFakeTimers()
+    try {
+      let beginCalls = 0
+      const fixture = harness(async (path) => {
+        if (path.endsWith('/doc?format=qingml')) return editingDoc()
+        if (path.endsWith('/review/annotations')) {
+          return {
+            status: 'created', docVersion: 1, groupCount: 1, anchorCount: 1, seq: 4,
+            annotations: [{ id: 'annotation-1', summary: '句式生硬' }],
+          }
+        }
+        throw new Error(`unexpected path: ${path}`)
+      }, ONLINE_ENGINE, candidateDoc('开篇', '第一版正文。'), async (_path, init) => {
+        const action = (JSON.parse(String(init?.body)) as { action: string }).action
+        if (action === 'begin') {
+          beginCalls += 1
+          if (beginCalls <= 3) throw new EngineHttpError(409, { code: 'BUSY_NATIVE' })
+        }
+        return { active: action !== 'end' }
+      })
+      markReview(fixture)
+      const entering = fixture.listeners.get('agent/pre-step')!(
+        { agent: { id: 'dsh-1' }, turn: 66 },
+        async () => ({ kind: 'enter', messages: [] }),
+      )
+      await vi.runAllTimersAsync()
+      await entering
+      await fixture.tools.get('qing_read_draft')!.execute(
+        { mode: 'full' },
+        exec(undefined, 'annotate-after-busy-read', 'qing_read_draft'),
+      )
+      await expect(fixture.tools.get('qing_annotate')!.execute(
+        { groups },
+        exec(undefined, 'annotate-after-busy', 'qing_annotate'),
+      )).resolves.toMatchObject({ status: 'created', count: 1 })
+      expect(beginCalls).toBe(4)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('VERSION_CONFLICT 自动重读、重建锚点并只重试一次，成功卡冻结数量与摘要', async () => {
+    let currentVersion = 1
+    const annotationBodies: Array<Record<string, unknown>> = []
+    const fixture = harness(async (path, init) => {
+      if (path.endsWith('/doc?format=qingml')) return editingDoc(currentVersion)
+      if (path.endsWith('/review/annotations')) {
+        annotationBodies.push(JSON.parse(String(init?.body)))
+        if (annotationBodies.length === 1) {
+          currentVersion = 2
+          throw new EngineHttpError(409, { code: 'VERSION_CONFLICT', expected: 1, actual: 2 })
+        }
+        return {
+          status: 'created', docVersion: 2, groupCount: 1, anchorCount: 1, seq: 9,
+          annotations: [{ id: 'annotation-1', summary: '句式生硬' }],
+        }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+    reviewTurnCoordinatorFor(fixture.engine).markPending('dsh-1', {
+      type: 'sensitive', templateId: 'review-sensitive-default', templateName: '敏感词',
+    })
+    await fixture.listeners.get('agent/pre-step')!(
+      { agent: { id: 'dsh-1' }, turn: 64 },
+      async () => ({ kind: 'enter', messages: [] }),
+    )
+    await fixture.tools.get('qing_read_draft')!.execute(
+      { mode: 'full' },
+      exec(undefined, 'annotate-read', 'qing_read_draft'),
+    )
+    const tool = fixture.tools.get('qing_annotate')!
+    const result = await tool.execute(
+      { groups },
+      exec(undefined, 'annotate-write', 'qing_annotate'),
+    ) as { count: number; summaries: string[] }
+
+    expect(annotationBodies).toHaveLength(2)
+    expect(annotationBodies.map((body) => body.expectedDocVersion)).toEqual([1, 2])
+    expect(annotationBodies[0]).toMatchObject({
+      groups: [{ origin: 'sensitive', anchors: [{ find: '第一版正文。' }] }],
+    })
+    expect(annotationBodies[1]).toMatchObject({
+      groups: [{ origin: 'sensitive', anchors: [{ find: '第一版正文。' }] }],
+    })
+    expect(result).toEqual(expect.objectContaining({ count: 1, summaries: ['句式生硬'] }))
+    const content = tool.output!.render({ groups } as never, result as never)
+    const meta = tool.output!.presentationMeta!({ groups } as never, result as never)
+    expect(content).toEqual([{ type: 'text', text: '审查批注已生成 · 1 处\n- 句式生硬' }])
+    expect(tool.presentResult!({ groups } as never, { isError: false, content, meta })).toEqual({
+      card: 'generic',
+      title: '审查批注已生成 · 1 处',
+      content: [{ type: 'text', text: '- 句式生硬' }],
+    })
+  })
+
+  it('第二次 VERSION_CONFLICT 不再重试并原样交还引擎错误，失败卡保留事实', async () => {
+    let currentVersion = 1
+    let annotationCalls = 0
+    const secondConflict = new EngineHttpError(409, {
+      code: 'VERSION_CONFLICT', expected: 2, actual: 3, nextStep: 'read-latest',
+    })
+    const fixture = harness(async (path) => {
+      if (path.endsWith('/doc?format=qingml')) return editingDoc(currentVersion)
+      if (path.endsWith('/review/annotations')) {
+        annotationCalls += 1
+        if (annotationCalls === 1) {
+          currentVersion = 2
+          throw new EngineHttpError(409, { code: 'VERSION_CONFLICT', expected: 1, actual: 2 })
+        }
+        throw secondConflict
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+    markReview(fixture)
+    await fixture.listeners.get('agent/pre-step')!(
+      { agent: { id: 'dsh-1' }, turn: 65 },
+      async () => ({ kind: 'enter', messages: [] }),
+    )
+    await fixture.tools.get('qing_read_draft')!.execute(
+      { mode: 'full' },
+      exec(undefined, 'annotate-read-second-conflict', 'qing_read_draft'),
+    )
+    const tool = fixture.tools.get('qing_annotate')!
+    const caught = await tool.execute(
+      { groups },
+      exec(undefined, 'annotate-second-conflict', 'qing_annotate'),
+    ).catch((error: unknown) => error)
+    expect(caught).toBe(secondConflict)
+    expect(annotationCalls).toBe(2)
+    const failureContent = [{ type: 'text' as const, text: 'Error: VERSION_CONFLICT expected 2 actual 3' }]
+    expect(tool.presentResult!({ groups } as never, { isError: true, content: failureContent })).toEqual({
+      card: 'generic', title: '审查批注生成失败', content: failureContent,
+    })
   })
 })
 

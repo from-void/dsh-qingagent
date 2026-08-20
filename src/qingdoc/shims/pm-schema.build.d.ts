@@ -14,6 +14,41 @@ export interface StyleTemplateItem {
   builtin: boolean
 }
 
+export type ReviewType =
+  | 'sensitive'
+  | 'deai'
+  | 'source'
+  | 'consistency'
+  | 'privacy'
+  | 'format'
+  | 'role'
+  | 'custom'
+
+export interface ReviewTemplateItem {
+  id: string
+  type: ReviewType
+  name: string
+  prompt: string
+  builtin: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface LexiconResourceSummary {
+  id: string
+  name: string
+  entryCount: number
+  description: string
+  enabled: boolean
+}
+
+export function assembleReviewQuery(
+  type: ReviewType,
+  template: Pick<ReviewTemplateItem, 'id' | 'name' | 'prompt'>,
+  supplement: string,
+  lexicons?: ReadonlyArray<{ id: string; name: string }>,
+): string
+
 export type AiRunMark =
   | { type: 'bold' | 'italic' | 'underline' | 'strike' | 'strikeThrough' | 'code' | 'math' }
   | { type: 'link'; href: string; title?: string | null }

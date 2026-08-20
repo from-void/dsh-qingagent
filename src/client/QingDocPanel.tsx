@@ -18,7 +18,7 @@ import { buildAnnotationInstruction } from '@qingweb/pages/workspace/components/
 import { DocFindBar } from '@qingweb/pages/workspace/components/DocFindBar'
 import { DocToolbar } from '@qingweb/pages/workspace/components/DocToolbar'
 import { PatchNav } from '@qingweb/pages/workspace/components/PatchNav'
-import { DeaiReviewModal } from '@qingweb/pages/workspace/components/DeaiReviewModal'
+import { ReviewLaunchModal } from '@qingweb/pages/workspace/components/ReviewLaunchModal'
 import { QingLoading } from '@qingweb/pages/workspace/components/QingLoading'
 import { ReviewIcon, ReviewMenu } from '@qingweb/pages/workspace/components/ReviewMenu'
 import type { AiModifyTarget } from '@qingweb/pages/workspace/data/aiModifyTarget'
@@ -33,7 +33,7 @@ import { pmDocToViewDocumentSnapshot } from '@qingweb/pages/workspace/data/proto
 import { canUseDocumentEditing } from '@qingweb/pages/workspace/data/reviewActions'
 import { useWorkspaceFind } from '@qingweb/pages/workspace/hooks/useWorkspaceFind'
 import type { PmDoc } from '@qingagent/pm-schema'
-import type { StyleTemplateItem } from '@qingagent/contract-ts'
+import type { LexiconResourceSummary, ReviewTemplateItem } from '@qingagent/contract-ts'
 import {
   encodeAssetBridgeContext,
   type AssetBridgeContext,
@@ -74,7 +74,6 @@ export { computeExternalReviewChangeRatio } from '../reviewMode.js'
 export { QingBrandBadge } from './QingBrandBadge.js'
 import {
   assembleDshReviewQuery,
-  DSH_DEAI_STYLE_TEMPLATES,
   exportFilename,
   QING_EXPORT_FORMATS,
   type QingExportFormat,
@@ -1691,31 +1690,50 @@ export interface QingDocFunctionsProps {
   onSendMessage?: (dshSessionId: string, text: string) => Promise<void>
 }
 
+async function reviewBridgeJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, init)
+  const body = await response.json().catch(() => undefined) as T | Record<string, unknown> | undefined
+  if (!response.ok) {
+    throw new BridgeHttpError(
+      response.status,
+      body && typeof body === 'object' ? body as Record<string, unknown> : { error: `HTTP ${response.status}` },
+    )
+  }
+  return body as T
+}
+
+function reviewBridgeSessionQuery(props: Pick<QingDocFunctionsProps, 'sessionId' | 'engineSessionId'>): string {
+  return new URLSearchParams({
+    dshSessionId: props.sessionId,
+    engineSessionId: props.engineSessionId,
+  }).toString()
+}
+
 /** 青简纸面原生功能区；组件与 DOM 结构对齐 WorkspaceDocumentPane.tsx:436-522。 */
 export function QingDocFunctions(props: QingDocFunctionsProps) {
   const [reviewMenuOpen, setReviewMenuOpen] = useState(false)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
-  const [deaiOpen, setDeaiOpen] = useState(false)
+  const [reviewLaunchType, setReviewLaunchType] = useState<QingReviewType | null>(null)
+  const [sourceMaterialAvailable, setSourceMaterialAvailable] = useState<boolean | undefined>()
   const [sendingReview, setSendingReview] = useState(false)
-  const [deaiTemplates, setDeaiTemplates] = useState<StyleTemplateItem[]>(
-    () => DSH_DEAI_STYLE_TEMPLATES.map((template) => ({ ...template })),
-  )
   const reviewAnchorRef = useRef<HTMLDivElement>(null)
   const exportAnchorRef = useRef<HTMLDivElement>(null)
-  const customTemplateSequenceRef = useRef(0)
+  const templatesRef = useRef(new Map<string, ReviewTemplateItem>())
+  const lexiconsRef = useRef<LexiconResourceSummary[]>([])
 
   useEffect(() => {
     if (props.reviewDisabledReason) {
       setReviewMenuOpen(false)
-      setDeaiOpen(false)
+      setReviewLaunchType(null)
     }
     if (props.exportDisabledReason) setExportMenuOpen(false)
   }, [props.exportDisabledReason, props.reviewDisabledReason])
 
   const sendReview = useCallback(async (
     type: QingReviewType,
-    supplement = '',
-    template?: Pick<StyleTemplateItem, 'name' | 'prompt'>,
+    template: ReviewTemplateItem,
+    supplement: string,
+    lexicons: LexiconResourceSummary[],
   ) => {
     if (sendingReview) return
     if (!props.onSendMessage) {
@@ -1723,50 +1741,159 @@ export function QingDocFunctions(props: QingDocFunctionsProps) {
       return
     }
     setSendingReview(true)
+    let marked = false
     try {
+      if (type === 'source') {
+        const query = reviewBridgeSessionQuery(props)
+        const materials = await reviewBridgeJson<{ materials: Array<{ parseState?: string }> }>(
+          `/qingagent-bridge/review-materials?${query}`,
+        )
+        if (!materials.materials.some((item) => item.parseState === 'ready')) {
+          props.onToast('当前没有可对照素材，请先添加素材')
+          return
+        }
+      }
+      await reviewBridgeJson('/qingagent-bridge/review-turn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dshSessionId: props.sessionId,
+          type,
+          templateId: template.id,
+          templateName: template.name,
+        }),
+      })
+      marked = true
       await props.onSendMessage(
         props.sessionId,
-        assembleDshReviewQuery(type, supplement, template),
+        assembleDshReviewQuery(type, template, supplement, lexicons),
       )
       props.onToast('审查请求已发给对话')
     } catch (error) {
+      if (marked) {
+        void reviewBridgeJson(
+          `/qingagent-bridge/review-turn?${new URLSearchParams({ dshSessionId: props.sessionId })}`,
+          { method: 'DELETE' },
+        ).catch(() => undefined)
+      }
       props.onToast(error instanceof Error ? error.message : '审查请求发送失败')
     } finally {
       setSendingReview(false)
     }
   }, [props, sendingReview])
 
-  const chooseReview = (type: QingReviewType) => {
+  const chooseReview = async (type: QingReviewType) => {
     setReviewMenuOpen(false)
-    if (type === 'deai') {
-      setDeaiOpen(true)
-      return
+    if (type === 'source') {
+      try {
+        const query = reviewBridgeSessionQuery(props)
+        const materials = await reviewBridgeJson<{ materials: Array<{ parseState?: string }> }>(
+          `/qingagent-bridge/review-materials?${query}`,
+        )
+        setSourceMaterialAvailable(materials.materials.some((item) => item.parseState === 'ready'))
+      } catch (error) {
+        props.onToast(error instanceof Error ? error.message : '素材状态读取失败')
+        return
+      }
+    } else {
+      setSourceMaterialAvailable(undefined)
     }
-    void sendReview(type)
+    setReviewLaunchType(type)
   }
 
-  const loadDeaiTemplates = useCallback(async () => deaiTemplates, [deaiTemplates])
-  const loadDeaiTemplate = useCallback(async (id: string) => {
-    const template = deaiTemplates.find((item) => item.id === id)
-    if (!template) throw new Error('模板不存在')
-    return template
-  }, [deaiTemplates])
-  const saveDeaiTemplate = useCallback(async (input: {
+  const loadTemplates = useCallback(async (type: QingReviewType) => {
+    const result = await reviewBridgeJson<{ templates: Array<ReviewTemplateItem & { selected?: boolean }> }>(
+      `/qingagent-bridge/review-templates?${new URLSearchParams({ type })}`,
+    )
+    templatesRef.current = new Map(result.templates.map((template) => [template.id, template]))
+    return {
+      items: result.templates,
+      selectedTemplateId: result.templates.find((template) => template.selected)?.id ?? null,
+    }
+  }, [])
+
+  const saveTemplate = useCallback(async (input: {
+    id?: string
+    type: QingReviewType
     name: string
-    detail: string
     prompt: string
   }) => {
-    const saved: StyleTemplateItem = {
-      id: `dsh-deai-custom-${++customTemplateSequenceRef.current}`,
-      dtype: 'deai',
-      slot: 'instruction',
-      name: input.name,
-      detail: input.detail,
-      prompt: input.prompt,
-      builtin: false,
-    }
-    setDeaiTemplates((templates) => [...templates, saved])
-    return saved
+    const expectedUpdatedAt = input.id ? templatesRef.current.get(input.id)?.updatedAt : undefined
+    const result = await reviewBridgeJson<{ template: ReviewTemplateItem }>(
+      '/qingagent-bridge/review-templates',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...input, ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}) }),
+      },
+    )
+    templatesRef.current.set(result.template.id, result.template)
+    return result.template
+  }, [])
+
+  const deleteTemplate = useCallback(async (id: string) => {
+    await reviewBridgeJson(
+      `/qingagent-bridge/review-templates?${new URLSearchParams({ templateId: id })}`,
+      { method: 'DELETE' },
+    )
+    templatesRef.current.delete(id)
+    return null
+  }, [])
+
+  const selectTemplate = useCallback(async (type: QingReviewType, templateId: string) => {
+    await reviewBridgeJson('/qingagent-bridge/review-templates/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, templateId }),
+    })
+  }, [])
+
+  const supplementUrl = useCallback((type: QingReviewType, templateId?: string) => {
+    const query = new URLSearchParams({
+      dshSessionId: props.sessionId,
+      engineSessionId: props.engineSessionId,
+      type,
+    })
+    if (templateId) query.set('templateId', templateId)
+    return `/qingagent-bridge/review-supplement?${query}`
+  }, [props.engineSessionId, props.sessionId])
+
+  const loadSupplement = useCallback(async (type: QingReviewType, templateId?: string) => {
+    const result = await reviewBridgeJson<{ supplement: string }>(supplementUrl(type, templateId))
+    return result.supplement
+  }, [supplementUrl])
+
+  const saveSupplement = useCallback(async (
+    type: QingReviewType,
+    supplement: string,
+    templateId?: string,
+  ) => {
+    const result = await reviewBridgeJson<{ supplement: string }>(supplementUrl(type, templateId), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ supplement }),
+    })
+    return result.supplement
+  }, [supplementUrl])
+
+  const loadLexicons = useCallback(async () => {
+    const result = await reviewBridgeJson<{
+      lexicons: Array<{ id: string; name: string; entryCount: number; enabled: boolean }>
+    }>('/qingagent-bridge/lexicons')
+    const lexicons = result.lexicons.map((lexicon) => ({ ...lexicon, description: '' }))
+    lexiconsRef.current = lexicons
+    return lexicons
+  }, [])
+
+  // external 词库为只读；此处只回写本次弹窗的瞬态选择，不持久化。
+  const saveLexiconSelection = useCallback(async (enabledLexiconIds: string[]) => {
+    const enabled = new Set(enabledLexiconIds)
+    const lexicons = lexiconsRef.current.map((lexicon) => ({
+      ...lexicon,
+      enabled: enabled.has(lexicon.id),
+    }))
+    lexiconsRef.current = lexicons
+    return lexicons
   }, [])
 
   return (
@@ -1793,14 +1920,14 @@ export function QingDocFunctions(props: QingDocFunctionsProps) {
             <ReviewMenu
               anchorRef={reviewAnchorRef}
               onClose={() => setReviewMenuOpen(false)}
-              onSensitiveReview={() => chooseReview('sensitive')}
-              onDeaiReview={() => chooseReview('deai')}
-              onSourceCheck={() => chooseReview('source')}
-              onConsistencyReview={() => chooseReview('consistency')}
-              onPrivacyReview={() => chooseReview('privacy')}
-              onFormatReview={() => chooseReview('format')}
-              onRoleReview={() => chooseReview('role')}
-              onCustomReview={() => chooseReview('custom')}
+              onSensitiveReview={() => { void chooseReview('sensitive') }}
+              onDeaiReview={() => { void chooseReview('deai') }}
+              onSourceCheck={() => { void chooseReview('source') }}
+              onConsistencyReview={() => { void chooseReview('consistency') }}
+              onPrivacyReview={() => { void chooseReview('privacy') }}
+              onFormatReview={() => { void chooseReview('format') }}
+              onRoleReview={() => { void chooseReview('role') }}
+              onCustomReview={() => { void chooseReview('custom') }}
             />
           ) : null}
         </div>
@@ -1835,17 +1962,28 @@ export function QingDocFunctions(props: QingDocFunctionsProps) {
           ) : null}
         </div>
       </div>
-      <DeaiReviewModal
-        open={deaiOpen}
-        loadTemplates={loadDeaiTemplates}
-        loadTemplate={loadDeaiTemplate}
-        saveTemplate={saveDeaiTemplate}
-        onClose={() => setDeaiOpen(false)}
-        onConfirm={(template, supplement) => {
-          setDeaiOpen(false)
-          void sendReview('deai', supplement, template)
-        }}
-      />
+      {reviewLaunchType ? (
+        <ReviewLaunchModal
+          open
+          type={reviewLaunchType}
+          documentTitle={props.title}
+          loadTemplates={loadTemplates}
+          saveTemplate={saveTemplate}
+          deleteTemplate={deleteTemplate}
+          selectTemplate={selectTemplate}
+          loadSupplement={loadSupplement}
+          saveSupplement={saveSupplement}
+          loadLexicons={loadLexicons}
+          saveLexiconSelection={saveLexiconSelection}
+          sourceMaterialAvailable={reviewLaunchType === 'source' ? sourceMaterialAvailable : undefined}
+          onClose={() => setReviewLaunchType(null)}
+          onConfirm={(template, supplement, lexicons) => {
+            const type = reviewLaunchType
+            setReviewLaunchType(null)
+            void sendReview(type, template, supplement, lexicons)
+          }}
+        />
+      ) : null}
     </>
   )
 }
