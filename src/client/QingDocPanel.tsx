@@ -86,6 +86,7 @@ import './QingDocPanel.css'
 interface InjectedProps {
   qingLayout: ILayout
   qingSendMessage?: (dshSessionId: string, text: string) => Promise<void>
+  qingInsertAnnotation?: (instruction: string) => boolean
 }
 
 export type QingDocPanelProps = PropsRuntime<'details'> & InjectedProps
@@ -1373,15 +1374,17 @@ export function QingDocPanel(props: QingDocPanelProps) {
               annotations={annotations}
               editor={tiptapEditor}
               onAccept={(group, suggestion) => {
-                if (!props.qingSendMessage || turnRunningEffective) {
+                if (!props.qingInsertAnnotation || turnRunningEffective) {
                   setToast('输入框当前不可用，请稍后再回填批注')
                   return false
                 }
-                void props.qingSendMessage(
-                  sessionId,
+                const inserted = props.qingInsertAnnotation(
                   buildAnnotationInstruction(group, suggestion),
-                ).catch(() => setToast('批注意见回填失败，请重试'))
-                return true
+                )
+                setToast(inserted
+                  ? '已填入修改要求，请点击发送'
+                  : '输入框当前不可用，请稍后再回填批注')
+                return inserted
               }}
               onIgnore={(group) => {
                 if (!activeEngineSessionId || !panelDoc) {
