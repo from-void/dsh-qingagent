@@ -11,6 +11,8 @@ import {
   QingEditToolCard,
   QingFocusToolCard,
   QingListDocsToolCard,
+  QingListMaterialsToolCard,
+  QingReadMaterialToolCard,
   QingReadToolCard,
   QingReviewCommitToolCard,
 } from './QingToolCard.js'
@@ -293,6 +295,16 @@ export function apply(ctx: ClientContext): void {
     key: 'qing_read_draft',
     inject: () => ({ qingLayout: layout }),
   }, QingReadToolCard))
+  slots.inject('tool.call.toolview', () => slots.register({
+    name: 'tool.call.toolview',
+    key: 'qing_list_materials',
+    inject: () => ({ qingLayout: layout }),
+  }, QingListMaterialsToolCard))
+  slots.inject('tool.call.toolview', () => slots.register({
+    name: 'tool.call.toolview',
+    key: 'qing_read_material',
+    inject: () => ({ qingLayout: layout }),
+  }, QingReadMaterialToolCard))
   slots.inject('tool.call.toolview', () => slots.register({
     name: 'tool.call.toolview',
     key: 'qing_list_docs',

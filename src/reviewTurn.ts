@@ -14,6 +14,7 @@ export interface PendingReviewTurn {
   type: ReviewTurnType
   templateId: string
   templateName: string
+  targetEngineSessionId: string
 }
 
 export interface ActiveReviewTurn extends PendingReviewTurn {
@@ -43,10 +44,14 @@ export function parseReviewTurn(input: unknown): PendingReviewTurn {
   if (typeof value.templateName !== 'string' || !value.templateName.trim()) {
     throw new Error('templateName 必须是非空字符串。')
   }
+  if (typeof value.engineSessionId !== 'string' || !value.engineSessionId.trim()) {
+    throw new Error('engineSessionId 必须是非空字符串。')
+  }
   return {
     type: value.type as ReviewTurnType,
     templateId: value.templateId,
     templateName: value.templateName,
+    targetEngineSessionId: value.engineSessionId.trim(),
   }
 }
 

@@ -4,7 +4,11 @@ import { resolve } from 'node:path'
 import { act, type ComponentProps } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { QingEditToolCard } from '../src/client/QingToolCard.js'
+import {
+  QingEditToolCard,
+  QingListMaterialsToolCard,
+  QingReadMaterialToolCard,
+} from '../src/client/QingToolCard.js'
 import { failureSummary, QingWriteToolCard } from '../src/client/QingWriteToolCard.js'
 import { qingClientStore } from '../src/client/store.js'
 import {
@@ -168,6 +172,30 @@ describe('Qing write/edit tool card view navigation', () => {
       ))
       expect(host.textContent).toContain('修改未完成')
       expect(host.textContent).toContain('真实编辑失败')
+    } finally {
+      act(() => root.unmount())
+      host.remove()
+    }
+  })
+
+  it('素材工具卡显示清单数量与素材名称，且不提供文稿查看入口', () => {
+    stubBackgroundLoads()
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+
+    try {
+      act(() => root.render(
+        <QingListMaterialsToolCard {...props('materials-card', { count: 2 }) as unknown as ComponentProps<typeof QingListMaterialsToolCard>} />,
+      ))
+      expect(host.textContent).toContain('已读取素材清单 · 2 份')
+      expect(host.querySelector('button')).toBeNull()
+
+      act(() => root.render(
+        <QingReadMaterialToolCard {...props('materials-card', { title: '访谈记录.txt' }) as unknown as ComponentProps<typeof QingReadMaterialToolCard>} />,
+      ))
+      expect(host.textContent).toContain('已读取素材《访谈记录.txt》')
+      expect(host.querySelector('button')).toBeNull()
     } finally {
       act(() => root.unmount())
       host.remove()

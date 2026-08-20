@@ -17,11 +17,16 @@ describe('assembleDshReviewQuery', () => {
       ? [{ id: 'lexicon-ad', name: '广告合规' }, { id: 'lexicon-privacy', name: '隐私词' }]
       : []
     const supplement = '重点检查数字与称谓。'
-    const expected = assembleReviewQuery(type, template, supplement, lexicons)
+    const sourceGuide = '素材读取用 qing_list_materials / qing_read_material;素材引文 materialQuote 必须逐字来自素材文本'
+    const independentContract = '\n独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）'
+    const expectedBase = assembleReviewQuery(type, template, supplement, lexicons)
       .replaceAll('create_annotation_groups', 'qing_annotate')
       .replaceAll('readDraft', 'qing_read_draft')
       .replaceAll('editDraft', 'qing_edit_draft')
       .replaceAll('writeDraft', 'qing_write_draft')
+    const expected = type === 'source'
+      ? expectedBase.replace(independentContract, `\n${sourceGuide}${independentContract}`)
+      : expectedBase
     const actual = assembleDshReviewQuery(type, template, supplement, lexicons)
 
     expect(actual).toBe(expected)
@@ -30,6 +35,7 @@ describe('assembleDshReviewQuery', () => {
     expect(actual).toContain('qing_annotate')
     expect(actual).not.toMatch(/\b(?:readDraft|create_annotation_groups|editDraft|writeDraft)\b/)
     expect(actual).not.toContain('【执行方式】')
+    expect(actual.includes(sourceGuide)).toBe(type === 'source')
     expect(actual).toMatchSnapshot()
   })
 })

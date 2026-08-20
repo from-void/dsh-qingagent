@@ -155,8 +155,15 @@ describe('青简纸面审查/导出入口', () => {
       await Promise.resolve()
     })
     await vi.waitFor(() => expect(host.querySelector('[data-wf="ReviewLaunchModal"]')).not.toBeNull())
+    // 弹窗打开后切到另一稿，确认请求仍必须携带弹窗发起瞬间的目标稿。
+    renderFunctions({
+      engineSessionId: 'qing-switched-after-modal',
+      title: '后来切换的稿',
+      onSendMessage,
+    })
     const confirm = [...host.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
       .find((button) => button.textContent === '开始核查')!
+    await vi.waitFor(() => expect(confirm.disabled).toBe(false))
     await act(async () => {
       confirm.click()
       await Promise.resolve()
@@ -167,6 +174,12 @@ describe('青简纸面审查/导出入口', () => {
     expect(onSendMessage.mock.calls[0]?.[0]).toBe('dsh-docfns')
     expect(onSendMessage.mock.calls[0]?.[1]).toContain('对当前文档做来源核查。')
     expect(onSendMessage.mock.calls[0]?.[1]).toContain('qing_read_draft')
+    const reviewTurnCall = fetchMock.mock.calls.find(([input]) =>
+      new URL(String(input), 'http://localhost').pathname === '/qingagent-bridge/review-turn')
+    expect(JSON.parse(String(reviewTurnCall?.[1]?.body))).toMatchObject({
+      dshSessionId: 'dsh-docfns',
+      engineSessionId: 'qing-docfns',
+    })
     const paths = fetchMock.mock.calls.map(([input]) => new URL(String(input), 'http://localhost').pathname)
     expect(paths.filter((path) => path.endsWith('/review-materials'))).toHaveLength(2)
     expect(paths.indexOf('/qingagent-bridge/review-turn')).toBeLessThan(paths.length)

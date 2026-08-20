@@ -75,6 +75,12 @@ describe('client details 动态占槽', () => {
     } as unknown as Context
 
     apply(ctx)
+    const toolCardKeys = slots.register.mock.calls.map(([options]) =>
+      (options as { key?: string }).key).filter(Boolean)
+    expect(toolCardKeys).toEqual(expect.arrayContaining([
+      'qing_list_materials',
+      'qing_read_material',
+    ]))
     expect(inputTriggers.registerSource).toHaveBeenCalledWith(expect.objectContaining({
       name: 'qingagent-selection',
       codec: expect.any(Object),

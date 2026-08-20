@@ -14,17 +14,26 @@ export interface DshReviewTemplate {
   prompt: string
 }
 
+const SOURCE_MATERIAL_TOOL_GUIDE = '素材读取用 qing_list_materials / qing_read_material;素材引文 materialQuote 必须逐字来自素材文本'
+const INDEPENDENT_REVIEW_CONTRACT = '\n独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）'
+
 export function assembleDshReviewQuery(
   type: QingReviewType,
   template: DshReviewTemplate,
   supplement: string,
   lexicons: ReadonlyArray<{ id: string; name: string }> = [],
 ): string {
-  return assembleReviewQuery(type, template, supplement, lexicons)
+  const query = assembleReviewQuery(type, template, supplement, lexicons)
     .replaceAll('create_annotation_groups', 'qing_annotate')
     .replaceAll('readDraft', 'qing_read_draft')
     .replaceAll('editDraft', 'qing_edit_draft')
     .replaceAll('writeDraft', 'qing_write_draft')
+  return type === 'source'
+    ? query.replace(
+        INDEPENDENT_REVIEW_CONTRACT,
+        `\n${SOURCE_MATERIAL_TOOL_GUIDE}${INDEPENDENT_REVIEW_CONTRACT}`,
+      )
+    : query
 }
 
 export interface QingExportFormat {

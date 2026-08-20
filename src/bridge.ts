@@ -721,6 +721,9 @@ export class BridgeHub {
         } catch (error) {
           throw new HttpInputError(error instanceof Error ? error.message : '审查回合参数无效。')
         }
+        if (!this.bindings.hasDoc(dshSessionId, review.targetEngineSessionId)) {
+          throw new HttpInputError('engineSessionId 不属于当前 DSH 会话。')
+        }
         reviewTurnCoordinatorFor(this.engine).markPending(dshSessionId, review)
         writeJson(response, 200, { pending: true })
         return
