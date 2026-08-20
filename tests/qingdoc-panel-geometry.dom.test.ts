@@ -123,6 +123,30 @@ describe('B9 面板层级与几何 DOM 契约', () => {
     expect(getComputedStyle(host).getPropertyValue('--bg-paper-deep').trim()).toBe('#efe7d6')
   })
 
+  it('P89:drawio / mermaid / 媒体全屏均脱离纸面滚动流并固定覆盖视口', () => {
+    panelRoot('<div class="ws-body"><main class="ws-right"></main></div>')
+    const drawioHost = document.createElement('div')
+    drawioHost.dataset.drawioEditorHost = 'true'
+    drawioHost.innerHTML = '<div class="drawio-editor-overlay"></div>'
+    const mermaidViewer = document.createElement('div')
+    mermaidViewer.className = 'graph-diagram-viewer'
+    const mediaViewer = document.createElement('div')
+    mediaViewer.className = 'media-zoom-fullscreen'
+    document.body.append(drawioHost, mermaidViewer, mediaViewer)
+
+    for (const overlay of [
+      drawioHost.querySelector<HTMLElement>('.drawio-editor-overlay')!,
+      mermaidViewer,
+      mediaViewer,
+    ]) {
+      const style = getComputedStyle(overlay)
+      expect(overlay.closest('.ws-right')).toBeNull()
+      expect(style.position).toBe('fixed')
+      expect(style.inset).toBe('0')
+      expect(Number(style.zIndex)).toBeGreaterThan(100080)
+    }
+  })
+
   it('P87:媒体工具和图表操作按钮使用客户端声明的计算字号', () => {
     const root = panelRoot(`
       <button class="pm-image-tool">居中</button>

@@ -36,14 +36,25 @@ polyfillLayout()
 let host: HTMLElement
 let root: Root
 let paperStyle: HTMLStyleElement
+let panelStyle: HTMLStyleElement
 
 beforeEach(async () => {
   paperStyle = document.createElement('style')
   paperStyle.textContent = await readFile('src/qingdoc/qingdoc.css', 'utf8')
   document.head.append(paperStyle)
+  panelStyle = document.createElement('style')
+  panelStyle.textContent = await readFile('src/client/QingDocPanel.css', 'utf8')
+  document.head.append(panelStyle)
   host = document.createElement('section')
   host.dataset.qingagentDocPanel = ''
-  host.innerHTML = '<div class="ws-right"><div id="mount"></div></div>'
+  host.innerHTML = `
+    <div class="ws-body">
+      <main class="ws-right">
+        <div class="ws-paper-shell" aria-hidden="true"></div>
+        <div class="ws-document-content" id="mount"></div>
+      </main>
+    </div>
+  `
   document.body.append(host)
   root = createRoot(host.querySelector('#mount')!)
 })
@@ -52,6 +63,7 @@ afterEach(() => {
   act(() => root.unmount())
   host.remove()
   paperStyle.remove()
+  panelStyle.remove()
   window.localStorage.clear()
   vi.restoreAllMocks()
   vi.useRealTimers()
@@ -80,6 +92,76 @@ function renderFixture(interactiveEditable: boolean): void {
       />,
     )
   })
+}
+
+const LONG_PM_DOC = {
+  type: 'doc',
+  attrs: { schemaVersion: 1 },
+  content: [
+    {
+      type: 'heading',
+      attrs: { blockId: 'long-0', level: 1 },
+      content: [{ type: 'text', text: '长文第 1 块：纸面布局回归标题' }],
+    },
+    ...Array.from({ length: 13 }, (_, index) => ({
+      type: 'paragraph' as const,
+      attrs: { blockId: `long-${index + 1}` },
+      content: [{ type: 'text' as const, text: `长文第 ${index + 2} 块：用于验证纸面自然高度与外层滚动归属。` }],
+    })),
+  ],
+} satisfies PmDoc
+
+const SHORT_PM_DOC = {
+  type: 'doc',
+  attrs: { schemaVersion: 1 },
+  content: Array.from({ length: 2 }, (_, index) => ({
+    type: 'paragraph',
+    attrs: { blockId: `short-${index}` },
+    content: [{ type: 'text', text: `短文第 ${index + 1} 块` }],
+  })),
+} satisfies PmDoc
+
+function renderPmDoc(pmDoc: PmDoc, wrapper?: 'review'): void {
+  const view = (
+    <DocumentSnapshotView
+      doc={{ version: 1, ts: '2026-08-20T00:00:00.000Z', sections: [], pmDoc }}
+      docId="dsh-layout:dom-test"
+      editable
+      interactiveEditable={false}
+      showPatches={false}
+      acceptedPatches={new Set()}
+      rejectedPatches={new Set()}
+    />
+  )
+  act(() => root.render(wrapper === 'review' ? <div className="wdr-swap">{view}</div> : view))
+}
+
+function setMeasuredHeight(element: HTMLElement, height: number): void {
+  element.getBoundingClientRect = () => DOMRect.fromRect({ width: 468, height })
+}
+
+function setScrollMetrics(element: HTMLElement, clientHeight: number, scrollHeight: number): void {
+  Object.defineProperties(element, {
+    clientHeight: { configurable: true, value: clientHeight },
+    scrollHeight: { configurable: true, value: scrollHeight },
+  })
+}
+
+function hasNonClippingPaperLayout(rootElement: HTMLElement): boolean {
+  const paperShell = rootElement.querySelector<HTMLElement>('.ws-paper-shell')!
+  const proseMirror = rootElement.querySelector<HTMLElement>('.ProseMirror')!
+  if (paperShell.getBoundingClientRect().height >= proseMirror.getBoundingClientRect().height) return true
+
+  let ancestor = proseMirror.parentElement
+  while (ancestor && rootElement.contains(ancestor)) {
+    const overflowY = getComputedStyle(ancestor).overflowY
+    if (
+      (overflowY === 'auto' || overflowY === 'scroll')
+      && ancestor.scrollHeight > ancestor.clientHeight
+    ) return true
+    ancestor = ancestor.parentElement
+  }
+  return false
 }
 
 describe('青简 DocumentSnapshotView fixture', () => {
@@ -117,6 +199,46 @@ describe('青简 DocumentSnapshotView fixture', () => {
     expect(readonlyPaper).toBe(editablePaper)
     expect(readonlyPaper?.getAttribute('contenteditable')).toBe('false')
     expect(host.querySelectorAll('.wf-doc.ProseMirror')).toHaveLength(1)
+  })
+
+  it('长文超过一屏时包装层不收缩，纸面由 .ws-right 承担纵向滚动', async () => {
+    host.dataset.wsState = 'revealing'
+    renderPmDoc(LONG_PM_DOC)
+    await flushEditor()
+
+    const proseMirror = host.querySelector<HTMLElement>('.wf-doc.ProseMirror')!
+    const presentationShell = host.querySelector<HTMLElement>('.native-presentation-shell')!
+    const scrollContainer = host.querySelector<HTMLElement>('.ws-right')!
+    const paperShell = host.querySelector<HTMLElement>('.ws-paper-shell')!
+    expect(proseMirror.children.length).toBeGreaterThan(10)
+    expect(getComputedStyle(presentationShell).flexShrink).toBe('0')
+    expect(getComputedStyle(scrollContainer).overflowY).toBe('auto')
+
+    // 固化 0.1.35 真机量级：纸壳一屏 668px，正文 2107px；修复后外层必须
+    // 把完整正文计入 scrollHeight，而不是让可见溢出在祖先处被裁掉。
+    setMeasuredHeight(paperShell, 668)
+    setMeasuredHeight(proseMirror, 2107)
+    setScrollMetrics(scrollContainer, 668, 2107)
+    expect(hasNonClippingPaperLayout(host)).toBe(true)
+  })
+
+  it('短文与整篇审阅包装同样不会形成“纸矮于正文且不可滚”的组合', async () => {
+    renderPmDoc(SHORT_PM_DOC)
+    await flushEditor()
+
+    const proseMirror = host.querySelector<HTMLElement>('.wf-doc.ProseMirror')!
+    const paperShell = host.querySelector<HTMLElement>('.ws-paper-shell')!
+    const scrollContainer = host.querySelector<HTMLElement>('.ws-right')!
+    setMeasuredHeight(paperShell, 668)
+    setMeasuredHeight(proseMirror, 420)
+    setScrollMetrics(scrollContainer, 668, 668)
+    expect(hasNonClippingPaperLayout(host)).toBe(true)
+
+    renderPmDoc(LONG_PM_DOC, 'review')
+    await flushEditor()
+    const reviewWrapper = host.querySelector<HTMLElement>('.wdr-swap')!
+    expect(getComputedStyle(reviewWrapper).flexShrink).toBe('0')
+    expect(host.querySelectorAll('.wf-doc.ProseMirror > *').length).toBeGreaterThan(10)
   })
 
   it('本地快打字按 400ms trailing 合并，baseline 冻结在第一笔事务发生时', async () => {
