@@ -118,7 +118,7 @@ describe('批注 reference 标签与 source', () => {
       reference: {
         source: QING_ANNOTATION_REFERENCE_SOURCE,
         ref: '改准事实',
-        label: '按批注修改:改准事实',
+        label: '①按批注修改:改准事实',
         clipboardText: '改准事实',
       },
       span: { start: 1, end: 1, draftRev: 7 },
@@ -219,7 +219,7 @@ describe('occurrence 草稿操作', () => {
       reference: {
         source: QING_ANNOTATION_REFERENCE_SOURCE,
         ref: '请改为新事实',
-        label: '按批注修改:请改为新事实',
+        label: '①按批注修改:请改为新事实',
         clipboardText: '请改为新事实',
       },
       span: { start: 1, end: 1, draftRev: 31 },
@@ -238,7 +238,7 @@ describe('occurrence 草稿操作', () => {
       '一二三四五六七八九十一二三四五六',
     )).toBe(true)
     expect(selectionHarness.bail.mock.calls[0]?.[2].reference.label)
-      .toBe('一二三四五六七八九十一二三四…')
+      .toBe('①一二三四五六七八九十一二三四…')
 
     const foreign = occurrence(22, 0, '外部', { source: 'foreign-source' })
     const foreignHarness = contextHarness(inputState('\uFFFC', [foreign]))
@@ -284,10 +284,16 @@ describe('occurrence 草稿操作', () => {
 
 
 describe('dedupeAnnotationLabel', () => {
-  it('同标签冲突时缀·N 保证投影唯一;无冲突原样返回', async () => {
+  it('序号前置,任意两枚 label 首字符即分叉(互不为前缀)', async () => {
     const { dedupeAnnotationLabel } = await import('../src/client/annotationReference.js')
-    expect(dedupeAnnotationLabel('按批注修改:活动时间…', [])).toBe('按批注修改:活动时间…')
-    expect(dedupeAnnotationLabel('按批注修改:活动时间…', ['按批注修改:活动时间…'])).toBe('按批注修改:活动时间…·2')
-    expect(dedupeAnnotationLabel('按批注修改:活动时间…', ['按批注修改:活动时间…', '按批注修改:活动时间…·2'])).toBe('按批注修改:活动时间…·3')
+    const first = dedupeAnnotationLabel('按批注修改:活动时间…', [])
+    expect(first).toBe('①按批注修改:活动时间…')
+    const second = dedupeAnnotationLabel('按批注修改:活动时间…', [first])
+    expect(second).toBe('②按批注修改:活动时间…')
+    // 互不为前缀:首字符不同
+    expect(second.startsWith(first)).toBe(false)
+    expect(first.startsWith(second)).toBe(false)
+    const third = dedupeAnnotationLabel('别的指令', [first, second])
+    expect(third.charAt(0)).toBe('③')
   })
 })

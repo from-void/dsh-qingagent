@@ -28,14 +28,15 @@ export function annotationReferenceLabel(instruction: string): string {
   return previewLabel(`按批注修改:${summary}`)
 }
 
-/** 同标签会让草稿投影文本完全一致,替换某枚时 setDraft 的 diff 无法区分删的是哪一枚,
- *  会把相邻 occurrence 的载荷串绑/吞掉(评测 r2 席3)。冲突时给 label 缀「·N」保证投影唯一。 */
+const CIRCLED_NUMBERS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩', '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳'] as const
+
+/** 多枚批注 chip 的投影文本必须互不为前缀:尾缀「·N」不行(@X 仍是 @X·2 的前缀),
+ *  setDraft 的 diff 依旧歧义,替换某枚时会把相邻 occurrence 吞掉(评测 r2 席3 两轮实证)。
+ *  改为序号前置——首字符即分叉,任意两枚互不为前缀;序号取未被占用的最小圈号。 */
 export function dedupeAnnotationLabel(label: string, takenLabels: readonly string[]): string {
-  if (!takenLabels.includes(label)) return label
-  for (let n = 2; ; n += 1) {
-    const candidate = `${label}·${n}`
-    if (!takenLabels.includes(candidate)) return candidate
-  }
+  const taken = new Set(takenLabels.map((existing) => existing.charAt(0)))
+  const circled = CIRCLED_NUMBERS.find((mark) => !taken.has(mark)) ?? `#${takenLabels.length + 1}`
+  return `${circled}${label}`
 }
 
 function createAnnotationReference(instruction: string, takenLabels: readonly string[]): ReferenceInsert {
