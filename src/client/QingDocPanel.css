@@ -16,6 +16,19 @@
   margin-inline: 0;
 }
 
+/* 纸面滚动归属与青简 WorkspacePage 一致：.ws-right 是唯一纵向滚动容器。
+   DocumentSnapshotView 的可编辑分支会额外包一层 .native-presentation-shell，
+   整篇审阅又会再包 .wdr-swap；二者经 .ws-document-content{display:contents}
+   成为 .ws-right 的直接 flex 子项。若保持默认 flex-shrink:1，长文会被压成
+   一屏高，内部 ProseMirror 只以 overflow:visible 溢出，滚动容器拿不到正文
+   的真实高度。复用原生播放态已有的 flex:none 口径，让纸面按内容自然增高。 */
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .native-presentation-shell,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .wdr-swap {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+}
+
 /* P85:青简生成 CSS 中块手柄/正文浮层的最高层级当前为 100070。
    顶栏必须高于该上限；vendor 若抬高手柄层级，契约测试会提示同步抬高这里。 */
 [data-qingagent-doc-panel] .qingdoc-stage-controls {
