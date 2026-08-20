@@ -7,9 +7,8 @@ import type { QingSelection } from '../contracts.js'
 
 export const QING_SELECTION_REFERENCE_SOURCE = 'qingagent-selection'
 
-// 宿主 chip 是定宽单字符单元(U+FFFC 专用字体),label 绝对居中 overflow:hidden 硬裁,
-// 视觉预算约 6 个汉字——前缀会挤掉正文,label 只放引文头 5 字+省略号,完整内容走 hover title。
-const PREVIEW_LENGTH = 5
+// 选区与批注共用同一段 chip label 预览预算，完整内容仍由 ref 与 hover 承载。
+export const CHIP_LABEL_PREVIEW_LENGTH = 14
 
 /**
  * 模型侧的选段表示。ref 自身携带文稿、块与字符范围，不能依赖 bridge 中稍后会清掉的
@@ -24,7 +23,9 @@ export function selectionReferenceText(selection: QingSelection, title?: string 
 
 export function selectionReferenceLabel(quote: string): string {
   const plain = quote.replace(/\s+/g, ' ').trim()
-  return plain.length > PREVIEW_LENGTH ? `${plain.slice(0, PREVIEW_LENGTH)}…` : plain
+  return plain.length > CHIP_LABEL_PREVIEW_LENGTH
+    ? `${plain.slice(0, CHIP_LABEL_PREVIEW_LENGTH)}…`
+    : plain
 }
 
 export function createSelectionReference(

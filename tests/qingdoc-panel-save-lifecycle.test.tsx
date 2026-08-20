@@ -4,6 +4,8 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DocWriteBaseline } from '@qingweb/pages/workspace/data/docWriteBaseline'
+import { buildAnnotationInstruction } from '@qingweb/pages/workspace/components/AnnotationCarousel'
+import type { AnnotationGroup } from '@qingagent/contract-ts'
 import type {
   BridgeEvent,
   DocSuggestion,
@@ -35,6 +37,7 @@ const viewHarness = vi.hoisted(() => ({
 }))
 const patchNavHarness = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }))
 const toolbarHarness = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }))
+const annotationCarouselHarness = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }))
 
 vi.mock('@qingweb/pages/workspace/components/DocumentSnapshotView', async () => {
   const React = await import('react')
@@ -100,6 +103,16 @@ vi.mock('@qingweb/pages/workspace/components/DocToolbar', async () => {
         'data-active': String(props.active === true),
         'data-session-id': String(props.sessionId ?? ''),
       })
+    },
+  }
+})
+
+vi.mock('../src/client/annotationCarousel.js', async () => {
+  const React = await import('react')
+  return {
+    QingAnnotationCarousel: (props: Record<string, unknown>) => {
+      annotationCarouselHarness.props = props
+      return React.createElement('div', { 'data-testid': 'mock-annotation-carousel' })
     },
   }
 })
@@ -173,6 +186,7 @@ afterEach(() => {
   viewHarness.props = null
   patchNavHarness.props = null
   toolbarHarness.props = null
+  annotationCarouselHarness.props = null
   FakeEventSource.instances = []
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
@@ -180,6 +194,53 @@ afterEach(() => {
 })
 
 describe('QingDocPanel 保存生命周期', () => {
+  it('采纳批注只调用 qingInsertAnnotation 插入 chip，并按结果提示用户', async () => {
+    installBridgeFetch('dsh-annotation-chip', ['qing-annotation-chip'])
+    const qingSendMessage = vi.fn(async () => undefined)
+    const qingInsertAnnotation = vi.fn(() => true)
+    renderPanel('dsh-annotation-chip', qingSendMessage, qingInsertAnnotation)
+    const onAccept = await vi.waitFor(() => {
+      expect(annotationCarouselHarness.props?.onAccept).toBeTypeOf('function')
+      return annotationCarouselHarness.props!.onAccept as (
+        group: AnnotationGroup,
+        suggestion: string,
+      ) => boolean
+    })
+    const group: AnnotationGroup = {
+      id: 'annotation-chip',
+      summary: '事实有误',
+      note: '发布日期不准确',
+      origin: 'source-check',
+      suggestion: '改为四月发布',
+      severity: 'error',
+      status: 'reviewing',
+      anchors: [{
+        blockId: 'p-1',
+        pmFrom: 1,
+        pmTo: 5,
+        quote: '三月发布',
+        textHash: 'hash',
+      }],
+    }
+    const instruction = buildAnnotationInstruction(group, '改为五月发布')
+
+    let accepted = false
+    act(() => { accepted = onAccept(group, '改为五月发布') })
+
+    expect(accepted).toBe(true)
+    expect(qingInsertAnnotation).toHaveBeenCalledOnce()
+    expect(qingInsertAnnotation).toHaveBeenCalledWith(instruction)
+    expect(qingSendMessage).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('已填入修改要求，请点击发送')
+
+    qingInsertAnnotation.mockReturnValue(false)
+    act(() => { accepted = onAccept(group, '改为五月发布') })
+
+    expect(accepted).toBe(false)
+    expect(document.body.textContent).toContain('输入框当前不可用，请稍后再回填批注')
+    expect(qingSendMessage).not.toHaveBeenCalled()
+  })
+
   it('online 且无文稿时显示已连接空态，点 × 后关闭并注销面板内容', async () => {
     const sessionId = 'dsh-online-empty'
     installBridgeFetch(sessionId, [])
@@ -1282,6 +1343,7 @@ describe('QingDocPanel 顶栏状态', () => {
 function renderPanel(
   sessionId: string,
   qingSendMessage?: (dshSessionId: string, text: string) => Promise<void>,
+  qingInsertAnnotation?: (instruction: string) => boolean,
 ): void {
   host = document.createElement('div')
   document.body.append(host)
@@ -1290,6 +1352,7 @@ function renderPanel(
     useSession: (selector: (session: { sessionId: string }) => unknown) => selector({ sessionId }),
     qingLayout: { openDetails: vi.fn(), closeDetails: vi.fn() },
     ...(qingSendMessage ? { qingSendMessage } : {}),
+    ...(qingInsertAnnotation ? { qingInsertAnnotation } : {}),
   } as unknown as QingDocPanelProps
   act(() => root?.render(<QingDocPanel {...props} />))
 }

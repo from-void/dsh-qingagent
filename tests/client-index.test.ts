@@ -79,6 +79,11 @@ describe('client details 动态占槽', () => {
       name: 'qingagent-selection',
       codec: expect.any(Object),
     }))
+    // 批注采纳 chip 的 source 与选段 source 同生命周期注册。
+    expect(inputTriggers.registerSource).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'qingagent-annotation',
+      codec: expect.any(Object),
+    }))
     expect(slots.register).not.toHaveBeenCalledWith(
       expect.objectContaining({ name: 'conversation.input.dock' }),
       expect.any(Function),
@@ -101,7 +106,8 @@ describe('client details 动态占槽', () => {
 
     detailsLifecycle?.()
     for (const dispose of effectDisposers) dispose()
-    expect(unregisterSource).toHaveBeenCalledOnce()
+    // 两个 source(选段+批注)各注销一次。
+    expect(unregisterSource).toHaveBeenCalledTimes(2)
     expect(source.closed).toBe(true)
   })
 
