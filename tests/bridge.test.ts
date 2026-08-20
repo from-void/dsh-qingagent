@@ -135,11 +135,14 @@ describe('BridgeHub', () => {
 
     const marked = response()
     await handler(request('POST', '/qingagent-bridge/review-turn', '127.0.0.1', {
-      dshSessionId: 'dsh-a', type: 'source', templateId: 'review-source-default', templateName: '来源核查',
+      dshSessionId: 'dsh-a', engineSessionId: 'qing-a', type: 'source',
+      templateId: 'review-source-default', templateName: '来源核查',
     }), marked as unknown as ServerResponse)
     expect(marked.status).toBe(200)
     const state = reviewTurnCoordinatorFor(engine)
-    expect(state.activate('dsh-a', 8)).toMatchObject({ type: 'source', turnId: 8 })
+    expect(state.activate('dsh-a', 8)).toMatchObject({
+      type: 'source', turnId: 8, targetEngineSessionId: 'qing-a',
+    })
     state.finish('dsh-a', 8)
 
     const calls: Array<[string, string, unknown?]> = [

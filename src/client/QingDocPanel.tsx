@@ -1713,7 +1713,11 @@ function reviewBridgeSessionQuery(props: Pick<QingDocFunctionsProps, 'sessionId'
 export function QingDocFunctions(props: QingDocFunctionsProps) {
   const [reviewMenuOpen, setReviewMenuOpen] = useState(false)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
-  const [reviewLaunchType, setReviewLaunchType] = useState<QingReviewType | null>(null)
+  const [reviewLaunch, setReviewLaunch] = useState<{
+    type: QingReviewType
+    engineSessionId: string
+    title: string
+  } | null>(null)
   const [sourceMaterialAvailable, setSourceMaterialAvailable] = useState<boolean | undefined>()
   const [sendingReview, setSendingReview] = useState(false)
   const reviewAnchorRef = useRef<HTMLDivElement>(null)
@@ -1724,13 +1728,14 @@ export function QingDocFunctions(props: QingDocFunctionsProps) {
   useEffect(() => {
     if (props.reviewDisabledReason) {
       setReviewMenuOpen(false)
-      setReviewLaunchType(null)
+      setReviewLaunch(null)
     }
     if (props.exportDisabledReason) setExportMenuOpen(false)
   }, [props.exportDisabledReason, props.reviewDisabledReason])
 
   const sendReview = useCallback(async (
     type: QingReviewType,
+    targetEngineSessionId: string,
     template: ReviewTemplateItem,
     supplement: string,
     lexicons: LexiconResourceSummary[],
@@ -1744,7 +1749,10 @@ export function QingDocFunctions(props: QingDocFunctionsProps) {
     let marked = false
     try {
       if (type === 'source') {
-        const query = reviewBridgeSessionQuery(props)
+        const query = reviewBridgeSessionQuery({
+          sessionId: props.sessionId,
+          engineSessionId: targetEngineSessionId,
+        })
         const materials = await reviewBridgeJson<{ materials: Array<{ parseState?: string }> }>(
           `/qingagent-bridge/review-materials?${query}`,
         )
@@ -1758,6 +1766,7 @@ export function QingDocFunctions(props: QingDocFunctionsProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           dshSessionId: props.sessionId,
+          engineSessionId: targetEngineSessionId,
           type,
           templateId: template.id,
           templateName: template.name,
@@ -1783,10 +1792,15 @@ export function QingDocFunctions(props: QingDocFunctionsProps) {
   }, [props, sendingReview])
 
   const chooseReview = async (type: QingReviewType) => {
+    const targetEngineSessionId = props.engineSessionId
+    const targetTitle = props.title
     setReviewMenuOpen(false)
     if (type === 'source') {
       try {
-        const query = reviewBridgeSessionQuery(props)
+        const query = reviewBridgeSessionQuery({
+          sessionId: props.sessionId,
+          engineSessionId: targetEngineSessionId,
+        })
         const materials = await reviewBridgeJson<{ materials: Array<{ parseState?: string }> }>(
           `/qingagent-bridge/review-materials?${query}`,
         )
@@ -1798,7 +1812,7 @@ export function QingDocFunctions(props: QingDocFunctionsProps) {
     } else {
       setSourceMaterialAvailable(undefined)
     }
-    setReviewLaunchType(type)
+    setReviewLaunch({ type, engineSessionId: targetEngineSessionId, title: targetTitle })
   }
 
   const loadTemplates = useCallback(async (type: QingReviewType) => {
@@ -1851,12 +1865,12 @@ export function QingDocFunctions(props: QingDocFunctionsProps) {
   const supplementUrl = useCallback((type: QingReviewType, templateId?: string) => {
     const query = new URLSearchParams({
       dshSessionId: props.sessionId,
-      engineSessionId: props.engineSessionId,
+      engineSessionId: reviewLaunch?.engineSessionId ?? props.engineSessionId,
       type,
     })
     if (templateId) query.set('templateId', templateId)
     return `/qingagent-bridge/review-supplement?${query}`
-  }, [props.engineSessionId, props.sessionId])
+  }, [props.engineSessionId, props.sessionId, reviewLaunch?.engineSessionId])
 
   const loadSupplement = useCallback(async (type: QingReviewType, templateId?: string) => {
     const result = await reviewBridgeJson<{ supplement: string }>(supplementUrl(type, templateId))
@@ -1962,11 +1976,11 @@ export function QingDocFunctions(props: QingDocFunctionsProps) {
           ) : null}
         </div>
       </div>
-      {reviewLaunchType ? (
+      {reviewLaunch ? (
         <ReviewLaunchModal
           open
-          type={reviewLaunchType}
-          documentTitle={props.title}
+          type={reviewLaunch.type}
+          documentTitle={reviewLaunch.title}
           loadTemplates={loadTemplates}
           saveTemplate={saveTemplate}
           deleteTemplate={deleteTemplate}
@@ -1975,17 +1989,17 @@ export function QingDocFunctions(props: QingDocFunctionsProps) {
           saveSupplement={saveSupplement}
           loadLexicons={loadLexicons}
           saveLexiconSelection={saveLexiconSelection}
-          sourceMaterialAvailable={reviewLaunchType === 'source' ? sourceMaterialAvailable : undefined}
+          sourceMaterialAvailable={reviewLaunch.type === 'source' ? sourceMaterialAvailable : undefined}
           onAddMaterial={() => {
             // 素材管理是青简客户端的能力边界:引导到客户端本文稿,添加后回来重新发起。
-            window.open(`qingjian://open?engineSessionId=${encodeURIComponent(props.engineSessionId)}`, '_self')
+            window.open(`qingjian://open?engineSessionId=${encodeURIComponent(reviewLaunch.engineSessionId)}`, '_self')
             props.onToast('已请求在青简中打开本文稿:请用输入框旁「素材」添加素材,完成后回到这里重新发起核查')
           }}
-          onClose={() => setReviewLaunchType(null)}
+          onClose={() => setReviewLaunch(null)}
           onConfirm={(template, supplement, lexicons) => {
-            const type = reviewLaunchType
-            setReviewLaunchType(null)
-            void sendReview(type, template, supplement, lexicons)
+            const { type, engineSessionId } = reviewLaunch
+            setReviewLaunch(null)
+            void sendReview(type, engineSessionId, template, supplement, lexicons)
           }}
         />
       ) : null}

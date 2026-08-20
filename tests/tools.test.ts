@@ -67,6 +67,10 @@ function harness(
     active: (JSON.parse(String(init?.body)) as { action: string }).action !== 'end',
   }),
   hasActive = true,
+  bindingOptions?: {
+    docs: Array<{ engineSessionId: string; title: string; createdAt: string }>
+    activeEngineSessionId: string
+  },
 ) {
   const tools = new Map<string, ToolDefinition>()
   const listeners = new Map<string, (...args: any[]) => any>()
@@ -82,15 +86,27 @@ function harness(
       return () => listeners.delete(name)
     }),
   } as unknown as Context
-  const active = { engineSessionId: 'qing-1', title: '测试稿', createdAt: '2026-08-15T00:00:00.000Z' }
+  const boundDocs = bindingOptions?.docs ?? [
+    { engineSessionId: 'qing-1', title: '测试稿', createdAt: '2026-08-15T00:00:00.000Z' },
+  ]
+  let activeEngineSessionId = bindingOptions?.activeEngineSessionId ?? boundDocs[0]!.engineSessionId
   const bindings = {
-    hasDoc: (sessionId: string, engineSessionId: string) => sessionId === 'dsh-1' && engineSessionId === 'qing-1',
-    listDocs: () => [active],
-    getBinding: () => ({ docs: [active], activeEngineSessionId: active.engineSessionId }),
-    getActive: () => hasActive ? active : undefined,
-    createDoc: vi.fn(async () => active),
-    setActive: vi.fn(async () => active),
-    updateTitle: vi.fn(async (_sessionId: string, _engineSessionId: string, title: string) => { active.title = title }),
+    hasDoc: (sessionId: string, engineSessionId: string) =>
+      sessionId === 'dsh-1' && boundDocs.some((item) => item.engineSessionId === engineSessionId),
+    listDocs: () => boundDocs,
+    getBinding: () => ({ docs: boundDocs, activeEngineSessionId }),
+    getActive: () => hasActive
+      ? boundDocs.find((item) => item.engineSessionId === activeEngineSessionId)
+      : undefined,
+    createDoc: vi.fn(async () => boundDocs[0]!),
+    setActive: vi.fn(async (_sessionId: string, engineSessionId: string) => {
+      activeEngineSessionId = engineSessionId
+      return boundDocs.find((item) => item.engineSessionId === engineSessionId)
+    }),
+    updateTitle: vi.fn(async (_sessionId: string, engineSessionId: string, title: string) => {
+      const doc = boundDocs.find((item) => item.engineSessionId === engineSessionId)
+      if (doc) doc.title = title
+    }),
   } as unknown as BindingStore
   const engine = {
     ensureReady: vi.fn(async () => engineStatus),
@@ -109,7 +125,10 @@ function harness(
   } as unknown as BridgeHub
   const telemetry = { capture: vi.fn(async () => undefined) } as unknown as TelemetryCapture
   registerTools({ ctx, engine, bindings, bridge, telemetry })
-  return { tools, listeners, events, bindings, engine, bridge, telemetry }
+  return {
+    tools, listeners, events, bindings, engine, bridge, telemetry,
+    setActiveEngineSessionId: (engineSessionId: string) => { activeEngineSessionId = engineSessionId },
+  }
 }
 
 function signalActions(engine: EngineService): Array<{ action: string; turnId: string }> {
@@ -298,6 +317,7 @@ describe('审查回合与 qing_annotate', () => {
       type,
       templateId: 'review-deai-default',
       templateName: '自然表达',
+      targetEngineSessionId: 'qing-1',
     })
   }
 
@@ -358,8 +378,62 @@ describe('审查回合与 qing_annotate', () => {
     await expect(fixture.tools.get('qing_annotate')!.execute(
       { groups },
       exec(undefined, 'annotate-unread', 'qing_annotate'),
-    )).rejects.toThrow('qing_read_draft')
+    )).rejects.toThrow('本审查回合的目标是《测试稿》')
     expect(vi.mocked(fixture.engine.fetchJson).mock.calls.some(([path]) => path.endsWith('/review/annotations'))).toBe(false)
+  })
+
+  it('打标目标不随活跃稿切换，省略 docRef 的读稿与批注始终命中打标稿', async () => {
+    const annotationPaths: string[] = []
+    const fixture = harness(async (path) => {
+      if (path.includes('/sessions/qing-1/doc?format=qingml')) return editingDoc()
+      if (path.includes('/sessions/qing-2/doc?format=qingml')) {
+        return doc({
+          sessionId: 'qing-2', docVersion: 4, state: 'editing',
+          qingml: '<title>切换稿</title><h1>切换稿</h1><p>另一篇正文。</p>',
+          title: '切换稿',
+        })
+      }
+      if (path.includes('/sessions/qing-1/review/annotations')) {
+        annotationPaths.push(path)
+        return {
+          status: 'created', docVersion: 1, groupCount: 1, anchorCount: 1, seq: 12,
+          annotations: [{ id: 'annotation-1', summary: '句式生硬' }],
+        }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, candidateDoc('开篇', '第一版正文。'), undefined, true, {
+      docs: [
+        { engineSessionId: 'qing-1', title: '打标稿', createdAt: '2026-08-15T00:00:00.000Z' },
+        { engineSessionId: 'qing-2', title: '切换稿', createdAt: '2026-08-15T00:01:00.000Z' },
+      ],
+      activeEngineSessionId: 'qing-1',
+    })
+    markReview(fixture)
+
+    // 弹窗打标后、agent 真正激活前面板已切到另一稿：预申领仍必须命中打标稿。
+    fixture.setActiveEngineSessionId('qing-2')
+    await fixture.listeners.get('agent/pre-step')!(
+      { agent: { id: 'dsh-1' }, turn: 67 },
+      async () => ({ kind: 'enter', messages: [] }),
+    )
+    expect(vi.mocked(fixture.engine.fetchTurnSignal).mock.calls[0]?.[0]).toContain('/sessions/qing-1/')
+
+    const read = await fixture.tools.get('qing_read_draft')!.execute(
+      { mode: 'full' },
+      exec(undefined, 'review-target-read', 'qing_read_draft'),
+    )
+    expect(read).toMatchObject({ engineSessionId: 'qing-1', title: '测试稿' })
+
+    await expect(fixture.tools.get('qing_annotate')!.execute(
+      { docRef: 'qing-2', groups },
+      exec(undefined, 'review-wrong-target', 'qing_annotate'),
+    )).rejects.toThrow('本审查回合的目标是《打标稿》')
+
+    await expect(fixture.tools.get('qing_annotate')!.execute(
+      { groups },
+      exec(undefined, 'review-target-write', 'qing_annotate'),
+    )).resolves.toMatchObject({ engineSessionId: 'qing-1', status: 'created' })
+    expect(annotationPaths).toEqual(['/sessions/qing-1/review/annotations'])
   })
 
   it('预申领 BUSY_NATIVE 不阻断审查读取，落批注前重新申领成功', async () => {
@@ -424,6 +498,7 @@ describe('审查回合与 qing_annotate', () => {
     })
     reviewTurnCoordinatorFor(fixture.engine).markPending('dsh-1', {
       type: 'sensitive', templateId: 'review-sensitive-default', templateName: '敏感词',
+      targetEngineSessionId: 'qing-1',
     })
     await fixture.listeners.get('agent/pre-step')!(
       { agent: { id: 'dsh-1' }, turn: 64 },
@@ -499,12 +574,134 @@ describe('审查回合与 qing_annotate', () => {
   })
 })
 
+describe('素材读取工具', () => {
+  it('映射素材清单并原样透传引擎的文本与截断元数据', async () => {
+    const fixture = harness(async (path) => {
+      if (path === '/sessions/qing-1/files') {
+        return {
+          sessionId: 'qing-1',
+          materials: [
+            { id: 'material-1', filename: '访谈.txt', parseState: 'ready', summary: '访谈摘要', wordCount: 12 },
+            { id: 'material-2', filename: '附件.pdf', parseState: 'processing', summary: '' },
+          ],
+          folderSources: [],
+        }
+      }
+      if (path === '/sessions/qing-1/files/material-1/text') {
+        return {
+          id: 'material-1', filename: '访谈.txt', mime: 'text/plain',
+          text: '逐字素材文本。', byteLen: 4096, truncated: true,
+        }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    const listTool = fixture.tools.get('qing_list_materials')!
+    const listed = await listTool.execute({}, exec(undefined, 'materials-list', 'qing_list_materials'))
+    expect(listed).toEqual({
+      materials: [
+        { materialId: 'material-1', name: '访谈.txt', parseState: 'ready', summary: '访谈摘要' },
+        { materialId: 'material-2', name: '附件.pdf', parseState: 'processing' },
+      ],
+    })
+    expect(validateJsonSchemaValue(listTool.output!.schema, listed)).toEqual([])
+
+    const readTool = fixture.tools.get('qing_read_material')!
+    const read = await readTool.execute(
+      { materialId: 'material-1' },
+      exec(undefined, 'material-read', 'qing_read_material'),
+    )
+    expect(read).toEqual({
+      materialId: 'material-1', name: '访谈.txt', mime: 'text/plain',
+      text: '逐字素材文本。', byteLen: 4096, truncated: true,
+    })
+    expect(validateJsonSchemaValue(readTool.output!.schema, read)).toEqual([])
+  })
+
+  it('无素材时返回空清单', async () => {
+    const fixture = harness(async (path) => {
+      if (path === '/sessions/qing-1/files') return { sessionId: 'qing-1', materials: [], folderSources: [] }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    await expect(fixture.tools.get('qing_list_materials')!.execute(
+      {},
+      exec(undefined, 'materials-empty', 'qing_list_materials'),
+    )).resolves.toEqual({ materials: [] })
+  })
+
+  it('素材 404 保留引擎错误，不伪造空文本', async () => {
+    const missing = new EngineHttpError(404, { code: 'MATERIAL_NOT_FOUND', error: '素材不存在' })
+    const fixture = harness(async (path) => {
+      if (path.endsWith('/files/material-missing/text')) throw missing
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    const caught = await fixture.tools.get('qing_read_material')!.execute(
+      { materialId: 'material-missing' },
+      exec(undefined, 'material-missing', 'qing_read_material'),
+    ).catch((error: unknown) => error)
+    expect(caught).toBe(missing)
+  })
+
+  it('审查回合内素材工具固定解析到打标稿，而非后来切换的活跃稿', async () => {
+    const materialPaths: string[] = []
+    const fixture = harness(async (path) => {
+      if (path.includes('/doc?format=qingml')) return doc({ state: 'editing', qingml: DRAFT_ONE, title: '测试稿' })
+      if (path.includes('/sessions/qing-1/files')) {
+        materialPaths.push(path)
+        if (path.endsWith('/text')) {
+          return {
+            id: 'material-1', filename: '目标素材.txt', mime: 'text/plain',
+            text: '目标稿素材。', byteLen: 18, truncated: false,
+          }
+        }
+        return {
+          sessionId: 'qing-1',
+          materials: [{ id: 'material-1', filename: '目标素材.txt', parseState: 'ready', summary: '' }],
+          folderSources: [],
+        }
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, candidateDoc('开篇', '第一版正文。'), undefined, true, {
+      docs: [
+        { engineSessionId: 'qing-1', title: '打标稿', createdAt: '2026-08-15T00:00:00.000Z' },
+        { engineSessionId: 'qing-2', title: '切换稿', createdAt: '2026-08-15T00:01:00.000Z' },
+      ],
+      activeEngineSessionId: 'qing-2',
+    })
+    reviewTurnCoordinatorFor(fixture.engine).markPending('dsh-1', {
+      type: 'source', templateId: 'review-source-default', templateName: '来源核查',
+      targetEngineSessionId: 'qing-1',
+    })
+    await fixture.listeners.get('agent/pre-step')!(
+      { agent: { id: 'dsh-1' }, turn: 68 },
+      async () => ({ kind: 'enter', messages: [] }),
+    )
+
+    await fixture.tools.get('qing_list_materials')!.execute(
+      {},
+      exec(undefined, 'review-materials-list', 'qing_list_materials'),
+    )
+    await fixture.tools.get('qing_read_material')!.execute(
+      { materialId: 'material-1' },
+      exec(undefined, 'review-material-read', 'qing_read_material'),
+    )
+    expect(materialPaths).toEqual([
+      '/sessions/qing-1/files',
+      '/sessions/qing-1/files/material-1/text',
+    ])
+  })
+})
+
 describe('qing_* 未连接结构化报错', () => {
   const calls: Array<[string, Record<string, unknown>]> = [
     ['qing_write_draft', { qingml: DRAFT_ONE }],
     ['qing_edit_draft', { ops: [{ kind: 'setTitle', title: '新标题' }] }],
     ['qing_review_commit', { action: 'accept_all' }],
     ['qing_read_draft', {}],
+    ['qing_list_materials', {}],
+    ['qing_read_material', { materialId: 'material-1' }],
     ['qing_list_docs', {}],
     ['qing_focus_doc', { docRef: 'qing-1' }],
   ]

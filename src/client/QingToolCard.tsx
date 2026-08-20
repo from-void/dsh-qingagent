@@ -176,6 +176,22 @@ export const QingReadToolCard = createQingToolCard({
   showViewButton: false,
 })
 
+export const QingListMaterialsToolCard = createQingToolCard({
+  runningTitle: '正在读取素材清单',
+  doneTitle: (meta) => `已读取素材清单 · ${meta.count ?? 0} 份`,
+  failedTitle: '素材清单读取未完成',
+  summary: () => '',
+  showViewButton: false,
+})
+
+export const QingReadMaterialToolCard = createQingToolCard({
+  runningTitle: '正在读取素材',
+  doneTitle: (meta) => meta.title ? `已读取素材《${meta.title}》` : '已读取素材',
+  failedTitle: '素材读取未完成',
+  summary: () => '',
+  showViewButton: false,
+})
+
 export const QingListDocsToolCard = createQingToolCard({
   runningTitle: '正在查看文稿清单',
   doneTitle: (meta) => (meta.scope === 'library' ? '文库清单' : '会话文稿清单'),

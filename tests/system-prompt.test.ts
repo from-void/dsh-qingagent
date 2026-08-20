@@ -6,6 +6,12 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('【正文输出纪律】严禁在聊天回复中输出文稿正文或 QingML——全文只放进 qing_write_draft 的 qingml 参数')
   })
 
+  it('说明素材清单与素材文本工具，并固定审查回合目标', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('用 qing_list_materials 列出当前目标文稿的会话素材')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('用 qing_read_material 按 materialId 读取素材文本')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('审查回合中两者始终使用该回合钉扎的目标文稿')
+  })
+
   it('以最近工具状态为权威并要求新指令先刷新审阅态', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('当前注入的【文稿状态】行或最近一次 qing 工具返回的【文稿状态】行(含 qing_list_docs 的状态列)为同级权威,且都优先于聊天记忆')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('当前 system context 中的【文稿状态】摘要或最近一次 qing 工具返回为权威')

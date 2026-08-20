@@ -46,7 +46,7 @@ import {
   type DocStateSnapshot,
 } from './docState.js'
 import { compileQingmlDocument } from './qingmlCompile.js'
-import { sanitizeUserVisibleText } from './userVisibleText.js'
+import { FRESH_DRAFT_REQUIRED_ERROR, sanitizeUserVisibleText } from './userVisibleText.js'
 import { renderedReviewSummary } from './reviewCount.js'
 import {
   reviewTurnCoordinatorFor,
@@ -514,6 +514,8 @@ export function registerTools(services: ToolServices): void {
   ctx.effect(() => ctx.tools.register(annotateTool(runtime)))
   ctx.effect(() => ctx.tools.register(reviewCommitTool(runtime, reviewTurns)))
   ctx.effect(() => ctx.tools.register(readDraftTool(runtime, readTurns)))
+  ctx.effect(() => ctx.tools.register(listMaterialsTool(runtime)))
+  ctx.effect(() => ctx.tools.register(readMaterialTool(runtime)))
   ctx.effect(() => ctx.tools.register(listDocsTool(runtime)))
   ctx.effect(() => ctx.tools.register(focusDocTool(runtime)))
 }
@@ -1198,8 +1200,9 @@ async function writeAnnotationGroups(
 function annotateTool(services: RuntimeToolServices) {
   return defineTool({
     name: 'qing_annotate',
-    description: '在审查回合中为当前青简文稿生成独立批注组。必须先用 qing_read_draft 读取本回合最新全文；find 必须逐字来自正文。reviewType 与来源由当前审查回合自动注入，不要把批注写成正文格式。',
+    description: '在审查回合中为面板发起时钉扎的目标文稿生成独立批注组。必须先用 qing_read_draft 读取本回合目标的最新全文；find 必须逐字来自正文。reviewType 与来源由当前审查回合自动注入，不要把批注写成正文格式。',
     parameters: {
+      docRef: { type: 'string', description: '可省略；若传入，必须是本审查回合钉扎的目标青简会话 ID。' },
       groups: {
         type: 'array',
         required: true,
@@ -1272,12 +1275,23 @@ function annotateTool(services: RuntimeToolServices) {
       const dshSessionId = sessionIdOf(exec)
       const activeReview = services.reviewTurnState.getActive(dshSessionId)
       if (!activeReview) throw new Error('qing_annotate 只能在已发起的审查回合中调用。')
+      const engineSessionId = assertReviewTarget(
+        services,
+        dshSessionId,
+        activeReview.targetEngineSessionId,
+        args.docRef,
+      )
+      const targetTitle = titleForEngineSession(services, dshSessionId, engineSessionId)
       await assertEngineOnline(services.engine)
-      const engineSessionId = resolveDocRef(services, dshSessionId, undefined)
       const generation = services.turnLeases.generation(dshSessionId, engineSessionId)
-      services.freshness.assertFresh(exec, engineSessionId, generation)
+      try {
+        services.freshness.assertFresh(exec, engineSessionId, generation)
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== FRESH_DRAFT_REQUIRED_ERROR) throw error
+        throw new Error(reviewTargetReadRequiredError(targetTitle))
+      }
       const readSnapshot = services.readTurns.snapshot(dshSessionId, engineSessionId)
-      if (!readSnapshot) throw new Error('请先用 qing_read_draft 读取本回合最新全文，再生成审查批注。')
+      if (!readSnapshot) throw new Error(reviewTargetReadRequiredError(targetTitle))
       const expectedDocVersion = readSnapshot.doc.docVersion
       const turnId = await services.turnLeases.retryBusyDocument(dshSessionId, engineSessionId)
       const inputGroups = args.groups as AnnotationGroupInput[]
@@ -1619,6 +1633,141 @@ function readDraftTool(services: RuntimeToolServices, readTurns: ReadTurnTracker
         engineSessionId,
         state: doc.state,
         docVersion: doc.docVersion,
+      }
+    },
+  })
+}
+
+interface ExternalMaterialsResponse {
+  materials: Array<{
+    id: string
+    filename: string
+    parseState: string
+    summary?: string | null
+  }>
+}
+
+interface ExternalMaterialTextResponse {
+  id: string
+  filename: string
+  mime: string
+  text: string
+  byteLen: number
+  truncated: boolean
+}
+
+function listMaterialsTool(services: RuntimeToolServices) {
+  return defineTool({
+    name: 'qing_list_materials',
+    description: '列出当前目标青简文稿关联的会话素材；审查回合使用面板发起时钉扎的目标稿，其他回合使用当前激活稿。',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          materials: {
+            type: 'array',
+            required: true,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                materialId: { type: 'string', required: true },
+                name: { type: 'string', required: true },
+                parseState: { type: 'string', required: true },
+                summary: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+      render: (_args, value) => textBlock([
+        `素材清单 · ${value.materials.length} 份`,
+        ...value.materials.map((material) => [
+          `- 《${material.name}》`,
+          `materialId=${material.materialId}`,
+          `parseState=${material.parseState}`,
+          material.summary ?? '',
+        ].filter(Boolean).join('｜')),
+      ].join('\n')),
+      presentationMeta: (_args, value) => ({ count: value.materials.length }),
+    },
+    presentCall: () => ({ card: 'generic', title: '正在读取素材清单', kind: 'read' }),
+    presentResult: (_args, result) => {
+      const count = (result.meta as { count?: number } | undefined)?.count ?? 0
+      return { card: 'generic', title: result.isError ? '素材清单读取失败' : `已读取素材清单 · ${count} 份` }
+    },
+    execute: async (_args, exec) => {
+      const dshSessionId = sessionIdOf(exec)
+      await assertEngineOnline(services.engine)
+      const engineSessionId = resolveMaterialTarget(services, dshSessionId)
+      const response = await services.engine.fetchJson<ExternalMaterialsResponse>(
+        `/sessions/${encodeURIComponent(engineSessionId)}/files`,
+      )
+      return {
+        materials: response.materials.map((material) => ({
+          materialId: material.id,
+          name: material.filename,
+          parseState: material.parseState,
+          ...(typeof material.summary === 'string' && material.summary
+            ? { summary: material.summary }
+            : {}),
+        })),
+      }
+    },
+  })
+}
+
+function readMaterialTool(services: RuntimeToolServices) {
+  return defineTool({
+    name: 'qing_read_material',
+    description: '按 materialId 读取当前目标青简文稿的一份会话素材文本；文本长度与截断状态直接采用引擎响应。',
+    parameters: {
+      materialId: { type: 'string', required: true, description: '从 qing_list_materials 返回的素材 ID。' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          materialId: { type: 'string', required: true },
+          name: { type: 'string', required: true },
+          mime: { type: 'string', required: true },
+          text: { type: 'string', required: true },
+          byteLen: { type: 'integer', required: true },
+          truncated: { type: 'boolean', required: true },
+        },
+      },
+      render: (_args, value) => textBlock([
+        `素材《${value.name}》`,
+        value.text,
+        value.truncated ? `（引擎已按预算截断；原文 ${value.byteLen} 字节）` : '',
+      ].filter(Boolean).join('\n')),
+      presentationMeta: (_args, value) => ({ title: value.name }),
+    },
+    presentCall: () => ({ card: 'generic', title: '正在读取素材', kind: 'read' }),
+    presentResult: (_args, result) => {
+      const title = (result.meta as { title?: string } | undefined)?.title
+      return {
+        card: 'generic',
+        title: result.isError ? '素材读取失败' : title ? `已读取素材《${title}》` : '已读取素材',
+      }
+    },
+    execute: async (args, exec) => {
+      const dshSessionId = sessionIdOf(exec)
+      await assertEngineOnline(services.engine)
+      const engineSessionId = resolveMaterialTarget(services, dshSessionId)
+      const material = await services.engine.fetchJson<ExternalMaterialTextResponse>(
+        `/sessions/${encodeURIComponent(engineSessionId)}/files/${encodeURIComponent(args.materialId)}/text`,
+      )
+      return {
+        materialId: material.id,
+        name: material.filename,
+        mime: material.mime,
+        text: material.text,
+        byteLen: material.byteLen,
+        truncated: material.truncated,
       }
     },
   })
@@ -2425,6 +2574,40 @@ function resolveDocRef(services: RuntimeToolServices, dshSessionId: string, docR
   return active.engineSessionId
 }
 
+function titleForEngineSession(
+  services: RuntimeToolServices,
+  dshSessionId: string,
+  engineSessionId: string,
+): string {
+  return services.bindings.listDocs(dshSessionId)
+    .find((doc) => doc.engineSessionId === engineSessionId)?.title?.trim() || '未命名文稿'
+}
+
+function assertReviewTarget(
+  services: RuntimeToolServices,
+  dshSessionId: string,
+  targetEngineSessionId: string,
+  requestedDocRef?: string,
+): string {
+  if (requestedDocRef && requestedDocRef !== targetEngineSessionId) {
+    const title = titleForEngineSession(services, dshSessionId, targetEngineSessionId)
+    throw new Error(`本审查回合的目标是《${title}》（docRef=${targetEngineSessionId}），不能为其他文稿生成批注。请用 qing_read_draft 读取目标稿后重试。`)
+  }
+  return targetEngineSessionId
+}
+
+function reviewTargetReadRequiredError(title: string): string {
+  return `${FRESH_DRAFT_REQUIRED_ERROR} 本审查回合的目标是《${title}》，请读取该稿最新全文后再生成审查批注。`
+}
+
+function resolveMaterialTarget(services: RuntimeToolServices, dshSessionId: string): string {
+  const reviewTarget = services.reviewTurnState.getActive(dshSessionId)?.targetEngineSessionId
+  if (reviewTarget) return reviewTarget
+  const active = services.bindings.getActive(dshSessionId)
+  if (!active) throw new Error('当前会话没有激活文稿。请先写一篇，或用 qing_list_docs / qing_focus_doc 选择。')
+  return active.engineSessionId
+}
+
 async function assertEngineOnline(
   engine: EngineService,
 ): Promise<Awaited<ReturnType<EngineService['ensureReady']>> & { state: 'online' }> {
@@ -2732,13 +2915,14 @@ function installTurnTracking(
 ): void {
   ctx.effect(() => ctx.on('agent/pre-step', async (payload, next) => {
     const dshSessionId = String(payload.agent.id)
-    services.reviewTurnState.activate(dshSessionId, payload.turn)
+    const activeReview = services.reviewTurnState.activate(dshSessionId, payload.turn)
     reviewTurns.begin(dshSessionId, payload.turn)
     writeTurns.begin(dshSessionId, payload.turn)
     readTurns.begin(dshSessionId, payload.turn)
     services.freshness.begin(dshSessionId, payload.turn)
-    // 回合起点钉住当时聚焦稿；面板在回合中途切换只影响下一回合。
-    const pinned = services.bindings.getActive(dshSessionId)?.engineSessionId
+    // 审查回合钉住弹窗发起稿；普通回合仍钉住回合起点的聚焦稿。
+    const pinned = activeReview?.targetEngineSessionId
+      ?? services.bindings.getActive(dshSessionId)?.engineSessionId
     await services.turnLeases.openTurn(dshSessionId, payload.turn, pinned)
     if (pinned && services.docStates.needsRefresh(dshSessionId)) {
       try {
