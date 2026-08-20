@@ -72,13 +72,35 @@ export const ReviewMenu: ComponentType<{
   onCustomReview: () => void
 }>
 export const ExportIcon: ComponentType
-export const DeaiReviewModal: ComponentType<{
+export const ReviewLaunchModal: ComponentType<{
   open: boolean
-  loadTemplates: () => Promise<import('@qingagent/contract-ts').StyleTemplateItem[]>
-  loadTemplate: (id: string) => Promise<import('@qingagent/contract-ts').StyleTemplateItem>
-  saveTemplate: (input: { name: string; detail: string; prompt: string }) => Promise<import('@qingagent/contract-ts').StyleTemplateItem>
+  type: import('@qingagent/contract-ts').ReviewType
+  documentTitle?: string
+  documentText?: string
+  loadTemplates: (type: import('@qingagent/contract-ts').ReviewType) => Promise<{
+    items: import('@qingagent/contract-ts').ReviewTemplateItem[]
+    selectedTemplateId: string | null
+  }>
+  saveTemplate: (input: {
+    id?: string
+    type: import('@qingagent/contract-ts').ReviewType
+    name: string
+    prompt: string
+  }) => Promise<import('@qingagent/contract-ts').ReviewTemplateItem>
+  deleteTemplate: (id: string) => Promise<string | null>
+  selectTemplate: (type: import('@qingagent/contract-ts').ReviewType, templateId: string) => Promise<void>
+  loadSupplement: (type: import('@qingagent/contract-ts').ReviewType, templateId?: string) => Promise<string>
+  saveSupplement: (type: import('@qingagent/contract-ts').ReviewType, supplement: string, templateId?: string) => Promise<string>
+  loadLexicons?: () => Promise<import('@qingagent/contract-ts').LexiconResourceSummary[]>
+  saveLexiconSelection?: (enabledLexiconIds: string[]) => Promise<import('@qingagent/contract-ts').LexiconResourceSummary[]>
+  sourceMaterialAvailable?: boolean
+  onAddMaterial?: () => void
   onClose: () => void
-  onConfirm: (template: import('@qingagent/contract-ts').StyleTemplateItem, supplement: string) => void
+  onConfirm: (
+    template: import('@qingagent/contract-ts').ReviewTemplateItem,
+    supplement: string,
+    lexicons: import('@qingagent/contract-ts').LexiconResourceSummary[],
+  ) => void
 }>
 export interface AiModifyTarget {
   label: string

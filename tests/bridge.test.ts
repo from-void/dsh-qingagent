@@ -11,6 +11,7 @@ import type { EngineService } from '../src/engine.js'
 import { EngineHttpError } from '../src/engine.js'
 import { createBridgeDocStateObserver } from '../src/index.js'
 import type { TelemetryCapture } from '../src/telemetry.js'
+import { reviewTurnCoordinatorFor } from '../src/reviewTurn.js'
 
 interface CapturedResponse {
   status?: number
@@ -76,6 +77,10 @@ function fixture(
       status: 200,
       headers: { 'Content-Type': 'image/png', ETag: 'asset-v1' },
     })),
+    fetchInternal: vi.fn(async () => new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })),
     launchInstalledClient: vi.fn(async () => true),
   } as unknown as EngineService
   const bindings = {
@@ -104,6 +109,63 @@ function fixture(
 }
 
 describe('BridgeHub', () => {
+  it('审查 bridge 按契约代理 external 模板、补充要求、词库与素材，并维护 pending 标记', async () => {
+    const binding = {
+      docs: [{ engineSessionId: 'qing-a', title: 'A', createdAt: '2026-08-15T00:00:00.000Z' }],
+      activeEngineSessionId: 'qing-a',
+    }
+    const { handler, engine, dispose } = fixture({ 'dsh-a': binding })
+    vi.mocked(engine.fetchInternal).mockImplementation(async (path) => {
+      const value = path.startsWith('/external/review-templates?')
+        ? { templates: [{ id: 'review-source-default', type: 'source', selected: true }] }
+        : path.endsWith('/select')
+          ? { selected: true, id: 'review-source-default', type: 'source' }
+          : path.includes('/review-supplement')
+            ? { supplement: '重点核对数字' }
+            : path === '/external/lexicons'
+              ? { lexicons: [{ id: 'lexicon-ad', name: '广告词', entryCount: 2, enabled: true }] }
+              : path.endsWith('/files')
+                ? { materials: [{ id: 'material-1', parseState: 'ready' }] }
+                : { ok: true }
+      return new Response(JSON.stringify(value), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    })
+
+    const marked = response()
+    await handler(request('POST', '/qingagent-bridge/review-turn', '127.0.0.1', {
+      dshSessionId: 'dsh-a', type: 'source', templateId: 'review-source-default', templateName: '来源核查',
+    }), marked as unknown as ServerResponse)
+    expect(marked.status).toBe(200)
+    const state = reviewTurnCoordinatorFor(engine)
+    expect(state.activate('dsh-a', 8)).toMatchObject({ type: 'source', turnId: 8 })
+    state.finish('dsh-a', 8)
+
+    const calls: Array<[string, string, unknown?]> = [
+      ['GET', '/qingagent-bridge/review-templates?type=source'],
+      ['POST', '/qingagent-bridge/review-templates/select', { type: 'source', templateId: 'review-source-default' }],
+      ['GET', '/qingagent-bridge/review-supplement?dshSessionId=dsh-a&engineSessionId=qing-a&type=source&templateId=review-source-default'],
+      ['PUT', '/qingagent-bridge/review-supplement?dshSessionId=dsh-a&engineSessionId=qing-a&type=source&templateId=review-source-default', { supplement: '重点核对数字' }],
+      ['GET', '/qingagent-bridge/lexicons'],
+      ['GET', '/qingagent-bridge/review-materials?dshSessionId=dsh-a&engineSessionId=qing-a'],
+    ]
+    for (const [method, url, body] of calls) {
+      const res = response()
+      await handler(request(method, url, '127.0.0.1', body), res as unknown as ServerResponse)
+      expect(res.status).toBe(200)
+    }
+    expect(vi.mocked(engine.fetchInternal).mock.calls.map(([path]) => path)).toEqual([
+      '/external/review-templates?type=source',
+      '/external/review-templates/review-source-default/select',
+      '/external/sessions/qing-a/review-supplement?type=source&templateId=review-source-default',
+      '/external/sessions/qing-a/review-supplement?type=source&templateId=review-source-default',
+      '/external/lexicons',
+      '/external/sessions/qing-a/files',
+    ])
+    dispose()
+  })
+
   it('telemetry route 只接受严格白名单，非法事件与任意字符串均拒绝且不外发', async () => {
     const { handler, telemetry, dispose } = fixture({})
     const accepted = response()

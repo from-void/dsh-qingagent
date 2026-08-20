@@ -48,6 +48,11 @@ import {
 import { compileQingmlDocument } from './qingmlCompile.js'
 import { sanitizeUserVisibleText } from './userVisibleText.js'
 import { renderedReviewSummary } from './reviewCount.js'
+import {
+  reviewTurnCoordinatorFor,
+  type ReviewTurnCoordinator,
+  type ReviewTurnType,
+} from './reviewTurn.js'
 
 interface ToolServices {
   ctx: Context
@@ -64,6 +69,7 @@ interface RuntimeToolServices extends ToolServices {
   freshness: FreshnessTracker
   turnLeases: AgentTurnLeaseCoordinator
   readTurns: ReadTurnTracker
+  reviewTurnState: ReviewTurnCoordinator
 }
 
 const textBlock = (text: string) => [{ type: 'text' as const, text }]
@@ -496,6 +502,7 @@ export function registerTools(services: ToolServices): void {
     freshness,
     turnLeases,
     readTurns,
+    reviewTurnState: reviewTurnCoordinatorFor(services.engine),
   }
   const { ctx } = runtime
   const reviewTurns = new ReviewTurnTracker()
@@ -504,6 +511,7 @@ export function registerTools(services: ToolServices): void {
   ctx.effect(() => () => runtime.turnLeases.dispose())
   ctx.effect(() => ctx.tools.register(writeDraftTool(runtime, writeTurns)))
   ctx.effect(() => ctx.tools.register(editDraftTool(runtime)))
+  ctx.effect(() => ctx.tools.register(annotateTool(runtime)))
   ctx.effect(() => ctx.tools.register(reviewCommitTool(runtime, reviewTurns)))
   ctx.effect(() => ctx.tools.register(readDraftTool(runtime, readTurns)))
   ctx.effect(() => ctx.tools.register(listDocsTool(runtime)))
@@ -592,6 +600,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
       try {
+        services.reviewTurnState.assertAnnotationOnly(dshSessionId)
         await assertEngineOnline(services.engine)
         const inheritedRequirements = writeTurns.assertWriteAllowed(exec, args.docRef)
         const requirements = inheritedRequirements ?? draftRequirementsOf(args)
@@ -972,6 +981,7 @@ function editDraftTool(services: RuntimeToolServices) {
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
       try {
+        services.reviewTurnState.assertAnnotationOnly(dshSessionId)
         await assertEngineOnline(services.engine)
         const engineSessionId = resolveDocRef(services, dshSessionId, args.docRef)
         await services.turnLeases.touchDocument(dshSessionId, engineSessionId)
@@ -1091,6 +1101,238 @@ function editDraftTool(services: RuntimeToolServices) {
         throw sanitizeToolBoundaryError(error)
       } finally {
         services.bridge.clearSelection(dshSessionId)
+      }
+    },
+  })
+}
+
+interface AnnotationAnchorInput {
+  find: string
+  all?: boolean
+}
+
+interface AnnotationGroupInput {
+  summary: string
+  note: string
+  severity?: 'error' | 'warn' | 'info'
+  suggestion?: string
+  judgment?: '口径漂移' | '数字失真' | '无据' | '素材遗漏' | '时间线' | '数字' | '称谓与术语' | '论断'
+  materialQuote?: string
+  checkedScope?: string
+  documentQuote?: string
+  anchors: AnnotationAnchorInput[]
+}
+
+interface AnnotationWriteResponse {
+  status: 'created'
+  docVersion: number
+  annotations: Array<{ id: string; summary: string }>
+  groupCount: number
+  anchorCount: number
+  seq: number | null
+}
+
+function annotationRequestGroups(
+  reviewType: ReviewTurnType,
+  groups: readonly AnnotationGroupInput[],
+): Array<AnnotationGroupInput & { origin: ReviewTurnType }> {
+  return groups.map((group) => ({
+    ...group,
+    origin: reviewType,
+    anchors: group.anchors.map((anchor) => ({ ...anchor })),
+  }))
+}
+
+/** 在最新 PM 文稿上逐项重新解析 find；返回的新对象才允许进入唯一一次冲突重试。 */
+function rebuildAnnotationGroups(
+  reviewType: ReviewTurnType,
+  groups: readonly AnnotationGroupInput[],
+  latestPmDoc: PmDoc,
+): Array<AnnotationGroupInput & { origin: ReviewTurnType }> {
+  const blocks = pmTextBlocks(latestPmDoc)
+  return groups.map((group) => ({
+    ...group,
+    origin: reviewType,
+    anchors: group.anchors.map((anchor) => {
+      const block = blocks.find((text) => text.includes(anchor.find))
+      if (!block) {
+        throw new Error(`文稿内容已经变化，批注锚点「${anchor.find}」不再存在。请基于刚读取的最新文稿重新审查后调用 qing_annotate。`)
+      }
+      const start = block.indexOf(anchor.find)
+      return { find: block.slice(start, start + anchor.find.length), ...(anchor.all === true ? { all: true } : {}) }
+    }),
+  }))
+}
+
+function isEngineCode(error: unknown, code: string): error is EngineHttpError {
+  if (!(error instanceof EngineHttpError) || !error.body || typeof error.body !== 'object') return false
+  return (error.body as { code?: unknown }).code === code
+}
+
+async function writeAnnotationGroups(
+  services: RuntimeToolServices,
+  dshSessionId: string,
+  engineSessionId: string,
+  turnId: string | undefined,
+  expectedDocVersion: number,
+  groups: Array<AnnotationGroupInput & { origin: ReviewTurnType }>,
+): Promise<AnnotationWriteResponse> {
+  try {
+    return await services.engine.fetchJson<AnnotationWriteResponse>(
+      `/sessions/${encodeURIComponent(engineSessionId)}/review/annotations`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          ...(turnId ? { turnId } : {}),
+          expectedDocVersion,
+          groups,
+        }),
+      },
+    )
+  } catch (error) {
+    services.turnLeases.recordWriteFailure(dshSessionId, engineSessionId, error)
+    throw error
+  }
+}
+
+function annotateTool(services: RuntimeToolServices) {
+  return defineTool({
+    name: 'qing_annotate',
+    description: '在审查回合中为当前青简文稿生成独立批注组。必须先用 qing_read_draft 读取本回合最新全文；find 必须逐字来自正文。reviewType 与来源由当前审查回合自动注入，不要把批注写成正文格式。',
+    parameters: {
+      groups: {
+        type: 'array',
+        required: true,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            summary: { type: 'string', required: true },
+            note: { type: 'string', required: true },
+            severity: { type: 'string', enum: ['error', 'warn', 'info'] },
+            suggestion: { type: 'string' },
+            judgment: { type: 'string', enum: ['口径漂移', '数字失真', '无据', '素材遗漏', '时间线', '数字', '称谓与术语', '论断'] },
+            materialQuote: { type: 'string' },
+            checkedScope: { type: 'string' },
+            documentQuote: { type: 'string' },
+            anchors: {
+              type: 'array',
+              required: true,
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  find: { type: 'string', required: true },
+                  all: { type: 'boolean' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          status: { type: 'string', enum: ['created'], required: true },
+          count: { type: 'integer', required: true },
+          summaries: { type: 'array', required: true, items: { type: 'string' } },
+          engineSessionId: { type: 'string', required: true },
+          docVersion: { type: 'integer', required: true },
+        },
+      },
+      render: (_args, value) => textBlock([
+        `审查批注已生成 · ${value.count} 处`,
+        ...value.summaries.map((summary) => `- ${summary}`),
+      ].join('\n')),
+      presentationMeta: (_args, value) => ({
+        count: value.count,
+        summaries: value.summaries,
+        engineSessionId: value.engineSessionId,
+        docVersion: value.docVersion,
+      }),
+    },
+    presentCall: () => ({ card: 'generic', title: '正在生成审查批注', kind: 'edit' }),
+    presentResult: (_args, result) => {
+      if (result.isError) {
+        return { card: 'generic', title: '审查批注生成失败', content: result.content }
+      }
+      const meta = result.meta as { count?: number; summaries?: string[] } | undefined
+      const count = meta?.count ?? 0
+      const summaries = meta?.summaries ?? []
+      return {
+        card: 'generic',
+        title: `审查批注已生成 · ${count} 处`,
+        ...(summaries.length ? { content: textBlock(summaries.map((summary) => `- ${summary}`).join('\n')) } : {}),
+      }
+    },
+    execute: async (args, exec) => {
+      const dshSessionId = sessionIdOf(exec)
+      const activeReview = services.reviewTurnState.getActive(dshSessionId)
+      if (!activeReview) throw new Error('qing_annotate 只能在已发起的审查回合中调用。')
+      await assertEngineOnline(services.engine)
+      const engineSessionId = resolveDocRef(services, dshSessionId, undefined)
+      const generation = services.turnLeases.generation(dshSessionId, engineSessionId)
+      services.freshness.assertFresh(exec, engineSessionId, generation)
+      const readSnapshot = services.readTurns.snapshot(dshSessionId, engineSessionId)
+      if (!readSnapshot) throw new Error('请先用 qing_read_draft 读取本回合最新全文，再生成审查批注。')
+      const expectedDocVersion = readSnapshot.doc.docVersion
+      const turnId = await services.turnLeases.retryBusyDocument(dshSessionId, engineSessionId)
+      const inputGroups = args.groups as AnnotationGroupInput[]
+      if (inputGroups.length === 0 || inputGroups.some((group) => group.anchors.length === 0)) {
+        throw new Error('groups 至少包含一组批注，且每组至少包含一个逐字锚点。')
+      }
+      let written: AnnotationWriteResponse
+      try {
+        written = await writeAnnotationGroups(
+          services,
+          dshSessionId,
+          engineSessionId,
+          turnId,
+          expectedDocVersion,
+          annotationRequestGroups(activeReview.type, inputGroups),
+        )
+      } catch (error) {
+        if (!isEngineCode(error, 'VERSION_CONFLICT')) throw error
+        const [latestDoc, latestPmDoc] = await Promise.all([
+          readDoc(services, exec, engineSessionId),
+          readPmDoc(services, exec, engineSessionId),
+        ])
+        const rebuiltGroups = rebuildAnnotationGroups(activeReview.type, inputGroups, latestPmDoc)
+        services.readTurns.rememberSnapshot(dshSessionId, engineSessionId, {
+          doc: latestDoc,
+          basePmDoc: latestPmDoc,
+          reviewCandidate: null,
+        })
+        const outline = outlineOf(latestDoc.qingml, latestDoc.title ?? '未命名文稿')
+        rememberDocState(services, exec, engineSessionId, {
+          state: latestDoc.state,
+          words: countDocVisibleChars(latestPmDoc),
+          blocks: outline.blocks,
+          structure: outline.structure,
+          title: outline.title,
+          docVersion: latestDoc.docVersion,
+        }, true, 'full')
+        // 契约只允许这一轮一次重试；第二次冲突保留引擎原始错误交给模型。
+        written = await writeAnnotationGroups(
+          services,
+          dshSessionId,
+          engineSessionId,
+          turnId,
+          latestDoc.docVersion,
+          rebuiltGroups,
+        )
+      }
+      await refreshAndPublishDocState(services, exec, true, engineSessionId)
+      const summaries = written.annotations.map((annotation) => annotation.summary)
+      return {
+        status: 'created' as const,
+        count: written.groupCount,
+        summaries,
+        engineSessionId,
+        docVersion: written.docVersion,
       }
     },
   })
@@ -2490,6 +2732,7 @@ function installTurnTracking(
 ): void {
   ctx.effect(() => ctx.on('agent/pre-step', async (payload, next) => {
     const dshSessionId = String(payload.agent.id)
+    services.reviewTurnState.activate(dshSessionId, payload.turn)
     reviewTurns.begin(dshSessionId, payload.turn)
     writeTurns.begin(dshSessionId, payload.turn)
     readTurns.begin(dshSessionId, payload.turn)
@@ -2507,15 +2750,23 @@ function installTurnTracking(
     return next()
   }))
   ctx.effect(() => ctx.on('agent/turn-stopping', async ({ agent, turn }) => {
-    await services.turnLeases.endTurn(String(agent.id), turn)
+    const dshSessionId = String(agent.id)
+    services.reviewTurnState.finish(dshSessionId, turn)
+    await services.turnLeases.endTurn(dshSessionId, turn)
   }))
   ctx.effect(() => ctx.on('agent/error', async ({ agent, turn }) => {
-    // step 级 error 不等于回合结束；保持租约与心跳，等 stopping/dispose 收口。
-    services.turnLeases.markAgentError(String(agent.id), turn)
+    const dshSessionId = String(agent.id)
+    if (services.reviewTurnState.finish(dshSessionId, turn)) {
+      // 审查错误是该审查回合的终态，立即收口；普通回合保留既有 step-error 语义。
+      await services.turnLeases.endTurn(dshSessionId, turn)
+    } else {
+      services.turnLeases.markAgentError(dshSessionId, turn)
+    }
   }))
   ctx.effect(() => ctx.on('agent/disposed', async ({ agent }) => {
     const dshSessionId = String(agent.id)
     await services.turnLeases.disposeAgent(dshSessionId)
+    services.reviewTurnState.dispose(dshSessionId)
     reviewTurns.dispose(dshSessionId)
     writeTurns.dispose(dshSessionId)
     readTurns.dispose(dshSessionId)

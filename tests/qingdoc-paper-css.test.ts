@@ -236,7 +236,7 @@ describe('青简纸面移植契约', () => {
     expect(css).toContain('.annotation-anchor-active[data-annotation-severity="error"]')
     expect(css).toContain('.annotation-anchor-accepted {')
     expect(panelSource).toContain('data-wf="WorkspaceDocFunctions"')
-    expect(panelSource).toContain('<DeaiReviewModal')
+    expect(panelSource).toContain('<ReviewLaunchModal')
     expect(panelSource).not.toContain('QingDocActionMenus')
     expect(css).not.toContain('.qingdoc-action-btn')
     expect(css).not.toContain('.qingdoc-review-dialog')

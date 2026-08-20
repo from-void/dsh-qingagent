@@ -53,6 +53,38 @@ function menuItem(label: string): HTMLButtonElement {
     .find((item) => item.textContent === label)!
 }
 
+function stubReviewBridge(materialReady = true): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input), 'http://localhost')
+    const type = url.searchParams.get('type') ?? 'custom'
+    const template = {
+      id: `review-${type}-default`,
+      type,
+      name: type === 'deai' ? '自然表达' : `${type} 标准模板`,
+      prompt: type === 'deai' ? '逐段识别机器腔并生成批注建议。' : `按 ${type} 规则逐项检查。`,
+      builtin: true,
+      createdAt: '2026-08-21T00:00:00.000Z',
+      updatedAt: '2026-08-21T00:00:00.000Z',
+      selected: true,
+    }
+    let body: unknown = { ok: true }
+    if (url.pathname.endsWith('/review-materials')) body = {
+      materials: [{ id: 'material-1', parseState: materialReady ? 'ready' : 'processing' }],
+    }
+    else if (url.pathname.endsWith('/review-templates') && (init?.method ?? 'GET') === 'GET') body = { templates: [template] }
+    else if (url.pathname.endsWith('/review-supplement')) {
+      body = init?.method === 'PUT' ? JSON.parse(String(init.body)) : { supplement: '' }
+    } else if (url.pathname.endsWith('/lexicons')) body = { lexicons: [
+      { id: 'lexicon-ad', name: '广告合规', entryCount: 12, enabled: true },
+      { id: 'lexicon-medical', name: '医疗宣传', entryCount: 8, enabled: true },
+    ] }
+    else if (url.pathname.endsWith('/review-templates/select')) body = { selected: true, id: template.id, type }
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
 describe('青简纸面审查/导出入口', () => {
   it('按 .ws-docfns 产品结构渲染，并以 title/aria-disabled 表达空稿禁用原因', () => {
     renderFunctions({
@@ -107,7 +139,8 @@ describe('青简纸面审查/导出入口', () => {
     expect(host.querySelector('[data-wf="ReviewMenu"]')).toBeNull()
   })
 
-  it('八类 ReviewMenu 原生菜单齐全，普通类型经 assembleDshReviewQuery 发回当前 dsh 会话', async () => {
+  it('八类 ReviewMenu 原生菜单齐全，来源核查经统一配置、素材预检与打标后发回当前会话', async () => {
+    const fetchMock = stubReviewBridge()
     const onSendMessage = vi.fn(async (_dshSessionId: string, _text: string) => undefined)
     renderFunctions({ onSendMessage })
 
@@ -121,14 +154,27 @@ describe('青简纸面审查/导出入口', () => {
       menuItem('来源核查').click()
       await Promise.resolve()
     })
+    await vi.waitFor(() => expect(host.querySelector('[data-wf="ReviewLaunchModal"]')).not.toBeNull())
+    const confirm = [...host.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
+      .find((button) => button.textContent === '开始核查')!
+    await act(async () => {
+      confirm.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await vi.waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1))
     expect(onSendMessage).toHaveBeenCalledTimes(1)
     expect(onSendMessage.mock.calls[0]?.[0]).toBe('dsh-docfns')
-    expect(onSendMessage.mock.calls[0]?.[1]).toContain('对当前文稿做来源核查(仅对照已关联素材)。')
+    expect(onSendMessage.mock.calls[0]?.[1]).toContain('对当前文档做来源核查。')
     expect(onSendMessage.mock.calls[0]?.[1]).toContain('qing_read_draft')
+    const paths = fetchMock.mock.calls.map(([input]) => new URL(String(input), 'http://localhost').pathname)
+    expect(paths.filter((path) => path.endsWith('/review-materials'))).toHaveLength(2)
+    expect(paths.indexOf('/qingagent-bridge/review-turn')).toBeLessThan(paths.length)
     expect(host.querySelector('[data-wf="ReviewMenu"]')).toBeNull()
   })
 
-  it('去AI味使用产品 DeaiReviewModal，所选模板规则与补充说明同路发送', async () => {
+  it('去AI味使用统一 ReviewLaunchModal，模板与补充说明同路发送', async () => {
+    stubReviewBridge()
     const onSendMessage = vi.fn(async (_dshSessionId: string, _text: string) => undefined)
     renderFunctions({ onSendMessage })
 
@@ -137,20 +183,16 @@ describe('青简纸面审查/导出入口', () => {
       menuItem('去AI味').click()
       await Promise.resolve()
     })
-    await vi.waitFor(() => expect(host.querySelector('[data-wf="DeaiReviewModal"]')).not.toBeNull())
-    expect(host.querySelectorAll('.ws-deai-template')).toHaveLength(3)
-
-    const deepRadio = [...host.querySelectorAll<HTMLInputElement>('input[name="deai-template"]')]
-      .find((input) => input.closest('.ws-deai-template')?.textContent?.includes('深度重写'))!
-    act(() => deepRadio.click())
-    const supplement = host.querySelector<HTMLTextAreaElement>('.ws-deai-supplement textarea')!
+    await vi.waitFor(() => expect(host.querySelector('[data-wf="ReviewLaunchModal"]')).not.toBeNull())
+    expect(host.querySelector('[data-wf="DeaiReviewModal"]')).toBeNull()
+    const supplement = host.querySelector<HTMLTextAreaElement>('.ws-launch-supplement textarea')!
     act(() => {
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
       setter?.call(supplement, '保留品牌口号')
       supplement.dispatchEvent(new Event('input', { bubbles: true }))
     })
 
-    const confirm = [...host.querySelectorAll<HTMLButtonElement>('.ws-lexicon-actions button')]
+    const confirm = [...host.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
       .find((button) => button.textContent === '开始处理')!
     await act(async () => {
       confirm.click()
@@ -159,10 +201,62 @@ describe('青简纸面审查/导出入口', () => {
 
     expect(onSendMessage).toHaveBeenCalledTimes(1)
     const query = onSendMessage.mock.calls[0]?.[1] ?? ''
-    expect(query).toContain('审查模板「深度重写」')
-    expect(query).toContain('按 24 类 AI 写作痕迹逐段检查并重写')
-    expect(query).toContain('本次补充要求:保留品牌口号')
-    expect(host.querySelector('[data-wf="DeaiReviewModal"]')).toBeNull()
+    expect(query).toContain('审查模板「自然表达」')
+    expect(query).toContain('逐段识别机器腔并生成批注建议')
+    expect(query).toContain('文档级补充要求（只适用于当前文档）：保留品牌口号')
+    expect(host.querySelector('[data-wf="ReviewLaunchModal"]')).toBeNull()
+  })
+
+  it('来源核查没有 ready 素材时显示真源阻断文案且不能发起', async () => {
+    stubReviewBridge(false)
+    const onSendMessage = vi.fn(async (_dshSessionId: string, _text: string) => undefined)
+    renderFunctions({ onSendMessage })
+
+    act(() => reviewButton().click())
+    await act(async () => {
+      menuItem('来源核查').click()
+      await Promise.resolve()
+    })
+    await vi.waitFor(() => expect(host.textContent).toContain('当前没有可对照素材，请先添加素材'))
+    const confirm = [...host.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
+      .find((button) => button.textContent === '开始核查')!
+    expect(confirm.disabled).toBe(true)
+    expect(onSendMessage).not.toHaveBeenCalled()
+  })
+
+  it('敏感词词库多选只改当前弹窗，并把所选清单注入审查指令', async () => {
+    const fetchMock = stubReviewBridge()
+    const onSendMessage = vi.fn(async (_dshSessionId: string, _text: string) => undefined)
+    renderFunctions({ onSendMessage })
+
+    act(() => reviewButton().click())
+    await act(async () => {
+      menuItem('敏感词审查').click()
+      await Promise.resolve()
+    })
+    await vi.waitFor(() => expect(host.textContent).toContain('已启用 2 个词库'))
+    act(() => host.querySelector<HTMLButtonElement>('.ws-launch-resource-row .ws-launch-link')!.click())
+    const medical = host.querySelector<HTMLInputElement>('input[aria-label="启用医疗宣传"]')
+      ?? [...host.querySelectorAll<HTMLInputElement>('.ws-lexicon-check input')][1]!
+    act(() => medical.click())
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
+        .find((button) => button.textContent === '完成')!.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
+        .find((button) => button.textContent === '开始审查')!.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await vi.waitFor(() => expect(onSendMessage).toHaveBeenCalledOnce())
+    const query = onSendMessage.mock.calls[0]?.[1] ?? ''
+    expect(query).toContain('「广告合规」(id: lexicon-ad)')
+    expect(query).not.toContain('「医疗宣传」(id: lexicon-medical)')
+    expect(fetchMock.mock.calls.some(([input, init]) =>
+      new URL(String(input), 'http://localhost').pathname.endsWith('/lexicons')
+      && (init?.method ?? 'GET') !== 'GET')).toBe(false)
   })
 
   it('确定性导出仅列格式项，并在 flush 后调用 /qingagent-bridge 对应 store', async () => {

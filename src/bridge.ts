@@ -44,6 +44,7 @@ import {
   validateBridgeTelemetryEvent,
   type TelemetryCapture,
 } from './telemetry.js'
+import { parseReviewTurn, reviewTurnCoordinatorFor } from './reviewTurn.js'
 
 const MAX_ASSET_BYTES = 50 * 1024 * 1024
 const MAX_ASSET_JSON_BYTES = 70 * 1024 * 1024
@@ -176,6 +177,17 @@ export class AgentTurnLeaseCoordinator {
     await segment.beginAttempt
     if (segment.state !== 'acquired') throw this.blockingError(segment)
     return segment.turnId
+  }
+
+  /** 审查预申领遇到 BUSY_NATIVE 时，落批注前再做一次完整冷申领。 */
+  async retryBusyDocument(dshSessionId: string, engineSessionId: string): Promise<string | undefined> {
+    const segment = this.turns.get(dshSessionId)?.segments.get(engineSessionId)
+    if (segment?.state === 'unknown' && segment.blockReason === 'busy-native') {
+      segment.beginAttempt = undefined
+      segment.blockReason = undefined
+      segment.lastError = undefined
+    }
+    return this.touchDocument(dshSessionId, engineSessionId)
   }
 
   async endTurn(dshSessionId: string, turn: number): Promise<void> {
@@ -480,7 +492,7 @@ function signalFailureKind(error: unknown): SignalFailureKind {
   if (error instanceof EngineHttpError) {
     const body = error.body as { code?: unknown } | null
     const code = typeof body?.code === 'string' ? body.code : ''
-    if (code === 'BUSY_NATIVE') return 'busy-native'
+    if (code === 'BUSY_NATIVE' || code === 'AGENT_BUSY') return 'busy-native'
     if (code === 'LEASE_HELD') return 'lease-held'
     if (code === 'LOCK_LOST') return 'lock-lost'
     if (error.status === 401 || error.status === 403) return 'auth'
@@ -697,6 +709,106 @@ export class BridgeHub {
         }
         this.emit(body.dshSessionId, { type: 'focus-changed', engineSessionId: body.engineSessionId })
         writeJson(response, 200, { ok: true })
+        return
+      }
+      if (request.method === 'POST' && url.pathname === '/qingagent-bridge/review-turn') {
+        const body = await readJsonBody(request) as Record<string, unknown>
+        const dshSessionId = typeof body.dshSessionId === 'string' ? body.dshSessionId.trim() : ''
+        if (!dshSessionId) throw new HttpInputError('dshSessionId 必须是非空字符串。')
+        let review
+        try {
+          review = parseReviewTurn(body)
+        } catch (error) {
+          throw new HttpInputError(error instanceof Error ? error.message : '审查回合参数无效。')
+        }
+        reviewTurnCoordinatorFor(this.engine).markPending(dshSessionId, review)
+        writeJson(response, 200, { pending: true })
+        return
+      }
+      if (request.method === 'DELETE' && url.pathname === '/qingagent-bridge/review-turn') {
+        reviewTurnCoordinatorFor(this.engine).cancelPending(requiredQuery(url, 'dshSessionId'))
+        writeJson(response, 200, { pending: false })
+        return
+      }
+      if (request.method === 'GET' && url.pathname === '/qingagent-bridge/review-templates') {
+        const type = requiredQuery(url, 'type')
+        writeJson(response, 200, await fetchInternalJson(this.engine,
+          `/external/review-templates?type=${encodeURIComponent(type)}`,
+        ))
+        return
+      }
+      if (request.method === 'POST' && url.pathname === '/qingagent-bridge/review-templates/select') {
+        const body = await readJsonBody(request) as Record<string, unknown>
+        const type = typeof body.type === 'string' ? body.type.trim() : ''
+        const templateId = typeof body.templateId === 'string' ? body.templateId.trim() : ''
+        if (!type || !templateId) throw new HttpInputError('type 与 templateId 均为必填字符串。')
+        const selected = await fetchInternalJson<{ id: string; type: string }>(this.engine,
+          `/external/review-templates/${encodeURIComponent(templateId)}/select`,
+          { method: 'POST', body: '{}' },
+        )
+        if (selected.type !== type) throw new HttpInputError('模板类型与审查类型不匹配。')
+        writeJson(response, 200, selected)
+        return
+      }
+      if (request.method === 'POST' && url.pathname === '/qingagent-bridge/review-templates') {
+        const body = await readJsonBody(request) as Record<string, unknown>
+        const id = typeof body.id === 'string' ? body.id.trim() : ''
+        const type = typeof body.type === 'string' ? body.type.trim() : ''
+        const name = typeof body.name === 'string' ? body.name : ''
+        const prompt = typeof body.prompt === 'string' ? body.prompt : ''
+        if (!type || !name.trim() || !prompt.trim()) {
+          throw new HttpInputError('type、name、prompt 均为必填字符串。')
+        }
+        if (id) {
+          const expectedUpdatedAt = typeof body.expectedUpdatedAt === 'string'
+            ? body.expectedUpdatedAt.trim()
+            : ''
+          if (!expectedUpdatedAt) throw new HttpInputError('更新模板必须提供 expectedUpdatedAt。')
+          writeJson(response, 200, await fetchInternalJson(this.engine,
+            `/external/review-templates/${encodeURIComponent(id)}`,
+            { method: 'PUT', body: JSON.stringify({ name, prompt, expectedUpdatedAt }) },
+          ))
+        } else {
+          writeJson(response, 200, await fetchInternalJson(this.engine, '/external/review-templates', {
+            method: 'POST',
+            body: JSON.stringify({ type, name, prompt }),
+          }))
+        }
+        return
+      }
+      if (request.method === 'DELETE' && url.pathname === '/qingagent-bridge/review-templates') {
+        const templateId = requiredQuery(url, 'templateId')
+        writeJson(response, 200, await fetchInternalJson(this.engine,
+          `/external/review-templates/${encodeURIComponent(templateId)}`,
+          { method: 'DELETE' },
+        ))
+        return
+      }
+      if (url.pathname === '/qingagent-bridge/review-supplement'
+        && (request.method === 'GET' || request.method === 'PUT')) {
+        const engineSessionId = this.authorizedEngineSessionId(url)
+        const type = requiredQuery(url, 'type')
+        const templateId = url.searchParams.get('templateId')?.trim()
+        const query = `type=${encodeURIComponent(type)}${templateId ? `&templateId=${encodeURIComponent(templateId)}` : ''}`
+        const path = `/sessions/${encodeURIComponent(engineSessionId)}/review-supplement?${query}`
+        const supplement = request.method === 'GET'
+          ? await fetchInternalJson(this.engine, `/external${path}`)
+          : await fetchInternalJson(this.engine, `/external${path}`, {
+            method: 'PUT',
+            body: JSON.stringify(await readJsonBody(request)),
+          })
+        writeJson(response, 200, supplement)
+        return
+      }
+      if (request.method === 'GET' && url.pathname === '/qingagent-bridge/lexicons') {
+        writeJson(response, 200, await fetchInternalJson(this.engine, '/external/lexicons'))
+        return
+      }
+      if (request.method === 'GET' && url.pathname === '/qingagent-bridge/review-materials') {
+        const engineSessionId = this.authorizedEngineSessionId(url)
+        writeJson(response, 200, await fetchInternalJson(this.engine,
+          `/external/sessions/${encodeURIComponent(engineSessionId)}/files`,
+        ))
         return
       }
       if (request.method === 'GET' && url.pathname === '/qingagent-bridge/export') {
@@ -980,6 +1092,17 @@ function validateSelection(value: unknown): QingSelection {
 
 export function isLoopback(address?: string): boolean {
   return address === '127.0.0.1' || address === '::1' || address?.startsWith('::ffff:127.') === true
+}
+
+async function fetchInternalJson<T = unknown>(
+  engine: EngineService,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const upstream = await engine.fetchInternal(path, init)
+  const body = await upstream.json().catch(() => undefined) as T | undefined
+  if (!upstream.ok) throw new EngineHttpError(upstream.status, body)
+  return body as T
 }
 
 function writeJson(response: ServerResponse, status: number, value: unknown): void {
