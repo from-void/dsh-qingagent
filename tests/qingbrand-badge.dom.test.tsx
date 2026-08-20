@@ -77,7 +77,12 @@ describe('青简顶栏品牌卡', () => {
     expect([...links].map((link) => link.querySelector('.qingbrand-item-label')?.textContent))
       .toEqual(['报 Bug', '提需求'])
     expect([...links].map((link) => link.querySelector('.qingbrand-item-hint')?.textContent))
-      .toEqual(['前往插件 git 仓库提报 issue', '有好的想法随时欢迎碰撞'])
+      .toEqual(['前往插件反馈页提报问题', '有好的想法随时欢迎碰撞'])
+    expect([...links].map((link) => link.href))
+      .toEqual([
+        'https://qingagent.com/feedback/plugin',
+        'https://qingagent.com/feedback/plugin',
+      ])
     // 底部 Star 入口:指向插件仓库主页(不是 issues),外链新窗口。
     const star = host!.querySelector<HTMLAnchorElement>('.qingbrand-star')
     expect(star?.textContent).toContain('觉得不错？给个 Star')

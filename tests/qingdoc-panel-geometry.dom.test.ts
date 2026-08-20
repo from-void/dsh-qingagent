@@ -37,6 +37,25 @@ function contains(rect: DOMRect, x: number, y: number): boolean {
 }
 
 describe('B9 面板层级与几何 DOM 契约', () => {
+  it('P90:宽度分隔条以面板左边界为中心，且保持 5px 热区', () => {
+    const root = panelRoot('<div class="qingdoc-details-resizer" data-qing-details-resizer></div>')
+    const resizer = root.querySelector<HTMLElement>('[data-qing-details-resizer]')!
+    const rootRect = setRect(root, { left: 720, top: 0, width: 560, height: 800 })
+    const style = getComputedStyle(resizer)
+    const width = Number.parseFloat(style.width)
+    const anchoredLeft = rootRect.left + Number.parseFloat(style.left)
+    const translatedLeft = style.transform === 'translateX(-50%)'
+      ? anchoredLeft - width / 2
+      : anchoredLeft
+    setRect(resizer, { left: translatedLeft, top: rootRect.top, width, height: rootRect.height })
+
+    const resizerRect = resizer.getBoundingClientRect()
+    const center = resizerRect.left + resizerRect.width / 2
+
+    expect(resizerRect.width).toBe(5)
+    expect(Math.abs(center - root.getBoundingClientRect().left)).toBeLessThanOrEqual(1)
+  })
+
   it.each([600, 970, 1400])('P84: %ipx 面板的滚动条贴住纸面，审查/导出锚仍在纸内', (panelWidth) => {
     const root = panelRoot(`
       <div class="ws-body">
