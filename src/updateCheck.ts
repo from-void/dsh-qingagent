@@ -133,8 +133,8 @@ function parseVersion(value: string): ParsedVersion | undefined {
 function readCurrentPackageVersion(): string {
   try {
     const packageJson = require('../package.json') as { version?: unknown }
-    return typeof packageJson.version === 'string' ? packageJson.version : '0.0.0'
+    return typeof packageJson.version === 'string' ? packageJson.version : ''
   } catch {
-    return '0.0.0'
+    return ''
   }
 }

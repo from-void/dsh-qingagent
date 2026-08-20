@@ -358,6 +358,11 @@
   text-decoration-color: #b08d4f;
 }
 
+[data-qingagent-doc-panel] .qingbrand-version {
+  margin: -5px 16px 9px;
+  text-align: center;
+}
+
 [data-qingagent-doc-panel] .qingbrand-update-dot {
   display: inline-block;
   width: 5px;
