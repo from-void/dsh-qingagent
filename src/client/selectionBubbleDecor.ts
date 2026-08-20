@@ -75,7 +75,18 @@ function decorateReviewOutcomeNode(node: Text): boolean {
   return true
 }
 
+/** 排除面:输入框、镜像层、纸面、chip 面板与已装饰区。文本节点直达路径(addedNodes 为
+ *  Text / characterData 变更)也必须过这道门——React 受控更新 mirror 文本走的正是这两条,
+ *  漏检会 replaceWith 掉 React 管理的节点,后续 reconcile removeChild 直接崩 composer。 */
+function isDecorExcluded(node: Text): boolean {
+  const parent = node.parentElement
+  return !parent || parent.closest(
+    `[${DECORATED}], textarea, [data-qingagent-doc-panel], [data-qing-chip-panel], [class*="mirror"], [class*="backdrop"]`,
+  ) !== null
+}
+
 function decorateTextNode(node: Text): void {
+  if (isDecorExcluded(node)) return
   const option = node.parentElement?.closest('button, [role="option"], [role="radio"]')
   if (option && /\bv\d+\b/i.test(node.data)) {
     node.data = node.data
