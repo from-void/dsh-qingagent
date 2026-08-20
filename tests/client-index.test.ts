@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import type { BridgeEvent, BridgeState, QingSelection } from '../src/contracts.js'
 import { apply } from '../src/client/index.js'
+import { qingClientStore } from '../src/client/store.js'
 import type { InsertReferenceRequest, InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 
 class FakeEventSource {
@@ -34,7 +35,7 @@ afterEach(() => {
 })
 
 describe('client details 动态占槽', () => {
-  it('仅在当前会话有生成流时注册，失败归零后让位，卸载时清理订阅', async () => {
+  it('online 空会话保留占槽，显式关闭后注销，新稿到达后恢复正常占槽', async () => {
     vi.stubGlobal('EventSource', FakeEventSource)
     const emptyState: BridgeState = {
       dshSessionId: 'dsh-m1', binding: { docs: [] }, docs: [],
@@ -83,6 +84,9 @@ describe('client details 动态占槽', () => {
       expect.any(Function),
     )
     await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1))
+    await vi.waitFor(() => expect(activeDetails.size).toBe(1))
+
+    qingClientStore.closePanel('dsh-m1')
     expect(activeDetails.size).toBe(0)
 
     const source = FakeEventSource.instances[0]!
@@ -94,8 +98,6 @@ describe('client details 动态占槽', () => {
       },
     })
     expect(activeDetails.size).toBe(1)
-    source.emit({ type: 'binding-changed', binding: { docs: [] } })
-    expect(activeDetails.size).toBe(0)
 
     detailsLifecycle?.()
     for (const dispose of effectDisposers) dispose()

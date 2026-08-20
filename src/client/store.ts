@@ -184,8 +184,9 @@ export class QingClientStore {
     const entry = this.entries.get(sessionId)
     if (entry?.panelClosed) return false
     const snapshot = this.getSnapshot(sessionId)
-    return snapshot.bindingCount > 0
-      || (snapshot.state !== undefined && snapshot.state.engine.state !== 'online')
+    // bridge 状态一旦就绪就保留面板：离线时显示连接引导，在线但尚无绑定稿时
+    // 显示已连接空态。只有用户显式点 × 才注销，避免客户端上线瞬间把侧栏关掉。
+    return snapshot.bindingCount > 0 || snapshot.state !== undefined
   }
 
   /** × 关闭:dsh 详情列显隐由插槽注册决定,layout.closeDetails 对它无效;这里置关闭位驱动注销。 */
