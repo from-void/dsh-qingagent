@@ -348,6 +348,7 @@ ${panelRoot} .qingdoc-details-resizer {
   bottom: 0;
   left: 0;
   width: 5px;
+  transform: translateX(-50%);
   cursor: col-resize;
   touch-action: none;
   outline: none;
@@ -357,8 +358,9 @@ ${panelRoot} .qingdoc-details-resizer::after {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 2px;
+  left: 50%;
   width: 1px;
+  transform: translateX(-50%);
   background: rgba(181, 154, 99, 0);
   transition: background .15s ease;
 }

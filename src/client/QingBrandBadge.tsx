@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-const QINGAGENT_FEEDBACK_URL = 'https://qingagent.com/feedback'
-const QINGAGENT_BUG_URL = 'https://github.com/void2anything/dsh-qingagent/issues'
+const QINGAGENT_FEEDBACK_URL = 'https://qingagent.com/feedback/plugin'
 const QINGAGENT_REPO_URL = 'https://github.com/void2anything/dsh-qingagent'
 const QINGAGENT_UPDATE_COMMAND = 'npx @deepseek-ai/dsh plugin --profile web add dsh-qingagent@latest'
 const UPDATE_SEEN_PREFIX = 'dsh-qingagent.update-seen.v1.'
@@ -143,9 +142,9 @@ export function QingBrandBadge() {
       {cardOpen ? (
         <div id={cardId} className="qingbrand-hover-card" role="group" aria-label="青简反馈与更新">
           <div className="qingbrand-feedback-links">
-            <a href={QINGAGENT_BUG_URL} target="_blank" rel="noreferrer">
+            <a href={QINGAGENT_FEEDBACK_URL} target="_blank" rel="noreferrer">
               <span className="qingbrand-item-label">报 Bug</span>
-              <span className="qingbrand-item-hint">前往插件 git 仓库提报 issue</span>
+              <span className="qingbrand-item-hint">前往插件反馈页提报问题</span>
             </a>
             <a href={QINGAGENT_FEEDBACK_URL} target="_blank" rel="noreferrer">
               <span className="qingbrand-item-label">提需求</span>
