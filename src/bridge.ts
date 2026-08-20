@@ -713,7 +713,8 @@ export class BridgeHub {
           return
         }
         const upstream = await this.engine.fetchInternal(
-          `/export/${encodeURIComponent(engineSessionId)}?format=${encodeURIComponent(format)}`,
+          // external 子树导出路由(引擎 0.1.5 新数据面;旧 /export 对插件身份 403)。
+          `/external/sessions/${encodeURIComponent(engineSessionId)}/export?format=${encodeURIComponent(format)}`,
         )
         const headers: Record<string, string> = {
           'Content-Type': upstream.headers.get('Content-Type') ?? 'application/octet-stream',

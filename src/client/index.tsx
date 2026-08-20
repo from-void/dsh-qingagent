@@ -16,9 +16,15 @@ import {
 import { qingClientStore } from './store.js'
 import {
   insertSelectionReference,
-  installSelectionChipHoverTitles,
   qingSelectionReferenceSource,
 } from './selectionReference.js'
+import {
+  insertAnnotationReference,
+  qingAnnotationReferenceSource,
+  removeOccurrenceFromDraft,
+  replaceOccurrenceRef,
+} from './annotationReference.js'
+import { installChipPresentation, type InputState as ChipInputState } from './chipPresentation.js'
 import { installSelectionBubbleDecor } from './selectionBubbleDecor.js'
 import { markPanelOpenSource } from './telemetry.js'
 
@@ -55,6 +61,8 @@ export function apply(ctx: ClientContext): void {
   // chip 提交必须能按 source 找回 codec；owner 缺失时 dsh 会阻止发送而不会降级成
   // clipboardText，因此 source 与选段 bridge 同属插件生命周期。
   ctx.effect(() => inputTriggers.registerSource(qingSelectionReferenceSource))
+  // 批注采纳 chip 与选段 chip 同生命周期:codec 恒等展开完整修改指令。
+  ctx.effect(() => inputTriggers.registerSource(qingAnnotationReferenceSource))
   // 发送气泡里的 [选段] 段落样式化(宿主消息渲染无槽位,DOM 装饰器随插件生命周期)。
   ctx.effect(() => installSelectionBubbleDecor())
 
@@ -130,6 +138,23 @@ export function apply(ctx: ClientContext): void {
                 handle.fiber.dispose()
               }
             },
+            // 批注采纳:把完整修改指令铸成输入框 chip(不代发,发送权在用户)。
+            qingInsertAnnotation: (instruction: string) => {
+              const sessionId = currentSessionId
+              if (!sessionId) return false
+              const handle = createScope(
+                ctx as unknown as Parameters<typeof createScope>[0],
+                sessionId as Parameters<typeof createScope>[1],
+              )
+              try {
+                return insertAnnotationReference(
+                  handle.ctx as unknown as Parameters<typeof insertAnnotationReference>[0],
+                  instruction,
+                )
+              } finally {
+                handle.fiber.dispose()
+              }
+            },
           }),
         }, QingDocPanel)
         if (shouldAutoOpen) layout.openDetails()
@@ -191,13 +216,35 @@ export function apply(ctx: ClientContext): void {
           ctx as unknown as Parameters<typeof createScope>[0],
           currentSessionId as Parameters<typeof createScope>[1],
         )
-        const inputState = selectionScope.ctx.conversation.input.for(selectionScope.ctx).state
+        const inputFacade = selectionScope.ctx.conversation.input.for(selectionScope.ctx)
+        const inputState = inputFacade.state
         const unsubscribeState = inputState.subscribe(syncSelectionReference)
-        // hover 出选段原始内容(chip 定宽硬裁,原生 title 补全语义)。
-        const uninstallHover = installSelectionChipHoverTitles(() => inputState.getSnapshot().occurrences)
+        // chip 呈现层:打标+药丸样式+hover 面板+移除角标(布局零影响,详见 chipPresentation)。
+        const scopeCtx = selectionScope.ctx
+        const uninstallChips = installChipPresentation({
+          getInputState: () => inputState.getSnapshot() as unknown as ChipInputState | undefined,
+          subscribeInputState: (listener) => inputState.subscribe(listener),
+          removeOccurrence: (occurrenceId) => removeOccurrenceFromDraft(
+            scopeCtx as unknown as Parameters<typeof removeOccurrenceFromDraft>[0],
+            occurrenceId,
+          ),
+          replaceOccurrenceRef: (occurrenceId, newRef) => replaceOccurrenceRef(
+            scopeCtx as unknown as Parameters<typeof replaceOccurrenceRef>[0],
+            occurrenceId,
+            newRef,
+          ),
+          onToast: (text) => {
+            (inputFacade as unknown as { notify(level: 'info' | 'error', text: string): void })
+              .notify('error', text)
+          },
+          getDocTitle: () => {
+            const id = currentSessionId
+            return id ? qingClientStore.getSnapshot(id).activeDoc?.title ?? undefined : undefined
+          },
+        })
         unsubscribeInput = () => {
           unsubscribeState()
-          uninstallHover()
+          uninstallChips()
         }
       }
       syncPanelRegistration()
