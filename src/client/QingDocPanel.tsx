@@ -1193,16 +1193,6 @@ export function QingDocPanel(props: QingDocPanelProps) {
     )
   }
 
-  const editorLockTitle = panelDoc && !docMissing
-    ? busy
-      ? '青简正在写作，请稍候'
-      : pendingReview
-        ? '审阅中 · 请先在右侧逐处确认'
-        : saveLocked
-          ? statusLabel || undefined
-          : undefined
-    : undefined
-
   return (
     <ConfirmProvider>
       <section
@@ -1274,11 +1264,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
         </div>
       </header>
       <div className="ws-body">
-        <main
-          className="ws-right"
-          title={editorLockTitle}
-          style={editorLockTitle ? { cursor: 'not-allowed' } : undefined}
-        >
+        <main className="ws-right">
           {docMissing ? (
             <div className="qingdoc-doc-missing" role="status">
               <svg className="qingdoc-doc-missing-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">

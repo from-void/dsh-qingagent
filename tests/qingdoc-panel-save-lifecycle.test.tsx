@@ -227,62 +227,6 @@ describe('QingDocPanel 保存生命周期', () => {
     expect(document.querySelector('.ws-paper-surface > .ws-editor-glow')).not.toBeNull()
   })
 
-  it('写作锁定态给正文容器一致提示与 not-allowed 光标', async () => {
-    installBridgeFetch('dsh-lock-writing', ['qing-lock-writing'], {
-      agentBusy: true,
-      panelPm: EDITED_PM,
-    })
-    renderPanel('dsh-lock-writing')
-
-    const container = await vi.waitFor(() => {
-      const candidate = document.querySelector<HTMLElement>('.ws-right')
-      expect(candidate?.title).toBe('青简正在写作，请稍候')
-      return candidate!
-    })
-    expect(container.style.cursor).toBe('not-allowed')
-  })
-
-  it('审阅锁定态给正文容器逐处确认提示与 not-allowed 光标', async () => {
-    installBridgeFetch('dsh-lock-review', ['qing-lock-review'], {
-      pendingReview: true,
-      reviewSuggestionStatus: 'reviewing',
-    })
-    renderPanel('dsh-lock-review')
-
-    const container = await vi.waitFor(() => {
-      const candidate = document.querySelector<HTMLElement>('.ws-right')
-      expect(candidate?.title).toBe('审阅中 · 请先在右侧逐处确认')
-      return candidate!
-    })
-    expect(container.style.cursor).toBe('not-allowed')
-  })
-
-  it('保存冲突复用状态标签作为正文提示，解锁后移除提示与禁用光标', async () => {
-    const sessionId = 'dsh-lock-conflict'
-    installBridgeFetch(sessionId, ['qing-lock-conflict'], { panelPm: EDITED_PM })
-    renderPanel(sessionId)
-    await vi.waitFor(() => expect(viewHarness.props?.interactiveEditable).toBe(true))
-
-    act(() => qingClientStore.setSaveState(sessionId, {
-      kind: 'conflict',
-      engineSessionId: 'qing-lock-conflict',
-      expected: 1,
-      actual: 2,
-      message: '保存冲突',
-    }))
-    const container = document.querySelector<HTMLElement>('.ws-right')!
-    expect(container.title).toBe('保存冲突·已暂停编辑')
-    expect(container.style.cursor).toBe('not-allowed')
-
-    await act(async () => {
-      await qingClientStore.resolveConflictByReload(sessionId, 'qing-lock-conflict')
-    })
-    await vi.waitFor(() => {
-      expect(container.hasAttribute('title')).toBe(false)
-      expect(container.style.cursor).toBe('')
-    })
-  })
-
   it('reveal 请求遇到面板文档短暂缺失时立即清理，恢复后不滞留写作中', async () => {
     vi.stubGlobal('EventSource', FakeEventSource)
     const restorePanel = deferred<void>()
