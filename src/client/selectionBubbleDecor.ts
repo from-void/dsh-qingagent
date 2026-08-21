@@ -76,6 +76,55 @@ function decorateReviewOutcomeNode(node: Text): boolean {
   return true
 }
 
+/** 审查发起 query(assembleDshReviewQuery 输出)的结构化卡:贴客户端发起审查的
+ *  ActionCard(标题行+「模板/补充」标签行,直角),完整契约文字不再整坨刷屏。
+ *  只做「已发起」这一事件快照,不引入会随全局状态漂移的进行中/已完成文案。 */
+const REVIEW_LAUNCH_HEAD_RE = /^对当前文档做([^。\n]{1,24}(?:审查|核查))。/u
+
+function decorateReviewLaunchNode(node: Text): boolean {
+  const text = node.data
+  const head = REVIEW_LAUNCH_HEAD_RE.exec(text)
+  if (!head || !text.includes('独立审查执行契约')) return false
+  const template = /审查模板「([^」]{1,60})」/u.exec(text)?.[1]
+  const supplement = /文档级补充要求（只适用于当前文档）：([\s\S]*?)\n独立审查执行契约/u.exec(text)?.[1]
+  const lexicons = /启用词库：([^\n]{1,240})/u.exec(text)?.[1]
+    ?.replace(/\(id: [^)]+\)/gu, '').replace(/\s{2,}/gu, ' ').trim()
+
+  const wrap = document.createElement('span')
+  wrap.setAttribute(DECORATED, '1')
+  wrap.style.cssText = [
+    'display:block', 'padding:8px 10px', 'border-radius:0',
+    'border:1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.35))',
+    'background:var(--dsw-alias-bg-layer-1, rgba(128,128,128,.06))',
+  ].join(';')
+  const header = document.createElement('span')
+  header.style.cssText = 'display:flex;align-items:center;gap:8px;font-weight:600'
+  const title = document.createElement('span')
+  title.textContent = head[1]!
+  const badge = document.createElement('span')
+  badge.textContent = '已发起'
+  badge.style.cssText = 'margin-left:auto;font-weight:400;font-size:.9em;opacity:.6'
+  header.append(title, badge)
+  wrap.append(header)
+  const row = (label: string, value: string) => {
+    const line = document.createElement('span')
+    line.style.cssText = 'display:flex;gap:8px;margin-top:4px;font-size:.94em'
+    const key = document.createElement('span')
+    key.textContent = label
+    key.style.cssText = 'opacity:.6;flex:none'
+    const val = document.createElement('span')
+    val.textContent = clip(value, 60)
+    val.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+    line.append(key, val)
+    return line
+  }
+  if (template) wrap.append(row('模板', template))
+  if (lexicons) wrap.append(row('词库', lexicons))
+  if (supplement?.trim()) wrap.append(row('补充', supplement))
+  node.replaceWith(wrap)
+  return true
+}
+
 /** 排除面:输入框、镜像层、纸面、chip 面板与已装饰区。文本节点直达路径(addedNodes 为
  *  Text / characterData 变更)也必须过这道门——React 受控更新 mirror 文本走的正是这两条,
  *  漏检会 replaceWith 掉 React 管理的节点,后续 reconcile removeChild 直接崩 composer。 */
@@ -98,6 +147,7 @@ function decorateTextNode(node: Text): void {
       .trim()
   }
   if (decorateReviewOutcomeNode(node)) return
+  if (decorateReviewLaunchNode(node)) return
   const text = node.data
   SELECTION_RE.lastIndex = 0
   if (!SELECTION_RE.test(text)) return
@@ -130,7 +180,7 @@ function decorateWithin(root: Node): void {
         return NodeFilter.FILTER_REJECT
       }
       const data = (node as Text).data
-      return data.includes('[选段]') || data.startsWith('【审核结果】') || /\bv\d+\b/i.test(data)
+      return data.includes('[选段]') || data.startsWith('【审核结果】') || data.startsWith('对当前文档做') || /\bv\d+\b/i.test(data)
         ? NodeFilter.FILTER_ACCEPT
         : NodeFilter.FILTER_SKIP
     },
