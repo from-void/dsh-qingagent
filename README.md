@@ -69,10 +69,14 @@ npx @deepseek-ai/dsh web
 **② 安装青简插件**
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add dsh-qingagent@latest
+npx @deepseek-ai/dsh plugin --profile web add github:void2anything/dsh-qingagent
 ```
 
 装完重启 `dsh web` 即生效。
+
+> 也可以从 npm 安装:`add dsh-qingagent@<版本号> --config.minimum-release-age=0`。
+> 直接 `add dsh-qingagent@latest` 可能装到旧版本——这是 pnpm v11 默认的 24 小时发布观察期(供应链防护),
+> 上面的 GitHub 方式与带 `--config.minimum-release-age=0` 的精确版本方式都不受影响。
 
 **③ 下载并启动一次青简客户端**
 
