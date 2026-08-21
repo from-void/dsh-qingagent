@@ -50,6 +50,8 @@ import { findOccurrenceProjection } from './annotationReference.js'
 /** 打标属性与浮层 id:宿主重绘丢标是常态,打标幂等、可重入。 */
 const CHIP_ATTR = 'data-qing-chip'
 const OCC_ATTR = 'data-qing-occ'
+/** 覆盖层显示文案(图标+「批注/选段:内容」):底层投影文字被透明化,::after 按此渲染。 */
+const DISPLAY_ATTR = 'data-qing-display'
 const PANEL_ATTR = 'data-qing-chip-panel'
 const BADGE_ATTR = 'data-qing-chip-badge'
 const STYLE_ID = 'qingagent-chip-presentation-style'
@@ -94,6 +96,13 @@ export function normalizeDirectionText(text: string): string {
   return value || text.trim()
 }
 
+/** 覆盖层文案:批注=笔图标,选段=左引号图标(用户裁定);dedupe 圈号是投影不变式
+ *  需要的机器噪音,显示层剥掉。旧格式 label(历史草稿恢复)原样透传,重铸后自然更新。 */
+export function chipDisplayText(kind: 'selection' | 'annotation', label: string): string {
+  const clean = label.replace(/^[①-⑳]|^#\d+/u, '')
+  return kind === 'annotation' ? `✎ ${clean}` : `「${clean}`
+}
+
 function occurrenceKind(occurrence: InputOccurrence): 'selection' | 'annotation' | undefined {
   if (occurrence.source === SELECTION_SOURCE) return 'selection'
   if (occurrence.source === ANNOTATION_SOURCE) return 'annotation'
@@ -125,6 +134,22 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     'box-shadow:0 0 0 1px rgba(186,92,38,.8);',
     'color:var(--dsw-alias-label-primary, inherit);',
     'border-radius:0;',
+    '}',
+    // 覆盖层显示(用户裁定:图标+「批注/选段:内容」12 号字):底层投影文字透明化,
+    // ::after 绝对定位覆盖——与宿主 chipLabel 同机制,不占布局、不改底层字符度量。
+    `[${CHIP_ATTR}][${DISPLAY_ATTR}]{`,
+    'position:relative;',
+    'color:transparent !important;',
+    '}',
+    `[${CHIP_ATTR}][${DISPLAY_ATTR}] *{`,
+    'color:transparent !important;',
+    '}',
+    `[${CHIP_ATTR}][${DISPLAY_ATTR}]::after{`,
+    `content:attr(${DISPLAY_ATTR});`,
+    'position:absolute;', 'inset:0;', 'padding:0 6px;', 'box-sizing:border-box;',
+    'font-size:12px;', 'line-height:inherit;',
+    'color:var(--dsw-alias-label-primary, #ece4d4);',
+    'white-space:nowrap;', 'overflow:hidden;', 'text-overflow:ellipsis;',
     '}',
   ].join('')
   document.head.appendChild(style)
@@ -159,6 +184,7 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
         }
       }
     }
+    const occurrenceById = new Map(occurrences.map((occurrence) => [occurrence.occurrenceId, occurrence]))
     for (const el of document.querySelectorAll(`[${CHIP_ATTR}]`)) {
       if (!(el instanceof HTMLElement)) continue
       const want = desired.get(el)
@@ -167,6 +193,7 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
         || el.getAttribute(OCC_ATTR) !== String(want.occurrenceId)) {
         el.removeAttribute(CHIP_ATTR)
         el.removeAttribute(OCC_ATTR)
+        el.removeAttribute(DISPLAY_ATTR)
       }
     }
     for (const [el, want] of desired) {
@@ -174,6 +201,8 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
       if (el.getAttribute(OCC_ATTR) !== String(want.occurrenceId)) {
         el.setAttribute(OCC_ATTR, String(want.occurrenceId))
       }
+      const display = chipDisplayText(want.kind, occurrenceById.get(want.occurrenceId)?.label ?? '')
+      if (el.getAttribute(DISPLAY_ATTR) !== display) el.setAttribute(DISPLAY_ATTR, display)
     }
     // 宿主重渲可能把 hover 中的 chip 换掉:旧节点已不在文档里就收浮层。
     if (hoverChip && !hoverChip.isConnected) hideOverlays()

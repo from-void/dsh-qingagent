@@ -78,7 +78,7 @@ describe('青简选段 inline reference chip', () => {
       span: { start: 6, end: 6, draftRev: 7 },
       reference: {
         source: 'qingagent-selection',
-        label: '春风又绿江南岸',
+        label: '选段：春风又绿江南岸',
       },
     })
     expect(payloads[1]?.span).toEqual({ start: 8, end: 8, draftRev: 8 })

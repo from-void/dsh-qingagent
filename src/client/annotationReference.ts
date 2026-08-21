@@ -22,12 +22,17 @@ function previewLabel(text: string): string {
     : plain
 }
 
-/** 批注 chip 只展示短摘要，完整修改指令保存在 ref 中。 */
+/** 批注 chip 只展示短摘要，完整修改指令保存在 ref 中。
+ *  用户裁定:内容为「批注：{修改方向}」——只取指令里的改法部分,不再复述「按批注修改」
+ *  前缀与问题摘要;方向至少展示 10 字(取 12),超出省略号。 */
 export function annotationReferenceLabel(instruction: string): string {
   const summary = instruction.replace(/\s+/g, ' ').trim()
-  // 指令文本(buildAnnotationInstruction 真源)本身以「按批注修改:」开头,不再重复加前缀。
-  const prefixed = /^按批注修改[:\uFF1A]/u.test(summary) ? summary : `按批注修改:${summary}`
-  return previewLabel(prefixed)
+  const body = summary
+    .replace(/^按批注修改[:\uFF1A]/u, '')
+    .replace(/[（(]原文[:\uFF1A]『[\s\S]*』[)）]\s*$/u, '')
+    .trim()
+  const direction = /^[\s\S]{1,60}?——([\s\S]+)$/u.exec(body)?.[1]?.trim() ?? body
+  return `批注：${previewLabel(direction)}`
 }
 
 const CIRCLED_NUMBERS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩', '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳'] as const

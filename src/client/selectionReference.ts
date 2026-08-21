@@ -7,8 +7,9 @@ import type { QingSelection } from '../contracts.js'
 
 export const QING_SELECTION_REFERENCE_SOURCE = 'qingagent-selection'
 
-// 选区与批注共用同一段 chip label 预览预算，完整内容仍由 ref 与 hover 承载。
-export const CHIP_LABEL_PREVIEW_LENGTH = 14
+// 选区与批注共用同一段 chip label 预览预算(用户裁定:内容至少展示 10 字,取 12,
+// 超出省略号),完整内容仍由 ref 与 hover 承载。
+export const CHIP_LABEL_PREVIEW_LENGTH = 12
 
 /**
  * 模型侧的选段表示。ref 自身携带文稿、块与字符范围，不能依赖 bridge 中稍后会清掉的
@@ -58,11 +59,13 @@ export function blockContainsId(block: PmBlockNode, blockId: string): boolean {
   return block.content?.some((child) => blockContainsId(child, blockId)) ?? false
 }
 
+/** 用户裁定:选段 chip 内容为「选段：{引文}」。 */
 export function selectionReferenceLabel(quote: string): string {
   const plain = quote.replace(/\s+/g, ' ').trim()
-  return plain.length > CHIP_LABEL_PREVIEW_LENGTH
+  const preview = plain.length > CHIP_LABEL_PREVIEW_LENGTH
     ? `${plain.slice(0, CHIP_LABEL_PREVIEW_LENGTH)}…`
     : plain
+  return `选段：${preview}`
 }
 
 export function createSelectionReference(

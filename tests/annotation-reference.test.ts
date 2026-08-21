@@ -90,11 +90,13 @@ function contextHarness(
 }
 
 describe('批注 reference 标签与 source', () => {
-  it('选区与批注共享 14 字预览预算，批注标签规范空白并截断', () => {
-    expect(CHIP_LABEL_PREVIEW_LENGTH).toBe(14)
-    expect(annotationReferenceLabel('  修改\n语气  ')).toBe('按批注修改:修改 语气')
-    expect(annotationReferenceLabel('请把这一段改得更准确一些'))
-      .toBe('按批注修改:请把这一段改得更…')
+  it('选区与批注共享 12 字预览预算,批注标签只取修改方向(用户裁定「批注:{方向}」)', () => {
+    expect(CHIP_LABEL_PREVIEW_LENGTH).toBe(12)
+    expect(annotationReferenceLabel('  修改\n语气  ')).toBe('批注：修改 语气')
+    expect(annotationReferenceLabel('按批注修改：预算无上限——补上单月上限与审批人并说明流程（原文：『按实际发生结算。』）'))
+      .toBe('批注：补上单月上限与审批人并说…')
+    expect(annotationReferenceLabel('请把这一段文字改得更加准确一些'))
+      .toBe('批注：请把这一段文字改得更加准…')
   })
 
   it('source 使用 @ 触发并把完整 ref 恒等展开', async () => {
@@ -118,7 +120,7 @@ describe('批注 reference 标签与 source', () => {
       reference: {
         source: QING_ANNOTATION_REFERENCE_SOURCE,
         ref: '改准事实',
-        label: '①按批注修改:改准事实',
+        label: '①批注：改准事实',
         clipboardText: '改准事实',
       },
       span: { start: 1, end: 1, draftRev: 7 },
@@ -221,7 +223,7 @@ describe('occurrence 草稿操作', () => {
       reference: {
         source: QING_ANNOTATION_REFERENCE_SOURCE,
         ref: '请改为新事实',
-        label: '①按批注修改:请改为新事实',
+        label: '①批注：请改为新事实',
         clipboardText: '请改为新事实',
       },
       span: { start: 1, end: 1, draftRev: 31 },
@@ -240,7 +242,7 @@ describe('occurrence 草稿操作', () => {
       '一二三四五六七八九十一二三四五六',
     )).toBe(true)
     expect(selectionHarness.bail.mock.calls[0]?.[2].reference.label)
-      .toBe('①一二三四五六七八九十一二三四…')
+      .toBe('①选段：一二三四五六七八九十一二…')
 
     const foreign = occurrence(22, 0, '外部', { source: 'foreign-source' })
     const foreignHarness = contextHarness(inputState('\uFFFC', [foreign]))
