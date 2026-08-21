@@ -260,20 +260,44 @@ const ANNOTATION_REMINT_PATTERN = /按批注修改[:\uFF1A][\s\S]*?[（(]原文[
 /** 刷新恢复的草稿把未发送 chip 退化成了投影全文纯文本(宿主草稿持久化只存 clipboard 投影)。
  *  识别两种形态并重铸回 occurrence chip:选段引用与批注指令。幂等:chip 镜像投影是 @label,
  *  不匹配这两个模式。返回重铸数量。 */
+/** 匹配是否落在任一现有 occurrence 的投影区间内(已铸 chip 的截断 label 含「按批注修改」
+ *  触发词,正则会从 label 内部起匹配、把相邻指令咬成一条——评测 r3 席3 双批注复制粘贴实证)。 */
+function overlapsExistingProjection(state: InputState, start: number, end: number): boolean {
+  for (const occurrence of state.occurrences ?? []) {
+    const projection = findOccurrenceProjection(state, occurrence.occurrenceId)
+    if (projection && start < projection.end + 1 && end > projection.start) return true
+  }
+  return false
+}
+
+function nextRemintMatch(state: InputState): RegExpExecArray | undefined {
+  // 全局逐位扫描:跳过与现有投影重叠的伪命中,取两模式中最靠前的干净命中。
+  const candidates: RegExpExecArray[] = []
+  for (const source of [SELECTION_REMINT_PATTERN, ANNOTATION_REMINT_PATTERN]) {
+    const scanner = new RegExp(source.source, 'gu')
+    for (;;) {
+      const match = scanner.exec(state.draft)
+      if (!match) break
+      if (!overlapsExistingProjection(state, match.index, match.index + match[0].length)) {
+        candidates.push(match)
+        break
+      }
+      scanner.lastIndex = match.index + 1
+    }
+  }
+  return candidates.sort((a, b) => a.index - b.index)[0]
+}
+
 export function remintDraftReferences(actx: ClientContext): number {
   const input = actx.conversation.input.for(actx)
   let reminted = 0
   for (let guard = 0; guard < 12; guard += 1) {
     const state = input.state.getSnapshot()
     if (state.phase !== 'plain') return reminted
-    const selectionMatch = SELECTION_REMINT_PATTERN.exec(state.draft)
-    const annotationMatch = ANNOTATION_REMINT_PATTERN.exec(state.draft)
-    const match = [selectionMatch, annotationMatch]
-      .filter((candidate): candidate is RegExpExecArray => candidate !== null)
-      .sort((a, b) => a.index - b.index)[0]
+    const match = nextRemintMatch(state)
     if (!match) return reminted
     const text = match[0]
-    const isSelection = match === selectionMatch
+    const isSelection = match[0].startsWith('[选段]')
     const takenLabels = (state.occurrences ?? []).map((occurrence) => occurrence.label)
     const reference: ReferenceInsert = isSelection
       ? {
