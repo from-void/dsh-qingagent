@@ -28,18 +28,18 @@ export function assembleDshReviewQuery(
     .replaceAll('readDraft', 'qing_read_draft')
     .replaceAll('editDraft', 'qing_edit_draft')
     .replaceAll('writeDraft', 'qing_write_draft')
-  if (type === 'source') {
-    return query.replace(
-      INDEPENDENT_REVIEW_CONTRACT,
-      `\n${SOURCE_MATERIAL_TOOL_GUIDE}${INDEPENDENT_REVIEW_CONTRACT}`,
-    )
-  }
-  if (type === 'deai') {
-    // 去AI味的产物必须可裁决:每处批注给出可直接整句替换的 suggestion,否则 hover 卡
-    // 没有「修改意见/生成修改」,用户只能忽略(评测 r3 席1 实证)。
-    return `${query}\n去AI味补充硬约束:每一处批注都必须给出 suggestion——一句结合上下文改写后的通顺整句,能直接替换原句;anchors[].find 必须是与 suggestion 对应的完整原句。禁止只指出问题不给改写。`
-  }
-  return query
+  const withSourceGuide = type === 'source'
+    ? query.replace(
+        INDEPENDENT_REVIEW_CONTRACT,
+        `\n${SOURCE_MATERIAL_TOOL_GUIDE}${INDEPENDENT_REVIEW_CONTRACT}`,
+      )
+    : query
+  // 批注必须可裁决:有明确可行改法就要给 suggestion,否则 hover 卡没有「修改意见/生成修改」,
+  // 用户只能忽略(评测 r3/r4 实证:去AI味、自定义审查都栽在这)。改写类审查(deai)更是强制。
+  const suggestionContract = type === 'deai'
+    ? '\n去AI味补充硬约束:每一处批注都必须给出 suggestion——一句结合上下文改写后的通顺整句,能直接替换原句;anchors[].find 必须是与 suggestion 对应的完整原句。禁止只指出问题不给改写。'
+    : '\n修改意见硬约束:凡问题存在明确可行的改法,必须在该批注的 suggestion 字段给出结合上下文改写后的通顺整句(可直接替换原句),且 anchors[].find 是与之对应的完整原句;只有无法在不改变原意的前提下安全改写时才允许省略 suggestion。在聊天里声称给了修改意见、批注里却没有 suggestion,视为未完成。'
+  return `${withSourceGuide}${suggestionContract}`
 }
 
 export interface QingExportFormat {

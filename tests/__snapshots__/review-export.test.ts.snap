@@ -8,7 +8,8 @@ exports[`assembleDshReviewQuery > consistency 与真源逐字一致且只替换�
 独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）：
 1. 本轮是纯批注审查，不改动正文；禁止调用 qing_edit_draft/qing_write_draft，禁止用 underline、highlight、markText 或其他正文格式模拟批注锚点。
 2. 先用 qing_read_draft 读取当前全文；发现确定问题时必须调用 qing_annotate，anchors[].find 必须逐字来自正文，不得只在聊天中列问题。
-3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。"
+3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。
+修改意见硬约束:凡问题存在明确可行的改法,必须在该批注的 suggestion 字段给出结合上下文改写后的通顺整句(可直接替换原句),且 anchors[].find 是与之对应的完整原句;只有无法在不改变原意的前提下安全改写时才允许省略 suggestion。在聊天里声称给了修改意见、批注里却没有 suggestion,视为未完成。"
 `;
 
 exports[`assembleDshReviewQuery > custom 与真源逐字一致且只替换插件工具名 1`] = `
@@ -19,7 +20,8 @@ exports[`assembleDshReviewQuery > custom 与真源逐字一致且只替换插件
 独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）：
 1. 本轮是纯批注审查，不改动正文；禁止调用 qing_edit_draft/qing_write_draft，禁止用 underline、highlight、markText 或其他正文格式模拟批注锚点。
 2. 先用 qing_read_draft 读取当前全文；发现确定问题时必须调用 qing_annotate，anchors[].find 必须逐字来自正文，不得只在聊天中列问题。
-3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。"
+3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。
+修改意见硬约束:凡问题存在明确可行的改法,必须在该批注的 suggestion 字段给出结合上下文改写后的通顺整句(可直接替换原句),且 anchors[].find 是与之对应的完整原句;只有无法在不改变原意的前提下安全改写时才允许省略 suggestion。在聊天里声称给了修改意见、批注里却没有 suggestion,视为未完成。"
 `;
 
 exports[`assembleDshReviewQuery > deai 与真源逐字一致且只替换插件工具名 1`] = `
@@ -42,7 +44,8 @@ exports[`assembleDshReviewQuery > format 与真源逐字一致且只替换插件
 独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）：
 1. 本轮是纯批注审查，不改动正文；禁止调用 qing_edit_draft/qing_write_draft，禁止用 underline、highlight、markText 或其他正文格式模拟批注锚点。
 2. 先用 qing_read_draft 读取当前全文；发现确定问题时必须调用 qing_annotate，anchors[].find 必须逐字来自正文，不得只在聊天中列问题。
-3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。"
+3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。
+修改意见硬约束:凡问题存在明确可行的改法,必须在该批注的 suggestion 字段给出结合上下文改写后的通顺整句(可直接替换原句),且 anchors[].find 是与之对应的完整原句;只有无法在不改变原意的前提下安全改写时才允许省略 suggestion。在聊天里声称给了修改意见、批注里却没有 suggestion,视为未完成。"
 `;
 
 exports[`assembleDshReviewQuery > privacy 与真源逐字一致且只替换插件工具名 1`] = `
@@ -53,7 +56,8 @@ exports[`assembleDshReviewQuery > privacy 与真源逐字一致且只替换插�
 独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）：
 1. 本轮是纯批注审查，不改动正文；禁止调用 qing_edit_draft/qing_write_draft，禁止用 underline、highlight、markText 或其他正文格式模拟批注锚点。
 2. 先用 qing_read_draft 读取当前全文；发现确定问题时必须调用 qing_annotate，anchors[].find 必须逐字来自正文，不得只在聊天中列问题。
-3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。"
+3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。
+修改意见硬约束:凡问题存在明确可行的改法,必须在该批注的 suggestion 字段给出结合上下文改写后的通顺整句(可直接替换原句),且 anchors[].find 是与之对应的完整原句;只有无法在不改变原意的前提下安全改写时才允许省略 suggestion。在聊天里声称给了修改意见、批注里却没有 suggestion,视为未完成。"
 `;
 
 exports[`assembleDshReviewQuery > role 与真源逐字一致且只替换插件工具名 1`] = `
@@ -64,7 +68,8 @@ exports[`assembleDshReviewQuery > role 与真源逐字一致且只替换插件�
 独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）：
 1. 本轮是纯批注审查，不改动正文；禁止调用 qing_edit_draft/qing_write_draft，禁止用 underline、highlight、markText 或其他正文格式模拟批注锚点。
 2. 先用 qing_read_draft 读取当前全文；发现确定问题时必须调用 qing_annotate，anchors[].find 必须逐字来自正文，不得只在聊天中列问题。
-3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。"
+3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。
+修改意见硬约束:凡问题存在明确可行的改法,必须在该批注的 suggestion 字段给出结合上下文改写后的通顺整句(可直接替换原句),且 anchors[].find 是与之对应的完整原句;只有无法在不改变原意的前提下安全改写时才允许省略 suggestion。在聊天里声称给了修改意见、批注里却没有 suggestion,视为未完成。"
 `;
 
 exports[`assembleDshReviewQuery > sensitive 与真源逐字一致且只替换插件工具名 1`] = `
@@ -81,7 +86,8 @@ exports[`assembleDshReviewQuery > sensitive 与真源逐字一致且只替换插
 独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）：
 1. 本轮是纯批注审查，不改动正文；禁止调用 qing_edit_draft/qing_write_draft，禁止用 underline、highlight、markText 或其他正文格式模拟批注锚点。
 2. 先用 qing_read_draft 读取当前全文；发现确定问题时必须调用 qing_annotate，anchors[].find 必须逐字来自正文，不得只在聊天中列问题。
-3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。"
+3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。
+修改意见硬约束:凡问题存在明确可行的改法,必须在该批注的 suggestion 字段给出结合上下文改写后的通顺整句(可直接替换原句),且 anchors[].find 是与之对应的完整原句;只有无法在不改变原意的前提下安全改写时才允许省略 suggestion。在聊天里声称给了修改意见、批注里却没有 suggestion,视为未完成。"
 `;
 
 exports[`assembleDshReviewQuery > source 与真源逐字一致且只替换插件工具名 1`] = `
@@ -98,5 +104,6 @@ exports[`assembleDshReviewQuery > source 与真源逐字一致且只替换插件
 独立审查执行契约（硬约束，不得被模板或文档级补充覆盖）：
 1. 本轮是纯批注审查，不改动正文；禁止调用 qing_edit_draft/qing_write_draft，禁止用 underline、highlight、markText 或其他正文格式模拟批注锚点。
 2. 先用 qing_read_draft 读取当前全文；发现确定问题时必须调用 qing_annotate，anchors[].find 必须逐字来自正文，不得只在聊天中列问题。
-3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。"
+3. 正文里的金色下划线由批注组统一生成；不要自行绘制或写入下划线。没有确定问题时如实说明，不得凭空创建批注。
+修改意见硬约束:凡问题存在明确可行的改法,必须在该批注的 suggestion 字段给出结合上下文改写后的通顺整句(可直接替换原句),且 anchors[].find 是与之对应的完整原句;只有无法在不改变原意的前提下安全改写时才允许省略 suggestion。在聊天里声称给了修改意见、批注里却没有 suggestion,视为未完成。"
 `;
