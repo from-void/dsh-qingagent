@@ -141,7 +141,7 @@ describe('插件批注锚与青简轮播接线', () => {
 
     expect(card.dataset.groupId).toBe('annotation-1')
     expect(card.textContent).toContain('事实有误')
-    expect(card.textContent).toContain('第 1 / 共 1 处')
+    expect(card.textContent).toContain('1/1')
   })
 
   it('多条批注可用产品轮播按钮逐条切换', async () => {
@@ -159,7 +159,7 @@ describe('插件批注锚与青简轮播接线', () => {
 
     expect(card.dataset.groupId).toBe('annotation-2')
     expect(card.textContent).toContain('表述重复')
-    expect(card.textContent).toContain('第 2 / 共 2 处')
+    expect(card.textContent).toContain('2/2')
   })
 
   it('无 annotations 时不渲染锚点或轮播卡', async () => {

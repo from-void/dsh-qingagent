@@ -4042,7 +4042,7 @@
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-nav button:disabled { color:var(--ink-4); cursor:default; }
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-meta { display:flex; align-items:center; gap:8px; margin-top:1px; }
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-origin { display:block; color:var(--ink-4); font-size:10.5px; line-height:1.5; }
-:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-severity { font-size:10.5px; line-height:1.5; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-severity { font-size:10.5px; line-height:1.5; margin-left:8px; padding:0 5px; border:1px solid currentColor; border-radius:0; font-weight:400; vertical-align:1px; }
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-severity[data-severity="error"] { color:var(--diff-del-ink); }
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-severity[data-severity="warn"] { color:var(--mark); }
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ahc-severity[data-severity="info"] { color:var(--ink-4); }
