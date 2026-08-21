@@ -16,6 +16,7 @@ import {
 } from '@qingweb/pages/workspace/components/DocumentSnapshotView'
 import { setNativePresentationDecorations } from '@qingweb/pages/workspace/data/nativePresentationPm'
 import { buildAnnotationInstruction } from '@qingweb/pages/workspace/components/AnnotationCarousel'
+import { maskSensitiveAnnotationGroup } from '@qingagent/contract-ts'
 import { DocFindBar } from '@qingweb/pages/workspace/components/DocFindBar'
 import { DocToolbar } from '@qingweb/pages/workspace/components/DocToolbar'
 import { PatchNav } from '@qingweb/pages/workspace/components/PatchNav'
@@ -1380,7 +1381,7 @@ export function QingDocPanel(props: QingDocPanelProps) {
                   return false
                 }
                 const inserted = props.qingInsertAnnotation(
-                  buildAnnotationInstruction(group, suggestion),
+                  buildFullQuoteAnnotationInstruction(group, suggestion),
                 )
                 setToast(inserted
                   ? '已填入修改要求，请点击发送'
@@ -2067,9 +2068,7 @@ function DshExportMenu(props: DshExportMenuProps) {
       } finally {
         window.setTimeout(() => URL.revokeObjectURL(url), 0)
       }
-      props.onToast(result.degradations
-        ? `${format.savedToast} · 部分图表以源码导出`
-        : format.savedToast)
+      props.onToast(`${format.savedToast}${describeExportDegradations(result.degradations)}`)
       props.onClose()
     } catch (error) {
       console.error('[qingagent-panel] export failed', error)
@@ -2099,4 +2098,18 @@ function DshExportMenu(props: DshExportMenuProps) {
       ))}
     </div>
   )
+}
+
+/** 真源指令把原文截为 30 字快照(聊天气泡显示考量);用户裁定「原文是什么就是什么」——
+ *  hover 面板与重组都要完整原文,这里把截断尾缀替换为完整引文(敏感词打码沿用真源)。 */
+function buildFullQuoteAnnotationInstruction(
+  group: Parameters<typeof buildAnnotationInstruction>[0],
+  suggestion?: string,
+): string {
+  const base = buildAnnotationInstruction(group, suggestion)
+  const fullQuote = maskSensitiveAnnotationGroup(group).anchors[0]?.quote?.replace(/\s+/gu, ' ').trim()
+  if (!fullQuote) return base
+  return /（原文：『[\s\S]*』）\s*$/u.test(base)
+    ? base.replace(/（原文：『[\s\S]*』）\s*$/u, `（原文：『${fullQuote}』）`)
+    : base
 }

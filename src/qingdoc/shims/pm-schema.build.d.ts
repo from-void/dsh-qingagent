@@ -238,3 +238,6 @@ export interface ExternalAssetUploadResponse {
   size: number
   src: string
 }
+
+/** 席 R3 修复:批注指令完整原文需要真源同款敏感词打码。 */
+export declare function maskSensitiveAnnotationGroup<T>(group: T): T
