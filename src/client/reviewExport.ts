@@ -28,12 +28,18 @@ export function assembleDshReviewQuery(
     .replaceAll('readDraft', 'qing_read_draft')
     .replaceAll('editDraft', 'qing_edit_draft')
     .replaceAll('writeDraft', 'qing_write_draft')
-  return type === 'source'
-    ? query.replace(
-        INDEPENDENT_REVIEW_CONTRACT,
-        `\n${SOURCE_MATERIAL_TOOL_GUIDE}${INDEPENDENT_REVIEW_CONTRACT}`,
-      )
-    : query
+  if (type === 'source') {
+    return query.replace(
+      INDEPENDENT_REVIEW_CONTRACT,
+      `\n${SOURCE_MATERIAL_TOOL_GUIDE}${INDEPENDENT_REVIEW_CONTRACT}`,
+    )
+  }
+  if (type === 'deai') {
+    // 去AI味的产物必须可裁决:每处批注给出可直接整句替换的 suggestion,否则 hover 卡
+    // 没有「修改意见/生成修改」,用户只能忽略(评测 r3 席1 实证)。
+    return `${query}\n去AI味补充硬约束:每一处批注都必须给出 suggestion——一句结合上下文改写后的通顺整句,能直接替换原句;anchors[].find 必须是与 suggestion 对应的完整原句。禁止只指出问题不给改写。`
+  }
+  return query
 }
 
 export interface QingExportFormat {

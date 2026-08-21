@@ -244,7 +244,7 @@ export function apply(ctx: ClientContext): void {
             if (!scope) return
             const snapshot = inputState.getSnapshot() as { draft?: string; phase?: string }
             if (snapshot.phase === 'plain'
-              && (snapshot.draft?.includes('[选段]《') || /按批注修改[::]/u.test(snapshot.draft ?? ''))) {
+              && (snapshot.draft?.includes('[选段]《') || /按批注修改[:\uFF1A]/u.test(snapshot.draft ?? ''))) {
               remintDraftReferences(scope.ctx)
             }
           })

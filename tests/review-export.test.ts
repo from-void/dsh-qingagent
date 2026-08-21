@@ -24,9 +24,12 @@ describe('assembleDshReviewQuery', () => {
       .replaceAll('readDraft', 'qing_read_draft')
       .replaceAll('editDraft', 'qing_edit_draft')
       .replaceAll('writeDraft', 'qing_write_draft')
+    const deaiAddendum = '\n去AI味补充硬约束:每一处批注都必须给出 suggestion——一句结合上下文改写后的通顺整句,能直接替换原句;anchors[].find 必须是与 suggestion 对应的完整原句。禁止只指出问题不给改写。'
     const expected = type === 'source'
       ? expectedBase.replace(independentContract, `\n${sourceGuide}${independentContract}`)
-      : expectedBase
+      : type === 'deai'
+        ? `${expectedBase}${deaiAddendum}`
+        : expectedBase
     const actual = assembleDshReviewQuery(type, template, supplement, lexicons)
 
     expect(actual).toBe(expected)

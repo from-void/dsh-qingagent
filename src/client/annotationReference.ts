@@ -26,7 +26,7 @@ function previewLabel(text: string): string {
 export function annotationReferenceLabel(instruction: string): string {
   const summary = instruction.replace(/\s+/g, ' ').trim()
   // 指令文本(buildAnnotationInstruction 真源)本身以「按批注修改:」开头,不再重复加前缀。
-  const prefixed = /^按批注修改[::]/u.test(summary) ? summary : `按批注修改:${summary}`
+  const prefixed = /^按批注修改[:\uFF1A]/u.test(summary) ? summary : `按批注修改:${summary}`
   return previewLabel(prefixed)
 }
 
@@ -255,7 +255,7 @@ export function replaceOccurrenceRef(
 
 const SELECTION_REMINT_PATTERN = /\[选段\]《[^《》]*》(?:第\d+段)?:「[^「」]*」/u
 // 真源 buildAnnotationInstruction 的稳定尾缀「(原文:『…』)」界定指令边界;无该尾缀的少数指令不重铸。
-const ANNOTATION_REMINT_PATTERN = /按批注修改[::][\s\S]*?(原文:『[^』]*』)/u
+const ANNOTATION_REMINT_PATTERN = /按批注修改[:\uFF1A][\s\S]*?(原文:『[^』]*』)/u
 
 /** 刷新恢复的草稿把未发送 chip 退化成了投影全文纯文本(宿主草稿持久化只存 clipboard 投影)。
  *  识别两种形态并重铸回 occurrence chip:选段引用与批注指令。幂等:chip 镜像投影是 @label,

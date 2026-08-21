@@ -4,7 +4,7 @@
  * 完整引文走 title 悬浮。只改文本节点、幂等、随插件卸载断开——不触碰宿主代码。
  * 兼容旧格式(带文稿/块/范围机器字段)以装饰历史消息。
  */
-const SELECTION_RE = /\[选段\](?: 出自)?《([^》]{1,120})》(?:第\d+段)?(?:（[^）]{0,200}）)?[:：]\s*「([\s\S]{1,500}?)」/g
+const SELECTION_RE = /\[选段\](?: 出自)?《([^》]{1,120})》(第\d+段)?(?:（[^）]{0,200}）)?[:：]\s*「([\s\S]{1,500}?)」/g
 
 const DECORATED = 'data-qingagent-selection-decorated'
 
@@ -13,10 +13,11 @@ function clip(text: string, max: number): string {
   return plain.length > max ? `${plain.slice(0, max - 1)}…` : plain
 }
 
-function buildChip(title: string, quote: string): HTMLSpanElement {
+function buildChip(title: string, quote: string, ordinal?: string): HTMLSpanElement {
   const chip = document.createElement('span')
   chip.setAttribute(DECORATED, '1')
-  chip.title = `《${title}》:「${quote}」`
+  // 「第N段」是重复引文的消歧定位,气泡装饰后必须保留在 title/展示里,不能丢。
+  chip.title = `《${title}》${ordinal ?? ''}:「${quote}」`
   chip.style.cssText = [
     'display:inline-flex', 'align-items:center', 'gap:4px', 'max-width:100%',
     'padding:1px 8px', 'margin:0 2px', 'border-radius:6px',
@@ -106,7 +107,7 @@ function decorateTextNode(node: Text): void {
   for (const match of text.matchAll(SELECTION_RE)) {
     const index = match.index ?? 0
     if (index > cursor) fragment.append(text.slice(cursor, index))
-    fragment.append(buildChip(match[1]!, match[2]!))
+    fragment.append(buildChip(match[1]!, match[3]!, match[2]))
     cursor = index + match[0].length
   }
   if (cursor < text.length) fragment.append(text.slice(cursor))

@@ -285,13 +285,24 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
       // 结构化(用户裁定):原文只读,输入框只留「修改方向」。
       // 指令真源格式:按批注修改:{方向}(原文:『{引文}』);引文缺省时整段视为方向。
       const parsed = /^按批注修改[:：]([\s\S]*?)(?:[（(]原文[:：]『([\s\S]*)』[)）])?\s*$/u.exec(occurrence.ref)
-      const direction = parsed?.[1]?.trim() ?? occurrence.ref
+      const action = parsed?.[1]?.trim() ?? occurrence.ref
       const quote = parsed?.[2]
+      // 真源 action = 「{问题摘要}——{改法}」:摘要只读展示,输入框只留改法(修改方向)。
+      const dashSplit = /^([\s\S]{1,60}?)——([\s\S]*)$/u.exec(action)
+      const summary = dashSplit?.[1]?.trim()
+      const direction = dashSplit?.[2]?.trim() ?? action
       const fieldLabel = (text: string): HTMLElement => {
         const label = document.createElement('div')
         label.textContent = text
         label.style.cssText = 'font-size:11px;opacity:.65;margin-bottom:4px'
         return label
+      }
+      if (summary) {
+        panel.appendChild(fieldLabel('问题'))
+        const summaryLine = document.createElement('div')
+        summaryLine.textContent = summary
+        summaryLine.style.cssText = 'margin-bottom:8px;font-weight:600'
+        panel.appendChild(summaryLine)
       }
       if (quote) {
         panel.appendChild(fieldLabel('原文'))
@@ -317,8 +328,9 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
         'font-size:12px', 'line-height:18px', 'outline:none',
       ].join(';')
       panel.appendChild(editArea)
-      // 确认时按真源格式重组完整指令(原文保持不动)。
+      // 确认时按真源格式重组完整指令(问题摘要与原文保持不动)。
       editArea.dataset.qingQuote = quote ?? ''
+      editArea.dataset.qingSummary = summary ?? ''
     }
 
     const footer = document.createElement('div')
@@ -334,8 +346,10 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
       confirmButton.addEventListener('click', () => {
         const direction = editArea?.value?.trim() ?? ''
         const quote = editArea?.dataset.qingQuote
+        const summary = editArea?.dataset.qingSummary
+        const action = summary ? `${summary}——${direction}` : direction
         const rebuilt = direction
-          ? `按批注修改：${direction}${quote ? `（原文：『${quote}』）` : ''}`
+          ? `按批注修改：${action}${quote ? `（原文：『${quote}』）` : ''}`
           : occurrence.ref
         if (deps.replaceOccurrenceRef(occurrence.occurrenceId, rebuilt)) {
           hideOverlays()
