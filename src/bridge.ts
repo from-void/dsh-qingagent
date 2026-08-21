@@ -931,12 +931,16 @@ export class BridgeHub {
         return
       }
       if (request.method === 'POST' && url.pathname === '/qingagent-bridge/review-annotations-ignore') {
+        const dshSessionId = requiredQuery(url, 'dshSessionId')
         const engineSessionId = this.authorizedEngineSessionId(url)
         const body = await readJsonBody(request) as ExternalAnnotationIgnoreRequest
-        writeJson(response, 200, await this.engine.fetchJson<ExternalAnnotationIgnoreResponse>(
+        const ignored = await this.engine.fetchJson<ExternalAnnotationIgnoreResponse>(
           `/sessions/${encodeURIComponent(engineSessionId)}/review/annotations/ignore`,
           { method: 'POST', body: JSON.stringify(body) },
-        ))
+        )
+        // 与 verdicts/commit 一致:批注状态变更要推给所有订阅方刷新,否则别的面板装饰残留。
+        await this.documentChanged(dshSessionId, engineSessionId)
+        writeJson(response, 200, ignored)
         return
       }
       if (request.method === 'POST' && url.pathname === '/qingagent-bridge/review-commit') {

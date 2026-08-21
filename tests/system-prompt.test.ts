@@ -147,6 +147,10 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
   })
 
   // 用户定的四步:不管已采纳的 → review 被拒的 → 反问是不是哪里改得不好 → 当轮就给方案。
+  it('全局问卷纪律:需要用户补充信息时纯文本问句收尾,禁 ask_user_question(评测 r5 席1)', () => {
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('一律用一句纯文本问句结束本回合,严禁调用 ask_user_question')
+  })
+
   it('审核结果回流:求证只许纯文本,严禁 ask_user_question 挂起锁稿(评测 r5 席3)', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('严禁调用 ask_user_question 或任何其他工具')
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('必须是纯文本收尾')

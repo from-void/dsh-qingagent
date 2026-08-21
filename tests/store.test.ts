@@ -678,3 +678,28 @@ function deferred<T>() {
     expect(store.getSnapshot('dsh-stash').conflictStash?.['qing-c']).toBeUndefined()
     expect(store.getSnapshot('dsh-stash').conflicts?.['qing-c']).toBeUndefined()
   })
+
+describe('批注忽略请求纪律', () => {
+  it('面板域不匹配时乐观帧跳过,但引擎 ignore 请求必须照发(评测 r5 席1 2.6)', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const calls: string[] = []
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      calls.push(url)
+      if (url.includes('/qingagent-bridge/review-annotations-ignore')) {
+        return Response.json({ ok: true, docVersion: 2 })
+      }
+      return Response.json(bridgeState())
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const store = new QingClientStore()
+    const release = store.retain('dsh-1')
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
+
+    // 此时 panelEngineSessionId 尚未建立(无 panelDoc)——旧实现在这里静默 return,
+    // 零网络往返,忽略永不生效。
+    await store.ignoreAnnotation('dsh-1', 'qing-1', 1, 'annotation-x')
+    expect(calls.some((url) => url.includes('/qingagent-bridge/review-annotations-ignore'))).toBe(true)
+    release()
+  })
+})

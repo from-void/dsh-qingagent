@@ -572,13 +572,18 @@ export class QingClientStore {
   ): Promise<void> {
     const entry = this.entry(sessionId)
     const previous = entry.snapshot.reviewModel
-    if (entry.snapshot.panelEngineSessionId !== engineSessionId || !previous?.annotations) return
-    const reviewModel: ExternalReviewRenderModelResponse = {
-      ...previous,
-      annotations: previous.annotations.map((annotation) =>
-        annotation.id === annotationId ? { ...annotation, status: 'ignored' } : annotation),
-    }
-    this.update(entry, { ...entry.snapshot, reviewModel })
+    // 乐观更新只在面板域匹配时做;但引擎请求任何情况下都必须发——早退吞请求会让
+    // 「忽略」点击零网络往返、下划线永久残留(评测 r5 席1 2.6 实证)。
+    const optimisticEligible = entry.snapshot.panelEngineSessionId === engineSessionId
+      && Boolean(previous?.annotations)
+    const reviewModel: ExternalReviewRenderModelResponse | undefined = optimisticEligible
+      ? {
+          ...previous!,
+          annotations: previous!.annotations!.map((annotation) =>
+            annotation.id === annotationId ? { ...annotation, status: 'ignored' } : annotation),
+        }
+      : undefined
+    if (reviewModel) this.update(entry, { ...entry.snapshot, reviewModel })
     try {
       const body: ExternalAnnotationIgnoreRequest = {
         expectedDocVersion,
@@ -588,8 +593,10 @@ export class QingClientStore {
         panelUrl('/qingagent-bridge/review-annotations-ignore', sessionId, engineSessionId),
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
       )
+      // 权威兜底:乐观帧没做成(域不匹配)时,从引擎重拉 render-model 让装饰同步。
+      if (!reviewModel) void this.refreshPanel(sessionId, engineSessionId).catch(() => undefined)
     } catch (error) {
-      if (entry.snapshot.reviewModel === reviewModel) {
+      if (reviewModel && entry.snapshot.reviewModel === reviewModel) {
         this.update(entry, { ...entry.snapshot, reviewModel: previous })
       }
       throw error
