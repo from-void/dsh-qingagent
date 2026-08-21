@@ -677,7 +677,20 @@ export class QingClientStore {
         }
       })
     }
+    // 断连窗口内的事件永久丢失:重连成功后必须全量拉平权威状态,否则裁决/结算事件
+    // 丢失会让面板停在 pendingReview/readonly 假锁,12 秒不释放直到手动刷新
+    // (评测 0822-r2 实证,共享评测环境 70 次断连是常态土壤)。
+    let hadError = false
+    source.onopen = () => {
+      if (!hadError) return
+      hadError = false
+      this.update(entry, { ...entry.snapshot, error: undefined })
+      void this.loadState(sessionId, entry)
+      const active = entry.snapshot.activeEngineSessionId ?? entry.snapshot.state?.binding.activeEngineSessionId
+      if (active) void this.refreshPanel(sessionId, active, { bypassGuard: true }).catch(() => undefined)
+    }
     source.onerror = () => {
+      hadError = true
       this.update(entry, { ...entry.snapshot, error: BRIDGE_RECONNECTING_ERROR })
     }
   }

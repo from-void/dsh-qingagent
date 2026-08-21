@@ -434,7 +434,9 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     if (kind === 'selection') {
       const body = document.createElement('div')
       // ref 形如「[选段]《文稿名》:「引文」」;面板 header 已展示文稿名,正文只放引文全文。
-      const quoteMatch = /「([\s\S]*)」\s*$/.exec(occurrence.ref)
+      // 引文必须锚定冒号后的「:文稿名自身可含「」(《「燃力纤」…》),贪婪匹配会从
+      // 书名里的第一个「切起,把锚点裁残(评测 0822-r2 实证)。
+      const quoteMatch = /[:\uFF1A]\s*「([\s\S]*)」\s*$/.exec(occurrence.ref)
       body.textContent = quoteMatch?.[1] ?? occurrence.ref
       body.style.cssText = [
         'max-height:200px', 'overflow:auto', 'margin-bottom:10px',

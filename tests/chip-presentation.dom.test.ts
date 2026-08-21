@@ -285,6 +285,15 @@ describe('hover 面板与 ✕ 角标', () => {
     expect(panel()!.textContent).not.toContain('确认')
   })
 
+  it('文稿名自含「」时引文取冒号后内容,不被书名里的「切残(评测 0822-r2)', () => {
+    const { harness } = mountHoveredChip()
+    harness.state.current!.occurrences![0]!.ref
+      = '[选段]《「燃力纤」减肥产品推广文案》第13段:「再犹豫一个夏天，你就比别人多胖一年。」'
+    vi.advanceTimersByTime(CHIP_PANEL_SHOW_DELAY)
+    expect(panel()!.textContent).toContain('再犹豫一个夏天，你就比别人多胖一年。')
+    expect(panel()!.textContent).not.toContain('减肥产品推广文案》第13段')
+  })
+
   it('批注面板结构化:原文只读、输入框只留修改方向;「确认」按真源格式重组', () => {
     const { harness } = mountHoveredChip('qingagent-annotation')
     harness.state.current!.occurrences![0]!.ref = '按批注修改：删除房号（原文：『晨光路19号801室』）'
