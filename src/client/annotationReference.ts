@@ -6,6 +6,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import {
   CHIP_LABEL_PREVIEW_LENGTH,
+  dedupeChipLabel,
   unweaveAtomicLabel,
   weaveAtomicLabel,
   QING_SELECTION_REFERENCE_SOURCE,
@@ -309,13 +310,16 @@ export function remintDraftReferences(actx: ClientContext): number {
       ? {
           source: QING_SELECTION_REFERENCE_SOURCE,
           ref: text,
-          label: selectionReferenceLabel(/「([^「」]*)」/u.exec(text)?.[1] ?? text),
+          label: weaveAtomicLabel(dedupeChipLabel(
+            selectionReferenceLabel(/「([^「」]*)」/u.exec(text)?.[1] ?? text),
+            takenLabels,
+          )),
           clipboardText: text,
         }
       : {
           source: QING_ANNOTATION_REFERENCE_SOURCE,
           ref: text,
-          label: dedupeAnnotationLabel(annotationReferenceLabel(text), takenLabels),
+          label: weaveAtomicLabel(dedupeAnnotationLabel(annotationReferenceLabel(text), takenLabels)),
           clipboardText: text,
         }
     input.setDraft(state.draft.slice(0, match.index) + state.draft.slice(match.index + text.length))
