@@ -125,6 +125,74 @@ function decorateReviewLaunchNode(node: Text): boolean {
   return true
 }
 
+/** 发送气泡里的批注指令结构化:「按批注修改:{问题}——{方向}(原文:『引文』)」渲染成
+ *  与 chip hover 面板同语义的卡(问题/方向/原文),多条连发不再拼成一坨(用户实测点名)。
+ *  正则与 remint 的 ANNOTATION_REMINT_PATTERN 同源;无原文尾缀的整行形态也装饰。 */
+const ANNOTATION_MSG_RE = /按批注修改[:：]([\s\S]*?)[（(]原文[:：]『([^』]*)』[)）]\s*/gu
+
+function buildAnnotationCard(action: string, quote?: string): HTMLSpanElement {
+  const card = document.createElement('span')
+  card.setAttribute(DECORATED, '1')
+  card.style.cssText = [
+    'display:block', 'margin:3px 0', 'padding:6px 10px', 'border-radius:0',
+    'border-left:3px solid rgba(186,92,38,.8)',
+    'background:rgba(186,92,38,.10)',
+  ].join(';')
+  // 真源 action = 「{问题摘要}——{改法}」;摘要缺省时整段视为改法。
+  const dashSplit = /^([\s\S]{1,60}?)——([\s\S]*)$/u.exec(action.trim())
+  const summary = dashSplit?.[1]?.trim()
+  const direction = dashSplit?.[2]?.trim() ?? action.trim()
+  const head = document.createElement('span')
+  head.style.cssText = 'display:flex;align-items:baseline;gap:6px'
+  const mark = document.createElement('span')
+  mark.textContent = '批注修改'
+  mark.style.cssText = 'opacity:.65;font-size:.85em;flex:none'
+  head.append(mark)
+  if (summary) {
+    const problem = document.createElement('span')
+    problem.textContent = summary
+    problem.style.cssText = 'font-weight:600'
+    head.append(problem)
+  }
+  card.append(head)
+  const directionLine = document.createElement('span')
+  directionLine.textContent = direction
+  directionLine.style.cssText = 'display:block;margin-top:2px'
+  card.append(directionLine)
+  if (quote?.trim()) {
+    const quoteLine = document.createElement('span')
+    quoteLine.title = quote
+    quoteLine.textContent = `原文:${clip(quote, 42)}`
+    quoteLine.style.cssText = 'display:block;margin-top:3px;font-size:.9em;opacity:.7'
+    card.append(quoteLine)
+  }
+  return card
+}
+
+function decorateAnnotationInstructionNode(node: Text): boolean {
+  const text = node.data
+  ANNOTATION_MSG_RE.lastIndex = 0
+  if (!ANNOTATION_MSG_RE.test(text)) {
+    // 无原文尾缀的独立整行形态:整个文本节点就是一条指令时装饰。
+    const bare = /^\s*按批注修改[:：]([\s\S]+)$/u.exec(text)
+    if (!bare || text.includes('（原文') || text.includes('(原文')) return false
+    node.replaceWith(buildAnnotationCard(bare[1]!))
+    return true
+  }
+  ANNOTATION_MSG_RE.lastIndex = 0
+  const fragment = document.createDocumentFragment()
+  let cursor = 0
+  for (const match of text.matchAll(ANNOTATION_MSG_RE)) {
+    const index = match.index ?? 0
+    if (index > cursor) fragment.append(text.slice(cursor, index))
+    fragment.append(buildAnnotationCard(match[1]!, match[2]))
+    cursor = index + match[0].length
+  }
+  if (cursor < text.length) fragment.append(text.slice(cursor))
+  node.replaceWith(fragment)
+  return true
+}
+
 /** 排除面:输入框、镜像层、纸面、chip 面板与已装饰区。文本节点直达路径(addedNodes 为
  *  Text / characterData 变更)也必须过这道门——React 受控更新 mirror 文本走的正是这两条,
  *  漏检会 replaceWith 掉 React 管理的节点,后续 reconcile removeChild 直接崩 composer。 */
@@ -148,6 +216,7 @@ function decorateTextNode(node: Text): void {
   }
   if (decorateReviewOutcomeNode(node)) return
   if (decorateReviewLaunchNode(node)) return
+  if (decorateAnnotationInstructionNode(node)) return
   const text = node.data
   SELECTION_RE.lastIndex = 0
   if (!SELECTION_RE.test(text)) return
@@ -180,7 +249,7 @@ function decorateWithin(root: Node): void {
         return NodeFilter.FILTER_REJECT
       }
       const data = (node as Text).data
-      return data.includes('[选段]') || data.startsWith('【审核结果】') || data.startsWith('对当前文档做') || /\bv\d+\b/i.test(data)
+      return data.includes('[选段]') || data.includes('按批注修改') || data.startsWith('【审核结果】') || data.startsWith('对当前文档做') || /\bv\d+\b/i.test(data)
         ? NodeFilter.FILTER_ACCEPT
         : NodeFilter.FILTER_SKIP
     },

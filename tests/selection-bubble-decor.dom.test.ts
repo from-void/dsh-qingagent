@@ -86,3 +86,40 @@ describe('审查发起气泡结构化卡', () => {
     stop()
   })
 })
+
+describe('批注指令气泡结构化卡', () => {
+  it('两条批注指令连发拆成两张卡:问题/方向/原文分层,不再拼一坨', async () => {
+    const stop = installSelectionBubbleDecor()
+    const bubble = document.createElement('div')
+    bubble.append(document.createTextNode(
+      '按批注修改：强凑三组排比——改为自然表述。（原文：『为提升本社区应对高温灾害的综合能力。』） '
+      + '按批注修改：空泛升华——落到具体闭环。（原文：『实现社区高温韧性能力的螺旋式提升。』）',
+    ))
+    document.body.append(bubble)
+
+    await Promise.resolve()
+
+    const cards = [...bubble.querySelectorAll('[data-qingagent-selection-decorated]')]
+    expect(cards.length).toBe(2)
+    expect(cards[0]!.textContent).toContain('批注修改')
+    expect(cards[0]!.textContent).toContain('强凑三组排比')
+    expect(cards[0]!.textContent).toContain('改为自然表述')
+    expect(cards[0]!.textContent).toContain('原文:')
+    expect(cards[1]!.textContent).toContain('空泛升华')
+    expect(bubble.textContent).not.toContain('（原文：『')
+    stop()
+  })
+
+  it('无原文尾缀的独立指令整行装饰', async () => {
+    const stop = installSelectionBubbleDecor()
+    const bubble = document.createElement('div')
+    bubble.append(document.createTextNode('按批注修改：把时间改成四月'))
+    document.body.append(bubble)
+
+    await Promise.resolve()
+
+    expect(bubble.querySelector('[data-qingagent-selection-decorated]')).toBeTruthy()
+    expect(bubble.textContent).toContain('把时间改成四月')
+    stop()
+  })
+})
