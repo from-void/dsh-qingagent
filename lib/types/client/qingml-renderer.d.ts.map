@@ -1,0 +1,1 @@
+{"version":3,"file":"qingml-renderer.d.ts","sourceRoot":"","sources":["../../../src/client/qingml-renderer.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,cAAc;IAC7B,IAAI,EAAE,MAAM,CAAA;IACZ,KAAK,EAAE,MAAM,GAAG,IAAI,CAAA;IACpB,SAAS,EAAE,MAAM,CAAA;CAClB;AAoBD,yDAAyD;AACzD,wBAAgB,YAAY,CAAC,MAAM,EAAE,MAAM,EAAE,MAAM,GAAE,SAA2B,GAAG,cAAc,CAWhG"}

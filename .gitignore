@@ -1,5 +1,5 @@
 node_modules
-lib/
+# lib 构建产物入库:支持 github: 协议直装(git 安装无法现场构建,vendor submodule 拉不到)
 *.log
 .DS_Store
 coverage/

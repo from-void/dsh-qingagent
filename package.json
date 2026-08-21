@@ -54,7 +54,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run check:qingdoc-css && npm run check:telemetry-redact && npm run typecheck && npm test && npm run build",
-    "prepack": "npm run check"
+    "prepublishOnly": "npm run check"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

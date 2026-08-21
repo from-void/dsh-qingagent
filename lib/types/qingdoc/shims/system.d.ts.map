@@ -1,0 +1,1 @@
+{"version":3,"file":"system.d.ts","sourceRoot":"","sources":["../../../../src/qingdoc/shims/system.tsx"],"names":[],"mappings":"AAEA,OAAO,EAAE,eAAe,EAAE,UAAU,EAAE,MAAM,iCAAiC,CAAA;AAC7E,YAAY,EAAE,cAAc,EAAE,MAAM,iCAAiC,CAAA;AAIrE,wBAAgB,QAAQ;gBAER,MAAM,GAAG;QAAE,OAAO,EAAE,MAAM,CAAA;KAAE,GAAG,MAAM;eAKtC,IAAI;EAElB"}
