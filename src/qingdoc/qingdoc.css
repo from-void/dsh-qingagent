@@ -830,7 +830,7 @@
   :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .wdr-swap {animation:wdr-swap-in .34s cubic-bezier(.22,.61,.36,1) both}
   @keyframes wdr-swap-in {from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
-/* source: apps/web/src/pages/workspace/workspace.css:1120-1157 */
+/* source: apps/web/src/pages/workspace/workspace.css:1136-1173 */
   /* ============ 青简 Loading（空文档占位：静止态/推理态） ============ */
   /* 复用 .doc-empty 那张「奶白纸」(ink-skin 给了 top/背景/阴影)，只把里面的浮动 loader 换成青字效果，
      所以这里不自定义铺满背景/定位——纸张与位置完全沿用原空态。 */
@@ -870,7 +870,7 @@
     overflow:hidden;
   }
 
-/* source: apps/web/src/pages/workspace/workspace.css:1289-3652 */
+/* source: apps/web/src/pages/workspace/workspace.css:1305-3668 */
   /* ============ 工具栏 · 浮现式 (选中文本时出现在选区上方) ============ */
   :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .doc-toolbar {
     /* z-index 必须高于表格列/行头热区(.tbl-col-hdr/.tbl-row-hdr=100010、.tbl-dot=100020):

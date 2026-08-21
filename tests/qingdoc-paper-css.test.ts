@@ -39,7 +39,7 @@ describe('青简纸面移植契约', () => {
     expect(css).toContain('padding-bottom: 156px !important;')
     expect(css).toContain('--bg-paper-deep: #efe7d6;')
     expect(css).toContain('--font-zh-serif: "Noto Serif SC"')
-    expect(css).toContain('source: apps/web/src/pages/workspace/workspace.css:1120-1157')
+    expect(css).toContain('source: apps/web/src/pages/workspace/workspace.css:1136-1173')
     expect(css).toContain('.qing-stage .qing-center')
     expect(css).toContain('.qing-tag-inner .qt-author')
     expect(css).toContain('--r: 0;')

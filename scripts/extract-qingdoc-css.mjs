@@ -35,7 +35,7 @@ const sources = [
   ['packages/ui-kit/src/base.css', [[5, 36]]],
   ['packages/ui-kit/src/components.css', [[181, 274]]],
   ['apps/web/src/app.css', [[1, 15], [252, 474]]],
-  ['apps/web/src/pages/workspace/workspace.css', [[169, 169], [197, 214], [294, 376], [1120, 1157], [1289, 3652]]],
+  ['apps/web/src/pages/workspace/workspace.css', [[169, 169], [197, 214], [294, 376], [1136, 1173], [1305, 3668]]],
   ['apps/web/src/pages/workspace/workspace-ink-skin.css', [[20, 60], [119, 204], [592, 682], [1111, 1220], [1527, 1667], [1669, 1802], [1863, 2074], [2096, 2694], [3215, 3530]]],
   ['apps/web/src/pages/workspace/workspace-responsive.css', [[1, 30]]],
   // DocumentSnapshotView 的可达组件 CSS。与上方产品样式一样逐文件/逐行钉扎；
