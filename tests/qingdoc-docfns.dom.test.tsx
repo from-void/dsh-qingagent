@@ -154,14 +154,14 @@ describe('青简纸面审查/导出入口', () => {
       menuItem('来源核查').click()
       await Promise.resolve()
     })
-    await vi.waitFor(() => expect(host.querySelector('[data-wf="ReviewLaunchModal"]')).not.toBeNull())
+    await vi.waitFor(() => expect(document.querySelector('[data-wf="ReviewLaunchModal"]')).not.toBeNull())
     // 弹窗打开后切到另一稿，确认请求仍必须携带弹窗发起瞬间的目标稿。
     renderFunctions({
       engineSessionId: 'qing-switched-after-modal',
       title: '后来切换的稿',
       onSendMessage,
     })
-    const confirm = [...host.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
       .find((button) => button.textContent === '开始核查')!
     await vi.waitFor(() => expect(confirm.disabled).toBe(false))
     await act(async () => {
@@ -196,16 +196,16 @@ describe('青简纸面审查/导出入口', () => {
       menuItem('去AI味').click()
       await Promise.resolve()
     })
-    await vi.waitFor(() => expect(host.querySelector('[data-wf="ReviewLaunchModal"]')).not.toBeNull())
+    await vi.waitFor(() => expect(document.querySelector('[data-wf="ReviewLaunchModal"]')).not.toBeNull())
     expect(host.querySelector('[data-wf="DeaiReviewModal"]')).toBeNull()
-    const supplement = host.querySelector<HTMLTextAreaElement>('.ws-launch-supplement textarea')!
+    const supplement = document.querySelector<HTMLTextAreaElement>('.ws-launch-supplement textarea')!
     act(() => {
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
       setter?.call(supplement, '保留品牌口号')
       supplement.dispatchEvent(new Event('input', { bubbles: true }))
     })
 
-    const confirm = [...host.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
       .find((button) => button.textContent === '开始处理')!
     await act(async () => {
       confirm.click()
@@ -217,7 +217,7 @@ describe('青简纸面审查/导出入口', () => {
     expect(query).toContain('审查模板「自然表达」')
     expect(query).toContain('逐段识别机器腔并生成批注建议')
     expect(query).toContain('文档级补充要求（只适用于当前文档）：保留品牌口号')
-    expect(host.querySelector('[data-wf="ReviewLaunchModal"]')).toBeNull()
+    expect(document.querySelector('[data-wf="ReviewLaunchModal"]')).toBeNull()
   })
 
   it('来源核查没有 ready 素材时显示真源阻断文案且不能发起', async () => {
@@ -230,8 +230,8 @@ describe('青简纸面审查/导出入口', () => {
       menuItem('来源核查').click()
       await Promise.resolve()
     })
-    await vi.waitFor(() => expect(host.textContent).toContain('当前没有可对照素材，请先添加素材'))
-    const confirm = [...host.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
+    await vi.waitFor(() => expect(document.body.textContent).toContain('当前没有可对照素材，请先添加素材'))
+    const confirm = [...document.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
       .find((button) => button.textContent === '开始核查')!
     expect(confirm.disabled).toBe(true)
     expect(onSendMessage).not.toHaveBeenCalled()
@@ -247,18 +247,18 @@ describe('青简纸面审查/导出入口', () => {
       menuItem('敏感词审查').click()
       await Promise.resolve()
     })
-    await vi.waitFor(() => expect(host.textContent).toContain('已启用 2 个词库'))
-    act(() => host.querySelector<HTMLButtonElement>('.ws-launch-resource-row .ws-launch-link')!.click())
-    const medical = host.querySelector<HTMLInputElement>('input[aria-label="启用医疗宣传"]')
-      ?? [...host.querySelectorAll<HTMLInputElement>('.ws-lexicon-check input')][1]!
+    await vi.waitFor(() => expect(document.body.textContent).toContain('已启用 2 个词库'))
+    act(() => document.querySelector<HTMLButtonElement>('.ws-launch-resource-row .ws-launch-link')!.click())
+    const medical = document.querySelector<HTMLInputElement>('input[aria-label="启用医疗宣传"]')
+      ?? [...document.querySelectorAll<HTMLInputElement>('.ws-lexicon-check input')][1]!
     act(() => medical.click())
     await act(async () => {
-      [...host.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
+      [...document.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
         .find((button) => button.textContent === '完成')!.click()
       await Promise.resolve()
     })
     await act(async () => {
-      [...host.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
+      [...document.querySelectorAll<HTMLButtonElement>('.ws-launch-actions button')]
         .find((button) => button.textContent === '开始审查')!.click()
       await Promise.resolve()
       await Promise.resolve()

@@ -4070,7 +4070,7 @@
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .annotation-anchor-active[data-annotation-overlap="true"] { background:color-mix(in srgb,var(--mark) 16%,transparent); }
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .annotation-anchor-accepted { text-decoration-line:underline; text-decoration-style:wavy; text-decoration-color:var(--ink-4); text-decoration-thickness:1px; text-underline-offset:3px; background:transparent; }
 
-/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:2096-2154 */
+/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:2096-2694 */
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-lexicon-open:hover .ws-lexicon-chevron { color: var(--mark); transform: translateX(2px); }
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-lexicon-actions {
   display: flex;
@@ -4130,8 +4130,421 @@
 }
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-deai-detail .ws-lexicon-instruction input:focus { border-color: var(--mark); }
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-deai-detail .ws-lexicon-instruction textarea { min-height: 260px; }
-
-/* source: apps/web/src/pages/workspace/workspace-ink-skin.css:2570-2694 */
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(780px, 94vw);
+  max-height: min(680px, 88vh);
+  padding: 0;
+  overflow: hidden;
+  font-family: var(--font-zh-serif);
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-head {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 54px;
+  padding: 17px 52px 0 22px;
+  border-bottom: 1px solid var(--line-2);
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-head h2 {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 7px;
+  margin: 0;
+  color: var(--ink-1);
+  font: 700 15px/1.3 var(--font-zh-serif);
+  white-space: nowrap;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-back,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-close,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-link {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-family: var(--font-zh-serif);
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-back { flex: none; display: inline-flex; align-items: center; gap: 3px; font-size: 13px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-subtitle {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-3);
+  font: 11.5px/1.5 var(--font-zh-serif);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-close {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  top: 13px;
+  right: 16px;
+  width: 28px;
+  height: 28px;
+  font-size: 21px;
+  line-height: 26px;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-back:hover:not(:disabled),
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-close:hover:not(:disabled),
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-link:hover:not(:disabled) { color: var(--mark); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-back:disabled,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-close:disabled { color: var(--ink-4); cursor: default; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-body {
+  display: grid;
+  min-height: 0;
+  gap: 11px;
+  padding: 14px 22px 16px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-content,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-form,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-editor { display: grid; min-width: 0; gap: 11px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-starters {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 240px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  margin-right: auto;
+  gap: 4px 10px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-starters button {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dotted var(--mark);
+  border-radius: 0;
+  background: transparent;
+  color: var(--mark);
+  cursor: pointer;
+  font: inherit;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-starters button:hover {
+  border-bottom-color: var(--ink-1);
+  color: var(--ink-1);
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-starters button:disabled {
+  border-bottom-color: var(--ink-4);
+  color: var(--ink-4);
+  cursor: default;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-group { display: grid; min-width: 0; gap: 8px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-group-head { display: flex; align-items: baseline; gap: 12px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-modal .ws-launch-template-group-title {
+  margin: 0;
+  color: var(--ink-2);
+  font: 600 12.5px/1.4 var(--font-zh-serif);
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-grid.is-portrait {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-card {
+  position: relative;
+  min-width: 0;
+  min-height: 56px;
+  border: 1px solid var(--line-2);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-1);
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-card:hover { background: var(--bg-hover); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-card.is-selected {
+  border-color: var(--mark);
+  background: var(--mark-soft);
+  box-shadow: inset 3px 0 var(--mark);
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-card.is-portrait {
+  width: auto;
+  min-height: 148px;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-select {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 54px;
+  gap: 3px;
+  padding: 8px 11px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-zh-serif);
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-card.is-portrait .ws-launch-template-select {
+  display: flex;
+  min-height: 146px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 13px 8px 10px;
+  text-align: center;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-role-avatar {
+  display: grid;
+  width: 54px;
+  height: 58px;
+  margin: 0 auto 7px;
+  place-items: center;
+  color: currentColor;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-role-avatar svg { width: 54px; height: 54px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-card.is-portrait .ws-launch-template-name {
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-card.is-portrait .ws-launch-template-name strong {
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-role-position {
+  overflow: hidden;
+  width: 100%;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  line-height: 1.4;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-role-recommended {
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  color: var(--mark);
+  font-size: 9.5px;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-name strong {
+  overflow: hidden;
+  color: var(--ink-1);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-summary {
+  overflow: hidden;
+  color: var(--ink-3);
+  padding-right: 14px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-edit {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-4);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-edit svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-card:hover .ws-launch-template-edit { opacity: 1; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-edit:hover:not(:disabled) { color: var(--mark); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-select:focus-visible,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-edit:focus-visible,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-new:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  font: 11.5px/1.4 var(--font-zh-serif);
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-group:hover .ws-launch-template-new,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-new:focus-visible { opacity: 1; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-new:hover:not(:disabled) { color: var(--mark); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-select:disabled,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-edit:disabled { cursor: default; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-card:hover .ws-launch-template-edit:disabled { opacity: 0.5; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-new:disabled { cursor: default; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-translate-language-group { display: grid; gap: 8px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-translate-language-group h3 { margin: 0; color: var(--ink-2); font-size: 13px; font-weight: 600; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-translate-language-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-translate-language-chips button { padding: 6px 10px; border: 1px solid var(--line-2); border-radius: 0; background: transparent; color: var(--ink-3); font: 12.5px var(--font-zh-serif); cursor: pointer; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-translate-language-chips button.is-selected { border-color: var(--mark); background: rgba(200, 169, 106, 0.13); color: var(--ink-1); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-translate-language-chips button:disabled:not(.is-selected) { opacity: 0.35; cursor: default; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-resource-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line-1);
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mark);
+  font: 600 12px/1.6 var(--font-zh-serif);
+  white-space: nowrap;
+  cursor: pointer;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-source-blocked { background: var(--bg-subtle); color: var(--ink-3); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-field {
+  display: grid;
+  gap: 6px;
+  color: var(--ink-2);
+  font: 600 12.5px/1.4 var(--font-zh-serif);
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-field input,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 11px;
+  border: 1px solid var(--line-2);
+  border-radius: 0;
+  outline: 0;
+  background: var(--bg-canvas);
+  color: var(--ink-1);
+  font: 400 12.5px/1.6 var(--font-zh-serif);
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-field textarea { min-height: 150px; resize: vertical; }
+/* 字段标题行:左标题 + 右侧字段级动作(AI 起草贴在提示词框右上角) */
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-ai-draft {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dotted var(--mark);
+  border-radius: 0;
+  background: transparent;
+  color: var(--mark);
+  cursor: pointer;
+  font: 600 12px/1.6 var(--font-zh-serif);
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-ai-draft:hover:not(:disabled) {
+  border-bottom-color: var(--ink-1);
+  color: var(--ink-1);
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-ai-draft:disabled {
+  border-bottom-color: var(--ink-4);
+  color: var(--ink-4);
+  cursor: default;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-field input:focus,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-field textarea:focus { border-color: var(--mark); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-field input::placeholder,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-field textarea::placeholder { color: var(--ink-4); font-weight: 400; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-supplement textarea { min-height: 58px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-actions {
+  position: sticky;
+  bottom: -16px;
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0 -22px -16px;
+  padding: 10px 22px 16px;
+  border-top: 1px solid var(--line-2);
+  background: var(--bg-paper-deep);
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-actions .wf-btn { padding: 7px 16px; font-size: 12.5px; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-actions .wf-btn.primary { border-color: var(--mark); background: var(--mark); color: var(--bg-canvas); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-actions .wf-btn.primary:hover:not(:disabled) { border-color: var(--ink-1); background: var(--ink-1); color: var(--bg-canvas); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-actions .wf-btn[data-danger="true"] { margin-right: auto; color: var(--ws-red); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-modal .ws-launch-error,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-modal .ws-launch-status { margin: 0; color: var(--ink-3); line-height: 1.6; }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-modal .ws-launch-error { color: var(--ws-red); }
+@media (max-width: 560px) {
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-head { padding-left: 16px; }
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-body { padding-right: 16px; padding-left: 16px; }
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-actions { margin-right: -16px; margin-left: -16px; padding-right: 16px; padding-left: 16px; }
+  :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-launch-template-grid.is-portrait { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-lexicon-entry-list {
+  min-height: 240px;
+  max-height: min(480px, 58vh);
+  overflow-y: auto;
+  border-top: 1px solid var(--line-1);
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-lexicon-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(96px, auto);
+  align-items: center;
+  gap: 18px;
+  min-height: 44px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line-1);
+  transition: background-color 120ms ease;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-lexicon-entry:hover { background: var(--bg-subtle); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-lexicon-word {
+  overflow: hidden;
+  color: var(--ink-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-lexicon-replacement,
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-lexicon-mark-only {
+  justify-self: end;
+  font-size: 13px;
+  white-space: nowrap;
+}
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-lexicon-replacement { display: inline-flex; align-items: center; gap: 3px; color: var(--mark); }
+:is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-lexicon-mark-only { color: var(--ink-3); }
 :is([data-qingagent-doc-panel], #qingagent-doc-panel-specificity) .ws-export-menu {
   position: absolute;
   top: calc(100% + 7px);

@@ -4,6 +4,11 @@
 const RUNTIME_STYLE_ID = 'qingdoc-runtime-css'
 
 const RUNTIME_CSS = `
+/* 审查启动弹窗 portal 到 body(躲开 dsh 布局的 transform 祖先,fixed 才相对视口);
+   真源 overlay z-index:10000 压不过 dsh 输入框,这里提到面板浮层带(100550)。 */
+[data-qingagent-doc-panel] .ws-folder-modal-overlay.ws-launch-modal-overlay {
+  z-index: 100550;
+}
 [data-qingagent-doc-panel] .patch-nav:not(.is-confirming) {
   backdrop-filter: blur(18px) saturate(1.3);
   -webkit-backdrop-filter: blur(18px) saturate(1.3);

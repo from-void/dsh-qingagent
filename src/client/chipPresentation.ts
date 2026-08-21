@@ -97,14 +97,16 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
   style.id = STYLE_ID
   style.textContent = [
     `[${CHIP_ATTR}="selection"]{`,
-    'background:rgba(200,169,106,.16);',
-    'box-shadow:0 0 0 1px rgba(200,169,106,.40);',
-    'color:#ece4d4;',
+    // 用户裁定:选区 chip 是「带一定颜色的块」,不能是浅浅一层。
+    'background:rgba(200,169,106,.38);',
+    'box-shadow:0 0 0 1px rgba(200,169,106,.75);',
+    'color:#f5efdf;',
     'border-radius:0;',
     '}',
     `[${CHIP_ATTR}="annotation"]{`,
-    'background:rgba(176,84,30,.16);',
-    'box-shadow:0 0 0 1px rgba(176,84,30,.45);',
+    'background:rgba(186,92,38,.38);',
+    'box-shadow:0 0 0 1px rgba(186,92,38,.8);',
+    'color:#f7ece2;',
     'border-radius:0;',
     '}',
   ].join('')
@@ -163,11 +165,14 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
   // ---------------------------------------------------------------- 浮层单例
   const panel = document.createElement('div')
   panel.setAttribute(PANEL_ATTR, '1')
+  // 跟随宿主明暗主题(dsw 令牌;写死深色在浅色主题下是一坨黑块——用户实测点名)。
   panel.style.cssText = [
     'position:fixed', 'z-index:100600', 'display:none', 'width:360px', 'box-sizing:border-box',
     'padding:12px', 'border-radius:0',
-    'background:#2e2a24', 'color:#ece4d4',
-    'box-shadow:0 8px 24px rgba(0,0,0,.45)',
+    'background:var(--dsw-alias-bg-layer-3, #2e2a24)',
+    'color:var(--dsw-alias-label-primary, #ece4d4)',
+    'border:1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.25))',
+    'box-shadow:var(--dsw-shadow-lv2, 0 8px 24px rgba(0,0,0,.35))',
     'font-size:12px', 'line-height:18px',
   ].join(';')
 
@@ -177,10 +182,12 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
   badge.style.cssText = [
     'position:fixed', 'z-index:100601', 'display:none',
     'width:16px', 'height:16px', 'border-radius:0',
-    'background:#b3541e', 'color:#ece4d4',
-    'font-size:11px', 'line-height:16px', 'text-align:center',
+    'background:var(--dsw-alias-bg-layer-3, #26282c)',
+    'color:var(--dsw-alias-label-secondary, #b9b3a8)',
+    'border:1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.3))',
+    'font-size:10px', 'line-height:14px', 'text-align:center',
     'cursor:pointer', 'user-select:none',
-    'box-shadow:0 2px 8px rgba(0,0,0,.4)',
+    'box-shadow:var(--dsw-shadow-lv2, 0 2px 8px rgba(0,0,0,.3))',
   ].join(';')
 
   const panelButton = (text: string, primary: boolean): HTMLButtonElement => {
@@ -190,8 +197,8 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     button.style.cssText = [
       'padding:4px 14px', 'border-radius:0', 'cursor:pointer', 'font-size:12px', 'line-height:18px',
       primary
-        ? 'border:1px solid #b3541e;background:#b3541e;color:#ece4d4'
-        : 'border:1px solid rgba(236,228,212,.35);background:transparent;color:#ece4d4',
+        ? 'border:1px solid #b3541e;background:#b3541e;color:#f5efdf'
+        : 'border:1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.35));background:transparent;color:var(--dsw-alias-label-primary, #ece4d4)',
     ].join(';')
     return button
   }

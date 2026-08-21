@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties, RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
@@ -1977,7 +1978,10 @@ export function QingDocFunctions(props: QingDocFunctionsProps) {
           ) : null}
         </div>
       </div>
-      {reviewLaunch ? (
+      {reviewLaunch ? createPortal(
+        // scope 载体:display:contents 不产生盒子,只为让钉扎提取的 ws-launch-* 样式命中;
+        // portal 到 body 使 overlay 的 fixed 相对视口(面板祖先可能带 transform)。
+        <div data-qingagent-doc-panel style={{ display: 'contents' }}>
         <ReviewLaunchModal
           open
           type={reviewLaunch.type}
@@ -2003,6 +2007,8 @@ export function QingDocFunctions(props: QingDocFunctionsProps) {
             void sendReview(type, engineSessionId, template, supplement, lexicons)
           }}
         />
+        </div>,
+        document.body,
       ) : null}
     </>
   )
