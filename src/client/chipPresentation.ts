@@ -178,17 +178,18 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     '}',
     `[${CHIP_ATTR}][${DISPLAY_ATTR}]::after{`,
     `content:attr(${DISPLAY_ATTR});`,
-    'position:absolute;', 'inset:0;', 'padding:0 20px 0 22px;', 'box-sizing:border-box;',
-    'font-size:12px;',
-    // 垂直居中用 flex(用户实测 line-height 继承对不齐);ellipsis 需要 block 容器,
-    // 由内层 display:block + overflow 承担——flex 下直接给 ::after 生效于单行文本。
-    'display:flex;', 'align-items:center;',
+    // block + translateY 几何居中:flex 会吃掉 text-overflow(用户实测截断无省略号);
+    // -1px 校正 CJK 字面视觉重心略低(用户实测偏下一点)。
+    'position:absolute;', 'left:0;', 'right:0;', 'top:calc(50% - 1px);',
+    'transform:translateY(-50%);', 'display:block;',
+    'padding:0 20px 0 22px;', 'box-sizing:border-box;',
+    'font-size:12px;', 'line-height:normal;',
     'color:var(--dsw-alias-label-primary, #ece4d4);',
     'white-space:nowrap;', 'overflow:hidden;', 'text-overflow:ellipsis;',
     '}',
     // SVG 图标:mask + background-color,不吃 chip 的 transparent 文字色。
     `[${CHIP_ATTR}][${DISPLAY_ATTR}]:not([${WRAPPED_ATTR}])::before{`,
-    "content:'';", 'position:absolute;', 'left:6px;', 'top:50%;',
+    "content:'';", 'position:absolute;', 'left:6px;', 'top:calc(50% - 1px);',
     'width:12px;', 'height:12px;', 'transform:translateY(-50%);',
     'background:var(--dsw-alias-label-primary, #ece4d4);',
     `-webkit-mask:${QUOTE_ICON_SVG} center / 12px 12px no-repeat;`,

@@ -141,7 +141,8 @@ describe('chip 打标', () => {
     expect(css).toContain('content:attr(data-qing-display)')
     expect(css).toContain('font-size:12px')
     expect(css).toContain('text-overflow:ellipsis')
-    expect(css).toContain('align-items:center')
+    expect(css).toContain('translateY(-50%)')
+    expect(css).toContain('text-overflow:ellipsis')
     expect(css).toContain('::selection{ color:transparent; }')
     // 图标按 SVG 画(用户裁定),mask 数据 URI 注入
     expect(css).toContain('mask:url(')
