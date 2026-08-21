@@ -187,6 +187,24 @@ describe('agent 文稿回合租约', () => {
     expect(fixture.events.some((item) => item.event.type === 'export-request')).toBe(false)
   })
 
+  it('审核结果回流回合禁写:qing_write/edit 一律拒绝(评测 0822-r5)', async () => {
+    const fixture = harness(async (path) => {
+      if (path.endsWith('/doc?format=qingml')) return doc({ state: 'editing', qingml: DRAFT_ONE, title: '测试稿' })
+      throw new Error(`unexpected path: ${path}`)
+    })
+    const preStep = fixture.listeners.get('agent/pre-step')!
+    await preStep({
+      agent: { id: 'dsh-1' }, turn: 9,
+      messages: [{ content: [{ text: '【审核结果】本轮审阅我已处理:采纳 1 处,拒绝 0 处。全部改动均已采纳。' }] }],
+    }, async () => ({ kind: 'enter', messages: [] }))
+    await expect(fixture.tools.get('qing_edit_draft')!.execute(
+      { ops: [{ kind: 'strReplace', old: '旧', new: '新' }] },
+      exec(undefined, 'settle-write', 'qing_edit_draft'),
+    )).rejects.toThrow('用户刚完成裁决')
+    // 收尾:推进干净回合清结算标记,防 tracker 单例跨用例串扰
+    await preStep({ agent: { id: 'dsh-1' }, turn: 10, messages: [] }, async () => ({ kind: 'enter', messages: [] }))
+  })
+
   it('abort 路径宿主不发 turn-stopping,status idle 兜底收口残留租约', async () => {
     // 评测 r4 实证:用户点停止后回合被 abort,turn-stopping 不发射,残留段心跳把文稿
     // 永久锁死(agentBusy 数小时不释放)。idle 状态边界必须兜底关段。

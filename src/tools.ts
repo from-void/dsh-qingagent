@@ -531,7 +531,7 @@ export function registerTools(services: ToolServices): void {
   ctx.effect(() => () => runtime.turnLeases.dispose())
   ctx.effect(() => () => runtime.pendingTitles.dispose())
   ctx.effect(() => ctx.tools.register(writeDraftTool(runtime, writeTurns)))
-  ctx.effect(() => ctx.tools.register(editDraftTool(runtime)))
+  ctx.effect(() => ctx.tools.register(editDraftTool(runtime, writeTurns)))
   ctx.effect(() => ctx.tools.register(annotateTool(runtime)))
   ctx.effect(() => ctx.tools.register(reviewCommitTool(runtime, reviewTurns)))
   ctx.effect(() => ctx.tools.register(readDraftTool(runtime, readTurns)))
@@ -802,7 +802,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
   })
 }
 
-function editDraftTool(services: RuntimeToolServices) {
+function editDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTracker) {
   return defineTool({
     name: 'qing_edit_draft',
     description: '对已有青简文稿做结构化局部修改。改标题时,正文有与旧稿名相同的纸面大标题,只需用 strReplace 改纸面标题,稿名会在修改生效后自动跟随;正文没有同名纸面大标题时才用 setTitle 直接改稿名。删除整段/整节/清单项用 deleteBlock/deleteListItem,先 qing_read_draft mode:"blocks" 取得短定位键 locator,严禁用 strReplace 置空留残壳;真实引擎标识由工具内部映射,不要猜测或传入。改一句、插入一段或追加一节用相应操作;高亮、文字颜色、加粗一句话等行内标记用 markText。markText remove 前先读稿确认现有标记的确切 attrs;代码段内文本不支持行内标记。strReplace 的 old/new 通常必须是纯文本，不含 ##、-、** 等 Markdown 标记；只有扩展既有表格行或整块替换 fenced Mermaid 时传完整 Markdown 块。表格行严禁用 insertAfterLine/insertAfterBlock/appendSection 插入孤立管道文本。只有用户明确表达「所有/全部/凡是/都」等全局意图时,才用单个 strReplace + all:true;all:true 不得与 nth 同时使用。多处修改必须放进同一次调用的 ops 数组原子提交。insertAfterLine 的行号来自读稿当刻;同批先增删内容会令后续旧行号失效。复杂清单或表格附近优先使用 mode:"blocks" 给出的 locator。修改 Mermaid 先用 mode:"lines" 读取完整 fenced 块,再整块 strReplace,不得逐行改。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
@@ -1007,6 +1007,10 @@ function editDraftTool(services: RuntimeToolServices) {
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
       try {
+        // 结算回合硬闸先于一切:裁决即终态,先读稿再改也不行(评测 0822-r5)。
+        if (writeTurns.isSettlementTurn(dshSessionId)) {
+          throw new Error('用户刚完成裁决,改动已定稿;本回合不允许再修改文稿。若用户提出新的修改意见,等下一条消息再动手。')
+        }
         services.reviewTurnState.assertAnnotationOnly(dshSessionId)
         await assertEngineOnline(services.engine)
         const engineSessionId = resolveDocRef(services, dshSessionId, args.docRef)
@@ -1321,6 +1325,16 @@ function annotateTool(services: RuntimeToolServices) {
       const dshSessionId = sessionIdOf(exec)
       const activeReview = services.reviewTurnState.getActive(dshSessionId)
       if (!activeReview) throw new Error('qing_annotate 只能在已发起的审查回合中调用。')
+      // 无效批注硬闸:suggestion 与原文相同=空操作(评测 0822-r5 实证:已有空格仍报
+      // 「缺失」且改法与原文一字不差)。这样的「问题」大概率不存在,驳回让模型复核。
+      const normalize = (text: string) => text.replace(/\s+/gu, ' ').trim()
+      for (const group of (args.groups ?? []) as Array<{ suggestion?: string; anchors?: Array<{ find?: string }> }>) {
+        const suggestion = typeof group.suggestion === 'string' ? normalize(group.suggestion) : ''
+        if (!suggestion) continue
+        if ((group.anchors ?? []).some((anchor) => normalize(anchor.find ?? '') === suggestion)) {
+          throw new Error('存在 suggestion 与原文完全相同的批注——这不构成修改。请重新核对该处是否真的有问题;确认有问题就给出与原文不同的改法,没有问题就不要创建这条批注。')
+        }
+      }
       const engineSessionId = assertReviewTarget(
         services,
         dshSessionId,
@@ -2867,10 +2881,23 @@ class WriteTurnTracker {
     lengthResults: Array<{ actual: number; report: DraftLengthReport } | undefined>
   }>()
 
+  private readonly settlementTurns = new Map<string, number>()
+
   begin(agentId: string, turn: number): void {
     if (this.turns.get(agentId) === turn) return
     this.turns.set(agentId, turn)
     this.successful.delete(agentId)
+    this.settlementTurns.delete(agentId)
+  }
+
+  /** 本回合由【审核结果】回流触发:用户刚完成裁决,已定稿落盘。 */
+  markSettlementTurn(agentId: string, turn: number): void {
+    this.settlementTurns.set(agentId, turn)
+  }
+
+  isSettlementTurn(agentId: string): boolean {
+    const turn = this.turns.get(agentId)
+    return turn !== undefined && this.settlementTurns.get(agentId) === turn
   }
 
   dispose(agentId: string): void {
@@ -2879,6 +2906,11 @@ class WriteTurnTracker {
   }
 
   assertWriteAllowed(exec: ToolRunContext, docRef?: string): DraftRequirements | undefined {
+    // 审核结果回流回合的硬闸:prompt 纪律挡不住模型「拒绝后重做/全采纳后再提交」
+    // (评测 0822-r5 实证),裁决即终态,本回合一律禁写。
+    if (this.isSettlementTurn(sessionIdOf(exec))) {
+      throw new Error('用户刚完成裁决,改动已定稿;本回合不允许再修改文稿。若用户提出新的修改意见,等下一条消息再动手。')
+    }
     const agentId = sessionIdOf(exec)
     const key = this.key(agentId, exec)
     const state = this.successful.get(agentId)
@@ -3056,6 +3088,10 @@ function installTurnTracking(
     const activeReview = services.reviewTurnState.activate(dshSessionId, payload.turn)
     reviewTurns.begin(dshSessionId, payload.turn)
     writeTurns.begin(dshSessionId, payload.turn)
+    const messages = (payload as { messages?: Array<{ content?: Array<{ text?: string }> }> }).messages ?? []
+    if (messages.some((message) => message.content?.some((part) => typeof part.text === 'string' && part.text.startsWith('【审核结果】')))) {
+      writeTurns.markSettlementTurn(dshSessionId, payload.turn)
+    }
     readTurns.begin(dshSessionId, payload.turn)
     services.freshness.begin(dshSessionId, payload.turn)
     // 审查回合钉住弹窗发起稿；普通回合仍钉住回合起点的聚焦稿。
