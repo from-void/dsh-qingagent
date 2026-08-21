@@ -20,11 +20,11 @@ import { qingClientStore } from './store.js'
 import {
   insertSelectionReference,
   qingSelectionReferenceSource,
-  remintSelectionReferences,
 } from './selectionReference.js'
 import {
   insertAnnotationReference,
   qingAnnotationReferenceSource,
+  remintDraftReferences,
   removeOccurrenceFromDraft,
   replaceOccurrenceRef,
 } from './annotationReference.js'
@@ -96,11 +96,19 @@ export function apply(ctx: ClientContext): void {
         (doc) => doc.engineSessionId === selection.engineSessionId,
       )?.title
 
+      // 「第 N 段」人类可读定位:引文多处相同时的消歧信息(拿不到块索引则省略)。
+      const panelPm = snapshot.panelEngineSessionId === selection.engineSessionId
+        ? (snapshot.panelDoc as { pmDoc?: { content?: Array<{ attrs?: { blockId?: string } }> } } | undefined)?.pmDoc
+        : undefined
+      const blockIndex = panelPm?.content?.findIndex(
+        (block) => block.attrs?.blockId === selection.anchor.blockId) ?? -1
+      const paragraphOrdinal = blockIndex >= 0 ? blockIndex + 1 : undefined
+
       let inserted = false
       selectionInsertInFlight = true
       try {
         // 未移除时重复引用同一选段由 insertSelectionReference 的 occurrence 幂等挡住。
-        inserted = insertSelectionReference(selectionScope.ctx, selection, title)
+        inserted = insertSelectionReference(selectionScope.ctx, selection, title, paragraphOrdinal)
       } finally {
         selectionInsertInFlight = false
       }
@@ -235,8 +243,9 @@ export function apply(ctx: ClientContext): void {
             const scope = selectionScope
             if (!scope) return
             const snapshot = inputState.getSnapshot() as { draft?: string; phase?: string }
-            if (snapshot.phase === 'plain' && snapshot.draft?.includes('[选段]《')) {
-              remintSelectionReferences(scope.ctx)
+            if (snapshot.phase === 'plain'
+              && (snapshot.draft?.includes('[选段]《') || /按批注修改[::]/u.test(snapshot.draft ?? ''))) {
+              remintDraftReferences(scope.ctx)
             }
           })
         }

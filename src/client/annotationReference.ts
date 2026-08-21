@@ -251,3 +251,55 @@ export function replaceOccurrenceRef(
   }
   return false
 }
+
+
+const SELECTION_REMINT_PATTERN = /\[选段\]《[^《》]*》(?:第\d+段)?:「[^「」]*」/u
+// 真源 buildAnnotationInstruction 的稳定尾缀「(原文:『…』)」界定指令边界;无该尾缀的少数指令不重铸。
+const ANNOTATION_REMINT_PATTERN = /按批注修改[::][\s\S]*?(原文:『[^』]*』)/u
+
+/** 刷新恢复的草稿把未发送 chip 退化成了投影全文纯文本(宿主草稿持久化只存 clipboard 投影)。
+ *  识别两种形态并重铸回 occurrence chip:选段引用与批注指令。幂等:chip 镜像投影是 @label,
+ *  不匹配这两个模式。返回重铸数量。 */
+export function remintDraftReferences(actx: ClientContext): number {
+  const input = actx.conversation.input.for(actx)
+  let reminted = 0
+  for (let guard = 0; guard < 12; guard += 1) {
+    const state = input.state.getSnapshot()
+    if (state.phase !== 'plain') return reminted
+    const selectionMatch = SELECTION_REMINT_PATTERN.exec(state.draft)
+    const annotationMatch = ANNOTATION_REMINT_PATTERN.exec(state.draft)
+    const match = [selectionMatch, annotationMatch]
+      .filter((candidate): candidate is RegExpExecArray => candidate !== null)
+      .sort((a, b) => a.index - b.index)[0]
+    if (!match) return reminted
+    const text = match[0]
+    const isSelection = match === selectionMatch
+    const takenLabels = (state.occurrences ?? []).map((occurrence) => occurrence.label)
+    const reference: ReferenceInsert = isSelection
+      ? {
+          source: QING_SELECTION_REFERENCE_SOURCE,
+          ref: text,
+          label: selectionReferenceLabel(/「([^「」]*)」/u.exec(text)?.[1] ?? text),
+          clipboardText: text,
+        }
+      : {
+          source: QING_ANNOTATION_REFERENCE_SOURCE,
+          ref: text,
+          label: dedupeAnnotationLabel(annotationReferenceLabel(text), takenLabels),
+          clipboardText: text,
+        }
+    input.setDraft(state.draft.slice(0, match.index) + state.draft.slice(match.index + text.length))
+    const cleared = input.state.getSnapshot()
+    const at = Math.min(match.index, cleared.draft.length)
+    const ok = actx.bail(actx, 'slash/input-insert-reference', {
+      reference,
+      span: { start: at, end: at, draftRev: cleared.draftRev },
+    }) === true
+    if (!ok) {
+      input.setDraft(cleared.draft.slice(0, at) + text + cleared.draft.slice(at))
+      return reminted
+    }
+    reminted += 1
+  }
+  return reminted
+}

@@ -14,11 +14,16 @@ export const CHIP_LABEL_PREVIEW_LENGTH = 14
  * 模型侧的选段表示。ref 自身携带文稿、块与字符范围，不能依赖 bridge 中稍后会清掉的
  * 单槽 selection，也不能依赖只供复制/持久化的 clipboardText。
  */
-export function selectionReferenceText(selection: QingSelection, title?: string | null): string {
+export function selectionReferenceText(
+  selection: QingSelection,
+  title?: string | null,
+  paragraphOrdinal?: number,
+): string {
   // 展开文本会原样出现在发送气泡里:不带 UUID/块 ID/字符范围等机器噪音(用户实测嫌丑)。
-  // agent 定位选段靠引文逐字匹配(strReplace 内容锚点)+当前聚焦稿,标识符本就用不上。
+  // 但引文全文多处相同时纯文本锚有歧义——补一个人类可读的「第 N 段」定位(有块索引时)。
   const documentTitle = title?.trim() || '当前文稿'
-  return `[选段]《${documentTitle}》:「${selection.quote}」`
+  const locator = paragraphOrdinal && paragraphOrdinal > 0 ? `第${paragraphOrdinal}段` : ''
+  return `[选段]《${documentTitle}》${locator}:「${selection.quote}」`
 }
 
 export function selectionReferenceLabel(quote: string): string {
@@ -31,8 +36,9 @@ export function selectionReferenceLabel(quote: string): string {
 export function createSelectionReference(
   selection: QingSelection,
   title?: string | null,
+  paragraphOrdinal?: number,
 ): ReferenceInsert {
-  const ref = selectionReferenceText(selection, title)
+  const ref = selectionReferenceText(selection, title, paragraphOrdinal)
   return {
     source: QING_SELECTION_REFERENCE_SOURCE,
     ref,
@@ -50,9 +56,10 @@ export function insertSelectionReference(
   actx: ClientContext,
   selection: QingSelection,
   title?: string | null,
+  paragraphOrdinal?: number,
 ): boolean {
   const snapshot = actx.conversation.input.for(actx).state.getSnapshot()
-  const reference = createSelectionReference(selection, title)
+  const reference = createSelectionReference(selection, title, paragraphOrdinal)
   // 幂等守卫:bridge 状态重放/多路订阅可能对同一选段重复触发(用户实测双 chip);
   // 草稿里已有同 source+ref 的 occurrence 即视为已插入成功,由调用方清 ingress。
   if (snapshot.occurrences?.some((occurrence) =>
@@ -163,39 +170,3 @@ export function installSelectionChipHoverTitles(
 }
 
 
-const SELECTION_REF_PATTERN = /\[选段\]《[^《》]*》:「[^「」]*」/u
-
-/** 刷新恢复后的草稿里,未发送的选段 chip 会退化为完整 ref 纯文本(宿主草稿持久化只存
- *  clipboard 投影)。检测该模式并重铸回 occurrence chip:删文本、原位插 reference。
- *  幂等:chip 的镜像投影是 @label,不含该模式;返回重铸数量。 */
-export function remintSelectionReferences(actx: ClientContext): number {
-  const input = actx.conversation.input.for(actx)
-  let reminted = 0
-  for (let guard = 0; guard < 8; guard += 1) {
-    const state = input.state.getSnapshot()
-    if (state.phase !== 'plain') return reminted
-    const match = SELECTION_REF_PATTERN.exec(state.draft)
-    if (!match || match.index === undefined) return reminted
-    const ref = match[0]
-    const quote = /「([^「」]*)」/u.exec(ref)?.[1] ?? ref
-    input.setDraft(state.draft.slice(0, match.index) + state.draft.slice(match.index + ref.length))
-    const cleared = input.state.getSnapshot()
-    const at = Math.min(match.index, cleared.draft.length)
-    const ok = actx.bail(actx, 'slash/input-insert-reference', {
-      reference: {
-        source: QING_SELECTION_REFERENCE_SOURCE,
-        ref,
-        label: selectionReferenceLabel(quote),
-        clipboardText: ref,
-      },
-      span: { start: at, end: at, draftRev: cleared.draftRev },
-    }) === true
-    if (!ok) {
-      // 插入被拒:把文本放回去,避免丢内容;停止本轮重铸。
-      input.setDraft(cleared.draft.slice(0, at) + ref + cleared.draft.slice(at))
-      return reminted
-    }
-    reminted += 1
-  }
-  return reminted
-}
