@@ -10,6 +10,7 @@ import { DocStateCache } from '../src/docState.js'
 import type { EngineService } from '../src/engine.js'
 import { EngineHttpError } from '../src/engine.js'
 import { createBridgeDocStateObserver } from '../src/index.js'
+import { PendingTitleCoordinator } from '../src/pendingTitle.js'
 import type { TelemetryCapture } from '../src/telemetry.js'
 import { reviewTurnCoordinatorFor } from '../src/reviewTurn.js'
 
@@ -93,6 +94,7 @@ function fixture(
       (bindingsBySession[sessionId]?.docs ?? []).some((doc) => doc.engineSessionId === engineSessionId),
     setActive: vi.fn(),
     adoptDoc: vi.fn(),
+    updateTitle: vi.fn(async () => undefined),
   } as unknown as BindingStore
   const telemetry = { capture: vi.fn(async () => undefined) } as unknown as TelemetryCapture
   const hub = new BridgeHub(ctx, engine, bindings, undefined, undefined, telemetry, docStateObserver)
@@ -560,6 +562,28 @@ describe('BridgeHub', () => {
       type: 'turn-ended', engineSessionIds: ['qing-a'],
     })
     dispose()
+  })
+
+  it('文稿变化先收敛标题结算，删除通知会清掉对应扣留槽', async () => {
+    const runtime = fixture({})
+    const pendingTitles = {
+      settlePendingTitle: vi.fn(async () => 'none'),
+      clearDocument: vi.fn(),
+    } as unknown as PendingTitleCoordinator
+    const observer = createBridgeDocStateObserver(
+      runtime.ctx,
+      runtime.engine,
+      runtime.bindings,
+      new DocStateCache(),
+      pendingTitles,
+    )
+
+    await observer.documentChanged('dsh-a', 'qing-a')
+    await observer.documentDeleted?.('dsh-a', 'qing-a')
+
+    expect(pendingTitles.settlePendingTitle).toHaveBeenCalledWith('dsh-a', 'qing-a')
+    expect(pendingTitles.clearDocument).toHaveBeenCalledWith('dsh-a', 'qing-a')
+    runtime.dispose()
   })
 
   it('review-commit 后只刷新 system context 权威摘要，不再另走 agent.inject', async () => {

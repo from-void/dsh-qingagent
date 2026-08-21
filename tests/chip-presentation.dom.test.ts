@@ -90,6 +90,17 @@ function hover(textarea: HTMLTextAreaElement, x: number, y: number) {
   textarea.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x, clientY: y }))
 }
 
+function clipboardEvent(type: 'copy' | 'cut') {
+  const values = new Map<string, string>()
+  const clipboardData = {
+    setData: vi.fn((format: string, value: string) => { values.set(format, value); return true }),
+    getData: (format: string) => values.get(format) ?? '',
+  }
+  const event = new Event(type, { bubbles: true, cancelable: true }) as ClipboardEvent
+  Object.defineProperty(event, 'clipboardData', { value: clipboardData })
+  return { event, clipboardData }
+}
+
 /** MutationObserver 回调走 microtask(jsdom),等两拍让它 flush;假计时器下也安全。 */
 const flushObserver = async () => {
   await Promise.resolve()
@@ -325,6 +336,124 @@ describe('hover 面板与 ✕ 角标', () => {
     hover(textarea, 150, 15)
     vi.advanceTimersByTime(CHIP_PANEL_SHOW_DELAY)
     expect(panel()!.style.top).toBe('33px')
+  })
+})
+
+describe('copy/cut 完整展开', () => {
+  it('复制包含两枚 chip 的选区时，各 occurrence 按顺序独立展开完整 clipboardText', () => {
+    const { textarea } = mountComposer()
+    const firstProjection = '@①批注一'
+    const secondProjection = '@②批注二'
+    const draft = `前${firstProjection} ${secondProjection}后`
+    const harness = makeDeps([
+      occurrence({
+        occurrenceId: 1,
+        offset: 1,
+        source: 'qingagent-annotation',
+        label: '①批注一',
+        clipboardText: '按批注修改：第一条完整指令（原文：『甲』）',
+      }),
+      occurrence({
+        occurrenceId: 2,
+        offset: 1 + firstProjection.length + 1,
+        source: 'qingagent-annotation',
+        label: '②批注二',
+        clipboardText: '按批注修改：第二条完整指令（原文：『乙』）',
+      }),
+    ])
+    harness.state.current!.draft = draft
+    textarea.value = draft
+    textarea.setSelectionRange(0, draft.length)
+    uninstall = installChipPresentation(harness.deps)
+    const copied = clipboardEvent('copy')
+
+    textarea.dispatchEvent(copied.event)
+
+    expect(copied.event.defaultPrevented).toBe(true)
+    expect(copied.clipboardData.getData('text/plain')).toBe(
+      '前按批注修改：第一条完整指令（原文：『甲』） 按批注修改：第二条完整指令（原文：『乙』）后',
+    )
+  })
+
+  it('两枚相邻投影无分隔符时仍各自展开，不合并载荷', () => {
+    const { textarea } = mountComposer()
+    const firstProjection = '@①甲'
+    const secondProjection = '@②乙'
+    const draft = `${firstProjection}${secondProjection}`
+    const harness = makeDeps([
+      occurrence({ occurrenceId: 3, offset: 0, source: 'qingagent-annotation', label: '①甲', clipboardText: '完整甲' }),
+      occurrence({ occurrenceId: 4, offset: firstProjection.length, source: 'qingagent-annotation', label: '②乙', clipboardText: '完整乙' }),
+    ])
+    harness.state.current!.draft = draft
+    textarea.value = draft
+    textarea.setSelectionRange(0, draft.length)
+    uninstall = installChipPresentation(harness.deps)
+    const copied = clipboardEvent('copy')
+
+    textarea.dispatchEvent(copied.event)
+
+    expect(copied.clipboardData.getData('text/plain')).toBe('完整甲完整乙')
+  })
+
+  it('选区只含投影的一部分时，仍把相交 occurrence 完整展开', () => {
+    const { textarea } = mountComposer()
+    const draft = '头@①截断标签尾'
+    const harness = makeDeps([
+      occurrence({
+        occurrenceId: 5,
+        offset: 1,
+        source: 'qingagent-annotation',
+        label: '①截断标签',
+        clipboardText: '按批注修改：完整原文载荷（原文：『不可截断』）',
+      }),
+    ])
+    harness.state.current!.draft = draft
+    textarea.value = draft
+    textarea.setSelectionRange(3, 6)
+    uninstall = installChipPresentation(harness.deps)
+    const copied = clipboardEvent('copy')
+
+    textarea.dispatchEvent(copied.event)
+
+    expect(copied.clipboardData.getData('text/plain')).toBe('按批注修改：完整原文载荷（原文：『不可截断』）')
+  })
+
+  it('普通文本选区不与插件投影相交时不拦截原生复制', () => {
+    const { textarea } = mountComposer()
+    const draft = '普通文字 @①批注'
+    const harness = makeDeps([
+      occurrence({ occurrenceId: 6, offset: 5, source: 'qingagent-annotation', label: '①批注' }),
+    ])
+    harness.state.current!.draft = draft
+    textarea.value = draft
+    textarea.setSelectionRange(0, 4)
+    uninstall = installChipPresentation(harness.deps)
+    const copied = clipboardEvent('copy')
+
+    textarea.dispatchEvent(copied.event)
+
+    expect(copied.event.defaultPrevented).toBe(false)
+    expect(copied.clipboardData.setData).not.toHaveBeenCalled()
+  })
+
+  it('cut 安全降级为完整复制并提示手动删除，不破坏 occurrence', () => {
+    const { textarea } = mountComposer()
+    const draft = '@①批注'
+    const harness = makeDeps([
+      occurrence({ occurrenceId: 7, offset: 0, source: 'qingagent-annotation', label: '①批注', clipboardText: '完整批注' }),
+    ])
+    harness.state.current!.draft = draft
+    textarea.value = draft
+    textarea.setSelectionRange(0, draft.length)
+    uninstall = installChipPresentation(harness.deps)
+    const cut = clipboardEvent('cut')
+
+    textarea.dispatchEvent(cut.event)
+
+    expect(cut.event.defaultPrevented).toBe(true)
+    expect(cut.clipboardData.getData('text/plain')).toBe('完整批注')
+    expect(harness.onToast).toHaveBeenCalledWith('已复制,请手动删除')
+    expect(harness.removeOccurrence).not.toHaveBeenCalled()
   })
 })
 

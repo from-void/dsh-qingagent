@@ -69,10 +69,11 @@ describe('QINGAGENT_SYSTEM_PROMPT', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('工具返回的内容项包含标题、列表、表格等非段落结构,不等于自然段')
   })
 
-  it('改标题时同步稿名和纸面大标题并覆盖无大标题分支', () => {
+  it('改标题时让稿名跟随生效纸面标题，并覆盖无大标题分支', () => {
     expect(QINGAGENT_SYSTEM_PROMPT).toContain('正文是否有与旧稿名相同的纸面大标题')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('两者必须在同一次 ops 里提交且文字保持一致')
-    expect(QINGAGENT_SYSTEM_PROMPT).toContain('没有则允许只用 setTitle 改稿名')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('只需用 qing_edit_draft 的 strReplace 改纸面标题')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('稿名会在修改生效后自动跟随')
+    expect(QINGAGENT_SYSTEM_PROMPT).toContain('正文没有同名纸面大标题时才用 setTitle 直接改稿名')
   })
 
   it('明确提纲直接写入 QingML 标题结构', () => {

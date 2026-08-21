@@ -53,6 +53,7 @@ import {
   type ReviewTurnCoordinator,
   type ReviewTurnType,
 } from './reviewTurn.js'
+import { PendingTitleCoordinator } from './pendingTitle.js'
 
 interface ToolServices {
   ctx: Context
@@ -62,6 +63,7 @@ interface ToolServices {
   telemetry?: TelemetryCapture
   docStates?: DocStateCache
   freshness?: FreshnessTracker
+  pendingTitles?: PendingTitleCoordinator
 }
 
 interface RuntimeToolServices extends ToolServices {
@@ -70,6 +72,7 @@ interface RuntimeToolServices extends ToolServices {
   turnLeases: AgentTurnLeaseCoordinator
   readTurns: ReadTurnTracker
   reviewTurnState: ReviewTurnCoordinator
+  pendingTitles: PendingTitleCoordinator
 }
 
 const textBlock = (text: string) => [{ type: 'text' as const, text }]
@@ -445,15 +448,13 @@ function assertNoOrphanTableRows(ops: ExternalEditProposalOp[]): void {
   }
 }
 
-function assertSynchronizedTitleChange(
+function inspectSynchronizedTitleChange(
   currentTitle: string | null | undefined,
   pmDoc: PmDoc,
   ops: ExternalEditProposalOp[],
-): void {
-  const titleOp = ops.find((op): op is Extract<ExternalEditProposalOp, { kind: 'setTitle' }> => op.kind === 'setTitle')
+): { hasMatchingHeading: boolean; target?: string } {
   const oldTitle = currentTitle?.trim() ?? ''
-  const newTitle = titleOp?.title.trim() ?? ''
-  if (!titleOp || !oldTitle || !newTitle || oldTitle === newTitle) return
+  if (!oldTitle) return { hasMatchingHeading: false }
   let matchOrdinal = 0
   const headingMatchOrdinals = new Set<number>()
   for (const block of pmTextBlockEntries(pmDoc)) {
@@ -464,15 +465,32 @@ function assertSynchronizedTitleChange(
       index = block.text.indexOf(oldTitle, index + oldTitle.length)
     }
   }
-  if (headingMatchOrdinals.size === 0) return
-  const bodyTitleIsSynchronized = ops.some((op) =>
+  if (headingMatchOrdinals.size === 0) return { hasMatchingHeading: false }
+  const replacement = ops.find((op) =>
     op.kind === 'strReplace' &&
     op.old.trim() === oldTitle &&
-    op.new.trim() === newTitle &&
+    Boolean(op.new.trim()) &&
     (op.all === true || (op.nth === undefined ? matchOrdinal === 1 : headingMatchOrdinals.has(op.nth))))
-  if (!bodyTitleIsSynchronized) {
+  return {
+    hasMatchingHeading: true,
+    ...(replacement?.kind === 'strReplace' ? { target: replacement.new.trim() } : {}),
+  }
+}
+
+function assertSynchronizedTitleChange(
+  currentTitle: string | null | undefined,
+  pmDoc: PmDoc,
+  ops: ExternalEditProposalOp[],
+): string | undefined {
+  const titleOp = ops.find((op): op is Extract<ExternalEditProposalOp, { kind: 'setTitle' }> => op.kind === 'setTitle')
+  const oldTitle = currentTitle?.trim() ?? ''
+  const newTitle = titleOp?.title.trim() ?? ''
+  const synchronized = inspectSynchronizedTitleChange(currentTitle, pmDoc, ops)
+  if (titleOp && oldTitle && newTitle && oldTitle !== newTitle
+    && synchronized.hasMatchingHeading && synchronized.target !== newTitle) {
     throw new Error(`稿名和纸面开头的标题需要一起修改。请在同一批修改中，把正文开头的「${oldTitle}」也改成「${newTitle}」。`)
   }
+  return synchronized.target
 }
 
 const outlineSchema = {
@@ -484,6 +502,7 @@ export function registerTools(services: ToolServices): void {
   const docStates = services.docStates ?? new DocStateCache()
   const freshness = services.freshness ?? new FreshnessTracker()
   const readTurns = new ReadTurnTracker()
+  const pendingTitles = services.pendingTitles ?? new PendingTitleCoordinator(services.engine, services.bindings)
   const turnLeases = new AgentTurnLeaseCoordinator(
     services.engine,
     undefined,
@@ -503,12 +522,14 @@ export function registerTools(services: ToolServices): void {
     turnLeases,
     readTurns,
     reviewTurnState: reviewTurnCoordinatorFor(services.engine),
+    pendingTitles,
   }
   const { ctx } = runtime
   const reviewTurns = new ReviewTurnTracker()
   const writeTurns = new WriteTurnTracker()
   installTurnTracking(ctx, reviewTurns, writeTurns, readTurns, runtime)
   ctx.effect(() => () => runtime.turnLeases.dispose())
+  ctx.effect(() => () => runtime.pendingTitles.dispose())
   ctx.effect(() => ctx.tools.register(writeDraftTool(runtime, writeTurns)))
   ctx.effect(() => ctx.tools.register(editDraftTool(runtime)))
   ctx.effect(() => ctx.tools.register(annotateTool(runtime)))
@@ -644,6 +665,8 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
         if (docBefore.state === 'pendingReview') {
           throw new Error(REVIEW_PENDING_ERROR)
         }
+        // 整篇重写建立全新的正文/标题关系，旧局部改名不得跨过重写继续补发。
+        services.pendingTitles.clearDocument(dshSessionId, bound.engineSessionId)
         let proposal: ExternalProposalResponse
         try {
           proposal = await propose(services, exec, bound.engineSessionId, docBefore.docVersion, qingml)
@@ -781,7 +804,7 @@ function writeDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrac
 function editDraftTool(services: RuntimeToolServices) {
   return defineTool({
     name: 'qing_edit_draft',
-    description: '对已有青简文稿做结构化局部修改。改标题时,若正文有与旧稿名相同的纸面大标题,要同时用 setTitle 改稿名(元数据)、用 strReplace 改纸面标题;两者必须在同一次 ops 里一起提交,文字保持一致。正文没有同名纸面大标题时,允许只用 setTitle。删除整段/整节/清单项用 deleteBlock/deleteListItem,先 qing_read_draft mode:"blocks" 取得短定位键 locator,严禁用 strReplace 置空留残壳;真实引擎标识由工具内部映射,不要猜测或传入。改一句、插入一段或追加一节用相应操作;高亮、文字颜色、加粗一句话等行内标记用 markText。markText remove 前先读稿确认现有标记的确切 attrs;代码段内文本不支持行内标记。strReplace 的 old/new 通常必须是纯文本，不含 ##、-、** 等 Markdown 标记；只有扩展既有表格行或整块替换 fenced Mermaid 时传完整 Markdown 块。表格行严禁用 insertAfterLine/insertAfterBlock/appendSection 插入孤立管道文本。只有用户明确表达「所有/全部/凡是/都」等全局意图时,才用单个 strReplace + all:true;all:true 不得与 nth 同时使用。多处修改必须放进同一次调用的 ops 数组原子提交。insertAfterLine 的行号来自读稿当刻;同批先增删内容会令后续旧行号失效。复杂清单或表格附近优先使用 mode:"blocks" 给出的 locator。修改 Mermaid 先用 mode:"lines" 读取完整 fenced 块,再整块 strReplace,不得逐行改。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
+    description: '对已有青简文稿做结构化局部修改。改标题时,正文有与旧稿名相同的纸面大标题,只需用 strReplace 改纸面标题,稿名会在修改生效后自动跟随;正文没有同名纸面大标题时才用 setTitle 直接改稿名。删除整段/整节/清单项用 deleteBlock/deleteListItem,先 qing_read_draft mode:"blocks" 取得短定位键 locator,严禁用 strReplace 置空留残壳;真实引擎标识由工具内部映射,不要猜测或传入。改一句、插入一段或追加一节用相应操作;高亮、文字颜色、加粗一句话等行内标记用 markText。markText remove 前先读稿确认现有标记的确切 attrs;代码段内文本不支持行内标记。strReplace 的 old/new 通常必须是纯文本，不含 ##、-、** 等 Markdown 标记；只有扩展既有表格行或整块替换 fenced Mermaid 时传完整 Markdown 块。表格行严禁用 insertAfterLine/insertAfterBlock/appendSection 插入孤立管道文本。只有用户明确表达「所有/全部/凡是/都」等全局意图时,才用单个 strReplace + all:true;all:true 不得与 nth 同时使用。多处修改必须放进同一次调用的 ops 数组原子提交。insertAfterLine 的行号来自读稿当刻;同批先增删内容会令后续旧行号失效。复杂清单或表格附近优先使用 mode:"blocks" 给出的 locator。修改 Mermaid 先用 mode:"lines" 读取完整 fenced 块,再整块 strReplace,不得逐行改。文稿审阅中不得调用，应先用 ask_user 征询用户如何处理待审稿。',
     parameters: {
       docRef: { type: 'string', description: '要局部修改的青简会话 ID；省略时使用当前激活文稿。' },
       ops: {
@@ -915,7 +938,7 @@ function editDraftTool(services: RuntimeToolServices) {
               additionalProperties: false,
               properties: {
                 kind: { type: 'string', const: 'setTitle', required: true },
-                title: { type: 'string', required: true, description: '新标题;引擎约束:去空白后 1-48 字,同一批最多一个 setTitle,不与整篇 draft 混用。正文存在与旧稿名相同的大标题时,必须在同一次 ops 里用 strReplace 同步修改;不存在时允许只改稿名。' },
+                title: { type: 'string', required: true, description: '新稿名;引擎约束:去空白后 1-48 字,同一批最多一个 setTitle,不与整篇 draft 混用。仅在正文没有与旧稿名相同的纸面大标题时使用;有同名大标题时只用 strReplace,稿名会在正文修改生效后自动跟随。' },
               },
             },
           ],
@@ -986,7 +1009,7 @@ function editDraftTool(services: RuntimeToolServices) {
         services.reviewTurnState.assertAnnotationOnly(dshSessionId)
         await assertEngineOnline(services.engine)
         const engineSessionId = resolveDocRef(services, dshSessionId, args.docRef)
-        await services.turnLeases.touchDocument(dshSessionId, engineSessionId)
+        const turnId = await services.turnLeases.touchDocument(dshSessionId, engineSessionId)
         services.freshness.assertFresh(
           exec,
           engineSessionId,
@@ -1000,7 +1023,7 @@ function editDraftTool(services: RuntimeToolServices) {
         if (before.state === 'empty' && !titleOnly) throw new Error('文稿尚无正文；请先用 qing_write_draft 起草完整文稿。改标题可单独用 setTitle。')
         const needsLocatorMap = modelOps.some((op) =>
           'locator' in op || (op.kind === 'markText' && 'withinLocator' in op && Boolean(op.withinLocator)))
-        const basePmDoc = modelOps.some((op) => op.kind === 'setTitle') || needsLocatorMap
+        const basePmDoc = modelOps.some((op) => op.kind === 'setTitle' || op.kind === 'strReplace') || needsLocatorMap
           ? await readPmDoc(services, exec, engineSessionId)
           : undefined
         const ops = needsLocatorMap
@@ -1008,15 +1031,37 @@ function editDraftTool(services: RuntimeToolServices) {
           : modelOps as ExternalEditProposalOp[]
         assertNoRawTags(ops)
         assertNoOrphanTableRows(ops)
-        if (basePmDoc) assertSynchronizedTitleChange(before.title, basePmDoc, ops)
+        const synchronizedBodyTitle = basePmDoc
+          ? assertSynchronizedTitleChange(before.title, basePmDoc, ops)
+          : undefined
+        const titleOps = ops.filter((op): op is Extract<ExternalEditProposalOp, { kind: 'setTitle' }> => op.kind === 'setTitle')
+        if (titleOps.length > 1) throw new Error('同一批修改最多只能包含一个 setTitle。')
+        const titleOp = titleOps[0]
+        if (titleOp && !titleOp.title.trim()) throw new Error('稿名不能为空。')
+        const hasBodyOps = ops.some((op) => op.kind !== 'setTitle')
+        const pendingTitle = titleOp && hasBodyOps
+          ? titleOp.title.trim()
+          : !titleOp ? synchronizedBodyTitle : undefined
         const prepared = await prepareEditOps(services, exec, engineSessionId, ops, basePmDoc)
+        const submittedOps = titleOp && hasBodyOps
+          ? prepared.ops.filter((op) => op.kind !== 'setTitle')
+          : prepared.ops
         const proposal = await proposeEditOpsWithPlainTextRetry(
           services,
           exec,
           engineSessionId,
           before.docVersion,
-          prepared.ops,
+          submittedOps,
         )
+        if (pendingTitle) {
+          services.pendingTitles.deferTitle(dshSessionId, engineSessionId, pendingTitle)
+          if (proposal.status === 'committed') {
+            await services.pendingTitles.settlePendingTitle(dshSessionId, engineSessionId, turnId)
+          }
+        } else if (titleOp) {
+          // 纯元数据改名已经直发，清掉任何过期扣留槽，避免旧标题日后反向覆盖。
+          services.pendingTitles.clearDocument(dshSessionId, engineSessionId)
+        }
         const [official, reviewCandidate, officialPmDoc] = await Promise.all([
           readDoc(services, exec, engineSessionId),
           proposal.status === 'review'
@@ -1397,11 +1442,13 @@ function reviewCommitTool(services: RuntimeToolServices, reviewTurns: ReviewTurn
       await assertEngineOnline(services.engine)
       reviewTurns.assertFirstAdjudication(exec)
       const engineSessionId = resolveDocRef(services, dshSessionId, args.docRef)
-      await services.turnLeases.touchDocument(dshSessionId, engineSessionId)
-      const before = await readDoc(services, exec, engineSessionId)
-      const beforeTitle = before.title?.trim() || services.bindings.listDocs(dshSessionId)
-        .find((doc) => doc.engineSessionId === engineSessionId)?.title || '未命名文稿'
+      const turnId = await services.turnLeases.touchDocument(dshSessionId, engineSessionId)
+      let before = await readDoc(services, exec, engineSessionId)
       if (before.state !== 'pendingReview') {
+        const settled = await services.pendingTitles.settlePendingTitle(dshSessionId, engineSessionId, turnId)
+        if (settled === 'applied') before = await readDoc(services, exec, engineSessionId)
+        const beforeTitle = before.title?.trim() || services.bindings.listDocs(dshSessionId)
+          .find((doc) => doc.engineSessionId === engineSessionId)?.title || '未命名文稿'
         await refreshAndPublishDocState(services, exec, true, engineSessionId)
         return {
           status: 'no_pending_review' as const,
@@ -1419,6 +1466,7 @@ function reviewCommitTool(services: RuntimeToolServices, reviewTurns: ReviewTurn
         action: args.action,
       }
       const reviewed = await commitReview(services, exec, engineSessionId, body)
+      await services.pendingTitles.settlePendingTitle(dshSessionId, engineSessionId, turnId)
       const [official, officialPmDoc] = await Promise.all([
         readDoc(services, exec, engineSessionId),
         readPmDoc(services, exec, engineSessionId),
@@ -2956,5 +3004,6 @@ function installTurnTracking(
     readTurns.dispose(dshSessionId)
     services.freshness.dispose(dshSessionId)
     services.docStates.dispose(dshSessionId)
+    services.pendingTitles.clearSession(dshSessionId)
   }))
 }

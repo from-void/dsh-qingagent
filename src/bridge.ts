@@ -534,6 +534,7 @@ interface Subscriber {
 
 export interface BridgeDocStateObserver {
   documentChanged(dshSessionId: string, engineSessionId: string): Promise<void> | void
+  documentDeleted?(dshSessionId: string, engineSessionId: string): Promise<void> | void
 }
 
 export class BridgeHub {
@@ -1003,7 +1004,10 @@ export class BridgeHub {
       for (const item of loaded) {
         // 只有 external 明确返回 404 + SESSION_NOT_FOUND 才从切换数据源剔除。
         // 连接/服务错误仍作为 offline 保留，避免把暂时读不到误报成删除。
-        if (item.missing) continue
+        if (item.missing) {
+          await this.docStateObserver?.documentDeleted?.(dshSessionId, item.bound.engineSessionId)
+          continue
+        }
         docs.push({
           ...item.bound,
           title: item.doc?.title ?? item.bound.title,
