@@ -60,6 +60,7 @@ export const CHIP_PANEL_HIDE_DELAY = 350
 
 /** 文案冻结(SPEC):不得自造别的。 */
 const TOAST_INPUT_UNAVAILABLE = '输入框当前不可用,请稍后重试'
+const TOAST_CUT_COPIED = '已复制,请手动删除'
 
 /** 镜像层内 chip 元素的修饰类(子元素/状态类),配对时须排除。 */
 const CHIP_MODIFIER_CLASSES = ['chipLabel', 'chipIcon', 'chipInvalid']
@@ -435,19 +436,23 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
   document.addEventListener('mousedown', onMouseDown, { capture: true })
   // ---------------------------------------------------------------- chip 原子化(用户裁定)
   // chip 是整体:光标不允许落进投影文本内部;Backspace/Delete 命中时整体删除,不许拆字。
-  const ourProjections = (): Array<{ occurrenceId: number; start: number; end: number }> => {
+  const ourProjections = (): Array<{ occurrenceId: number; start: number; end: number; clipboardText: string }> => {
     const state = deps.getInputState()
     if (!state) return []
-    const result: Array<{ occurrenceId: number; start: number; end: number }> = []
+    const result: Array<{ occurrenceId: number; start: number; end: number; clipboardText: string }> = []
     for (const occurrence of state.occurrences ?? []) {
       if (!occurrenceKind(occurrence)) continue
       const projection = findOccurrenceProjection(state as never, occurrence.occurrenceId)
-      if (projection) result.push({ occurrenceId: occurrence.occurrenceId, ...projection })
+      if (projection) result.push({
+        occurrenceId: occurrence.occurrenceId,
+        clipboardText: occurrence.clipboardText,
+        ...projection,
+      })
     }
-    return result
+    return result.sort((left, right) => left.start - right.start)
   }
   const composerOf = (target: EventTarget | null): HTMLTextAreaElement | null =>
-    target instanceof HTMLTextAreaElement && collectChipElements().length >= 0 ? target : null
+    target instanceof HTMLTextAreaElement && !target.closest(`[${PANEL_ATTR}]`) ? target : null
   const onSelectionChange = () => {
     const textarea = composerOf(document.activeElement)
     if (!textarea || textarea.selectionStart !== textarea.selectionEnd) return
@@ -477,8 +482,38 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
       }
     }
   }
+  const onClipboard = (event: ClipboardEvent) => {
+    const textarea = composerOf(event.target)
+    const state = deps.getInputState()
+    // occurrence offset 只对当前 InputState.draft 有效；宿主状态尚未追上 textarea 时
+    // 放回原生复制，避免按旧坐标展开错误 occurrence。
+    if (!textarea || !state || textarea.value !== state.draft || !event.clipboardData) return
+    const selectionStart = textarea.selectionStart
+    const selectionEnd = textarea.selectionEnd
+    if (selectionStart === selectionEnd) return
+    const intersecting = ourProjections().filter((projection) =>
+      selectionStart < projection.end && selectionEnd > projection.start)
+    if (intersecting.length === 0) return
+
+    let cursor = selectionStart
+    const parts: string[] = []
+    for (const projection of intersecting) {
+      const plainEnd = Math.min(selectionEnd, Math.max(cursor, projection.start))
+      if (plainEnd > cursor) parts.push(state.draft.slice(cursor, plainEnd))
+      parts.push(projection.clipboardText)
+      cursor = Math.min(selectionEnd, Math.max(cursor, projection.end))
+    }
+    if (cursor < selectionEnd) parts.push(state.draft.slice(cursor, selectionEnd))
+    event.clipboardData.setData('text/plain', parts.join(''))
+    event.preventDefault()
+    // 原生 cut 的删除会被 preventDefault 一并拦下；保守降级为复制，避免宿主 diff
+    // 在跨 chip 选区里误伤相邻 occurrence 的完整载荷。
+    if (event.type === 'cut') deps.onToast(TOAST_CUT_COPIED)
+  }
   document.addEventListener('selectionchange', onSelectionChange)
   document.addEventListener('keydown', onKeyDown, { capture: true })
+  document.addEventListener('copy', onClipboard, { capture: true })
+  document.addEventListener('cut', onClipboard, { capture: true })
 
   const unsubscribeInputState = deps.subscribeInputState(retag)
   const observer = new MutationObserver((mutations) => {
@@ -501,6 +536,8 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     unsubscribeInputState()
     document.removeEventListener('selectionchange', onSelectionChange)
     document.removeEventListener('keydown', onKeyDown, { capture: true })
+    document.removeEventListener('copy', onClipboard, { capture: true })
+    document.removeEventListener('cut', onClipboard, { capture: true })
     document.removeEventListener('mousemove', onMouseMove, { capture: true })
     document.removeEventListener('mousedown', onMouseDown, { capture: true })
     clearTimers()

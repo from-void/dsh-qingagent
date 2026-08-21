@@ -11,6 +11,7 @@ import { draftRequirementsOf, registerTools } from '../src/tools.js'
 import { compileQingmlDocument } from '../src/qingmlCompile.js'
 import type { TelemetryCapture } from '../src/telemetry.js'
 import { REVIEW_TURN_EDIT_ERROR, reviewTurnCoordinatorFor } from '../src/reviewTurn.js'
+import { PendingTitleCoordinator } from '../src/pendingTitle.js'
 
 const DRAFT_ONE = '<title>测试稿</title><h1>开篇</h1><p>第一版正文。</p>'
 const DRAFT_TWO = '<title>测试稿</title><h1>开篇</h1><p>修正后的正文。</p>'
@@ -124,9 +125,10 @@ function harness(
     clearSelection: vi.fn(),
   } as unknown as BridgeHub
   const telemetry = { capture: vi.fn(async () => undefined) } as unknown as TelemetryCapture
-  registerTools({ ctx, engine, bindings, bridge, telemetry })
+  const pendingTitles = new PendingTitleCoordinator(engine, bindings)
+  registerTools({ ctx, engine, bindings, bridge, telemetry, pendingTitles })
   return {
-    tools, listeners, events, bindings, engine, bridge, telemetry,
+    tools, listeners, events, bindings, engine, bridge, telemetry, pendingTitles,
     setActiveEngineSessionId: (engineSessionId: string) => { activeEngineSessionId = engineSessionId },
   }
 }
@@ -1572,13 +1574,13 @@ describe('qing_edit_draft', () => {
     expect(JSON.stringify(fixture.tools.get('qing_edit_draft')!.parameters)).not.toContain('blockId')
   })
 
-  it('描述要求改标题时同批同步稿名和纸面大标题', () => {
+  it('描述要求同名纸面标题生效后自动跟随稿名，无同名标题才直改元数据', () => {
     const fixture = harness(async () => { throw new Error('不应访问引擎') })
     const tool = fixture.tools.get('qing_edit_draft')!
-    expect(tool.description).toContain('若正文有与旧稿名相同的纸面大标题')
-    expect(tool.description).toContain('两者必须在同一次 ops 里一起提交,文字保持一致')
-    expect(tool.description).toContain('正文没有同名纸面大标题时,允许只用 setTitle')
-    expect(JSON.stringify(tool.parameters)).toContain('不存在时允许只改稿名')
+    expect(tool.description).toContain('正文有与旧稿名相同的纸面大标题,只需用 strReplace 改纸面标题')
+    expect(tool.description).toContain('稿名会在修改生效后自动跟随')
+    expect(tool.description).toContain('正文没有同名纸面大标题时才用 setTitle 直接改稿名')
+    expect(JSON.stringify(tool.parameters)).toContain('有同名大标题时只用 strReplace')
   })
 
   it('纸面开头标题与旧稿名一致时，setTitle 缺少正文同步修改会在提交前拒绝', async () => {
@@ -1658,7 +1660,7 @@ describe('qing_edit_draft', () => {
     })
   })
 
-  it('稿名与纸面标题在同批同步修改时通过确定性闸门', async () => {
+  it('兼容同批 setTitle+正文改名：提交时扣留 setTitle，只让正文进入审阅', async () => {
     let proposed = false
     const ops = [
       { kind: 'setTitle' as const, title: '新标题' },
@@ -1673,17 +1675,70 @@ describe('qing_edit_draft', () => {
       }
       if (path.endsWith('/proposals')) {
         proposed = true
-        expect(JSON.parse(String(init?.body))).toMatchObject({ expectedDocVersion: 2, ops })
-        return { status: 'committed', docVersion: 3 }
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          expectedDocVersion: 2,
+          ops: [{ kind: 'strReplace', old: '旧标题', new: '新标题', nth: 1 }],
+        })
+        return { status: 'review', patchIds: ['patch-title'], count: 1 }
       }
       if (path.endsWith('/doc?format=qingml') && proposed) {
-        return doc({ docVersion: 3, state: 'editing', qingml: '<h1>新标题</h1><p>正文</p>', title: '新标题' })
+        return doc({ docVersion: 2, state: 'pendingReview', qingml: '<h1>旧标题</h1><p>正文</p>', title: '旧标题' })
+      }
+      if (path.endsWith('/review?format=render-model')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'pendingReview', agentBusy: false,
+          baseVersion: 2, suggestions: [reviewSuggestion('patch-title')],
+          editedDoc: candidateDoc('新标题', '正文'),
+        }
       }
       throw new Error(`unexpected path: ${path}`)
     }, ONLINE_ENGINE, candidateDoc('旧标题', '正文'))
 
     await expect(fixture.tools.get('qing_edit_draft')!.execute({ ops }, exec(undefined, 'edit-title-sync', 'qing_edit_draft')))
-      .resolves.toMatchObject({ status: 'committed', title: '新标题' })
+      .resolves.toMatchObject({ status: 'review', title: '旧标题' })
+    expect(fixture.pendingTitles.hasPendingTitle('dsh-1', 'qing-1')).toBe(true)
+  })
+
+  it('只改同名纸面 H1 时自动扣留目标，正文直落后补发稿名', async () => {
+    let bodyCommitted = false
+    let titleCommitted = false
+    const proposalBodies: Array<{ ops: Array<Record<string, unknown>> }> = []
+    const fixture = harness(async (path, init) => {
+      if (path.endsWith('/doc?lines=1')) {
+        return {
+          sessionId: 'qing-1', docVersion: 2, state: 'editing', agentBusy: false,
+          markdown: '# 旧标题\n\n正文', title: '旧标题',
+        }
+      }
+      if (path.endsWith('/proposals')) {
+        const body = JSON.parse(String(init?.body)) as { ops: Array<Record<string, unknown>> }
+        proposalBodies.push(body)
+        if (body.ops.some((op) => op.kind === 'strReplace')) bodyCommitted = true
+        if (body.ops.some((op) => op.kind === 'setTitle')) titleCommitted = true
+        return { status: 'committed', docVersion: bodyCommitted ? 3 : 2 }
+      }
+      if (path.endsWith('/doc?format=qingml')) {
+        return doc({
+          docVersion: bodyCommitted ? 3 : 2,
+          state: 'editing',
+          qingml: bodyCommitted ? '<h1>新标题</h1><p>正文</p>' : '<h1>旧标题</h1><p>正文</p>',
+          title: titleCommitted ? '新标题' : '旧标题',
+        })
+      }
+      throw new Error(`unexpected path: ${path}`)
+    }, ONLINE_ENGINE, candidateDoc('旧标题', '正文'))
+
+    await expect(fixture.tools.get('qing_edit_draft')!.execute({
+      ops: [{ kind: 'strReplace', old: '旧标题', new: '新标题', nth: 1 }],
+    }, exec(undefined, 'edit-title-auto-follow', 'qing_edit_draft'))).resolves.toMatchObject({
+      status: 'committed', title: '新标题',
+    })
+
+    expect(proposalBodies.map((body) => body.ops)).toEqual([
+      [{ kind: 'strReplace', old: '旧标题', new: '新标题', nth: 1 }],
+      [{ kind: 'setTitle', title: '新标题' }],
+    ])
+    expect(fixture.pendingTitles.hasPendingTitle('dsh-1', 'qing-1')).toBe(false)
   })
 
   it('描述明确同批行号逐 op 推进、多行块与块级锚点约束', () => {

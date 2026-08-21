@@ -11,6 +11,7 @@ import { EngineService } from './engine.js'
 import { QINGAGENT_SYSTEM_PROMPT } from './system-prompt.js'
 import { createTelemetry } from './telemetry.js'
 import { refreshDocState, registerTools } from './tools.js'
+import { PendingTitleCoordinator } from './pendingTitle.js'
 import {
   AgentIndex,
   DOC_STATE_STALE_LINE,
@@ -45,9 +46,15 @@ export function createBridgeDocStateObserver(
   engine: EngineService,
   bindings: BindingStore,
   docStates: DocStateCache,
+  pendingTitles?: PendingTitleCoordinator,
 ): BridgeDocStateObserver {
   return {
     documentChanged: async (dshSessionId, engineSessionId) => {
+      try {
+        await pendingTitles?.settlePendingTitle(dshSessionId, engineSessionId)
+      } catch {
+        // 标题补发保留槽位等待下一次刷新；正文状态摘要仍应继续更新。
+      }
       if (bindings.getActive(dshSessionId)?.engineSessionId !== engineSessionId) return
       docStates.markDirty(dshSessionId)
       const agent = ctx.agents.list().find((candidate) => String(candidate.id) === dshSessionId)
@@ -57,6 +64,9 @@ export function createBridgeDocStateObserver(
         // 主动 inject 只保留面板外部变更后的 stale 提醒；正常状态统一走 systemPrompt.context。
         injectDocState(agent, DOC_STATE_STALE_LINE)
       }
+    },
+    documentDeleted: (dshSessionId, engineSessionId) => {
+      pendingTitles?.clearDocument(dshSessionId, engineSessionId)
     },
   }
 }
@@ -79,6 +89,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const bindings = new BindingStore(domain, engine, (sessionId, binding) => bridge?.bindingChanged(sessionId, binding))
   const docStates = new DocStateCache()
   const freshness = new FreshnessTracker()
+  const pendingTitles = new PendingTitleCoordinator(engine, bindings)
   const agentIndex = new AgentIndex()
   bridge = new BridgeHub(
     ctx,
@@ -87,7 +98,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     undefined,
     undefined,
     telemetry,
-    createBridgeDocStateObserver(ctx, engine, bindings, docStates),
+    createBridgeDocStateObserver(ctx, engine, bindings, docStates, pendingTitles),
   )
   bridge.mount()
   engine.startMonitoring()
@@ -123,6 +134,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     telemetry,
     docStates,
     freshness,
+    pendingTitles,
   })
 }
 
@@ -156,6 +168,7 @@ export {
 } from './updateCheck.js'
 export { QINGJIAN_DOWNLOAD_URL, qingjianUnavailableMessage } from './onboarding.js'
 export { completeTopLevelBlocks, outlineOf } from './qingml.js'
+export { PendingTitleCoordinator } from './pendingTitle.js'
 export { compileQingmlDocument } from './qingmlCompile.js'
 export { selectionSystemPrompt } from './selection.js'
 export {
