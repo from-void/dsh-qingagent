@@ -284,10 +284,13 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
       editArea = document.createElement('textarea')
       editArea.value = occurrence.ref
       editArea.style.cssText = [
-        'display:block', 'width:100%', 'height:96px', 'box-sizing:border-box', 'margin-bottom:10px',
-        'padding:6px 8px', 'border-radius:0', 'resize:vertical',
-        'border:1px solid rgba(236,228,212,.25)', 'background:rgba(0,0,0,.25)', 'color:#ece4d4',
-        'font-size:12px', 'line-height:18px',
+        'width:100%', 'box-sizing:border-box', 'height:96px', 'resize:none',
+        'padding:7px 8px', 'border-radius:0', 'margin-bottom:10px',
+        // 主题自适应:灰底灰字像禁用态(用户实测点名)。
+        'background:var(--dsw-alias-bg-layer-1, rgba(255,255,255,.06))',
+        'color:var(--dsw-alias-label-primary, #ece4d4)',
+        'border:1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.35))',
+        'font-size:12px', 'line-height:18px', 'outline:none',
       ].join(';')
       panel.appendChild(editArea)
     }

@@ -25,7 +25,9 @@ function previewLabel(text: string): string {
 /** 批注 chip 只展示短摘要，完整修改指令保存在 ref 中。 */
 export function annotationReferenceLabel(instruction: string): string {
   const summary = instruction.replace(/\s+/g, ' ').trim()
-  return previewLabel(`按批注修改:${summary}`)
+  // 指令文本(buildAnnotationInstruction 真源)本身以「按批注修改:」开头,不再重复加前缀。
+  const prefixed = /^按批注修改[::]/u.test(summary) ? summary : `按批注修改:${summary}`
+  return previewLabel(prefixed)
 }
 
 const CIRCLED_NUMBERS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩', '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳'] as const
