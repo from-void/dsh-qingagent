@@ -235,7 +235,11 @@ export function QingDocPanel(props: QingDocPanelProps) {
         setToast(`${format.savedToast}${describeExportDegradations(result.degradations)}`)
       } catch (error) {
         console.error('[qingagent-panel] agent export failed', error)
-        setToast('导出失败,请重试')
+        // 引擎给的是可行动文案(如「还没有可导出的内容」),直接转述;拿不到再泛化。
+        const message = error instanceof Error && /[\u4e00-\u9fff]/.test(error.message)
+          ? error.message.replace(/^[^\u4e00-\u9fff]*/, '').slice(0, 40)
+          : ''
+        setToast(message || '导出失败,请重试')
       }
     })()
   }, [exportRequest, activeEngineSessionId, sessionId, flushPendingDocSave, snapshot.panelDoc?.title, snapshot.activeDoc?.title])

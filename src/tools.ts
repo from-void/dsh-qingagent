@@ -1740,7 +1740,11 @@ function exportTool(services: RuntimeToolServices) {
       const active = services.bindings.getActive(dshSessionId)
       if (!active) throw new Error('当前会话没有激活文稿。请先写一篇,或用 qing_list_docs / qing_focus_doc 选择。')
       const doc = await readDoc(services, exec, active.engineSessionId)
-      if (doc.state === 'empty' || !((doc.markdown ?? '') + (doc.qingml ?? '')).trim()) {
+      // 判空与引擎导出闸同源(可见字数):清空后的稿仍有标题/空段结构,文本判空会放行,
+      // 面板 409 后工具卡就成了虚报(评测 0822-r1 席2 实证)。
+      const visibleChars = (doc as { charCount?: number }).charCount
+      const emptyByChars = typeof visibleChars === 'number' ? visibleChars === 0 : !((doc.markdown ?? '') + (doc.qingml ?? '')).trim()
+      if (doc.state === 'empty' || emptyByChars) {
         throw new Error('还没有可导出的内容,请先完成正文再导出。')
       }
       if (doc.state === 'pendingReview') throw new Error('文稿正在审阅中,请先请用户完成裁决再导出。')
