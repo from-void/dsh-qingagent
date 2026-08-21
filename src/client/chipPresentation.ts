@@ -52,6 +52,10 @@ const CHIP_ATTR = 'data-qing-chip'
 const OCC_ATTR = 'data-qing-occ'
 /** 覆盖层显示文案(图标+「批注/选段:内容」):底层投影文字被透明化,::after 按此渲染。 */
 const DISPLAY_ATTR = 'data-qing-display'
+/** 跨行标记:投影字符流被 overflow-wrap:anywhere 拆成两段(U+2060 也拦不住)时,
+ *  absolute 覆盖层只能盖第一段——退化为底层原样文字(内容已是干净短 label),
+ *  ::before 同色块遮掉投影首字符 @,背景每段完整克隆。 */
+const WRAPPED_ATTR = 'data-qing-wrapped'
 const PANEL_ATTR = 'data-qing-chip-panel'
 const BADGE_ATTR = 'data-qing-chip-badge'
 const STYLE_ID = 'qingagent-chip-presentation-style'
@@ -149,6 +153,11 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     'color:var(--dsw-alias-label-primary, inherit);',
     'border-radius:0;',
     '}',
+    // 跨行时背景/描边每段完整克隆,不再一段有边一段裸奔。
+    `[${CHIP_ATTR}]{`,
+    '-webkit-box-decoration-break:clone;',
+    'box-decoration-break:clone;',
+    '}',
     // 覆盖层显示(用户裁定:图标+「批注/选段:内容」12 号字):底层投影文字透明化,
     // ::after 绝对定位覆盖——与宿主 chipLabel 同机制,不占布局、不改底层字符度量。
     `[${CHIP_ATTR}][${DISPLAY_ATTR}]{`,
@@ -172,6 +181,22 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     // 选中反馈只保留整块背景,不显字。
     `[${CHIP_ATTR}][${DISPLAY_ATTR}]::selection{ color:transparent; }`,
     `[${CHIP_ATTR}][${DISPLAY_ATTR}] *::selection{ color:transparent; }`,
+    // 跨行退化:底层原样文字显形(内容=干净短 label),关闭覆盖层;
+    // 投影首字符 @ 用同背景色块盖住(首段左缘固定宽),观感只留内容。
+    `[${CHIP_ATTR}][${WRAPPED_ATTR}]{`,
+    'color:var(--dsw-alias-label-primary, inherit) !important;',
+    '}',
+    `[${CHIP_ATTR}][${WRAPPED_ATTR}]::after{ display:none; }`,
+    // 首段左缘的投影 @ 用底色块盖住,块内画对应图标——退化观感=图标+干净内容。
+    `[${CHIP_ATTR}][${WRAPPED_ATTR}]::before{`,
+    "content:'';", 'position:absolute;', 'left:0;', 'top:0;', 'bottom:0;', 'width:13px;',
+    'background:var(--dsw-specific-input-major, #1b1c1f);',
+    'color:var(--dsw-alias-label-primary, #ece4d4);',
+    'font-size:12px;', 'display:flex;', 'align-items:center;', 'justify-content:center;',
+    '}',
+    `[${CHIP_ATTR}="selection"][${WRAPPED_ATTR}]::before{ content:'\u201C'; }`,
+    `[${CHIP_ATTR}="annotation"][${WRAPPED_ATTR}]::before{ content:'✎'; }`,
+    `[${CHIP_ATTR}][${WRAPPED_ATTR}]::selection{ color:var(--dsw-alias-label-primary, inherit); }`,
   ].join('')
   document.head.appendChild(style)
 
@@ -240,9 +265,13 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     wrapCheckQueued = true
     requestAnimationFrame(() => {
       wrapCheckQueued = false
-      for (const el of document.querySelectorAll(`[${CHIP_ATTR}][${DISPLAY_ATTR}]`)) {
+      for (const el of document.querySelectorAll(`[${CHIP_ATTR}]`)) {
         if (!(el instanceof HTMLElement)) continue
-        if (el.getClientRects().length > 1) el.removeAttribute(DISPLAY_ATTR)
+        const wrapped = el.getClientRects().length > 1
+        if (wrapped !== el.hasAttribute(WRAPPED_ATTR)) {
+          if (wrapped) el.setAttribute(WRAPPED_ATTR, '1')
+          else el.removeAttribute(WRAPPED_ATTR)
+        }
       }
     })
   }
