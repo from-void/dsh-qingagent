@@ -52,6 +52,15 @@ const CHIP_ATTR = 'data-qing-chip'
 const OCC_ATTR = 'data-qing-occ'
 /** 覆盖层显示文案(图标+「批注/选段:内容」):底层投影文字被透明化,::after 按此渲染。 */
 const DISPLAY_ATTR = 'data-qing-display'
+/** SVG 图标(用户裁定按 SVG 画):左双引号(两勾)=选段;钢笔=批注。
+ *  mask 方案让图标吃 CSS background-color,主题两态都清晰。 */
+export const QUOTE_ICON_SVG = "url(\"data:image/svg+xml," + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M2 9.2C2 5.9 4 3.6 7 3v2C5.4 5.5 4.6 6.6 4.5 8H7v5H2V9.2Zm7 0C9 5.9 11 3.6 14 3v2c-1.6.5-2.4 1.6-2.5 3H14v5H9V9.2Z"/></svg>',
+) + "\")"
+export const PEN_ICON_SVG = "url(\"data:image/svg+xml," + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M11.3 1.9a1.4 1.4 0 0 1 2 0l.8.8a1.4 1.4 0 0 1 0 2L6 12.8 2.2 13.8 3.2 10 11.3 1.9Zm.9 1.5-7.6 7.6-.4 1.4 1.4-.4 7.6-7.6-1-1Z"/></svg>',
+) + "\")"
+
 /** 跨行标记:投影字符流被 overflow-wrap:anywhere 拆成两段(U+2060 也拦不住)时,
  *  absolute 覆盖层只能盖第一段——退化为底层原样文字(内容已是干净短 label),
  *  ::before 同色块遮掉投影首字符 @,背景每段完整克隆。 */
@@ -115,10 +124,10 @@ export function chipDisplayText(
       .replace(/[（(]原文[:\uFF1A]『[\s\S]*』[)）]\s*$/u, '')
       .trim()
     const direction = /^[\s\S]{1,60}?——([\s\S]+)$/u.exec(body)?.[1]?.trim() ?? body
-    return `✎ 批注：${direction || fallback}`
+    return `批注：${direction || fallback}`
   }
   const quote = /[:\uFF1A]\s*「([\s\S]*)」\s*$/u.exec(ref ?? '')?.[1]?.replace(/\s+/gu, ' ').trim()
-  return `\u201C选段：${quote || fallback}`
+  return `选段：${quote || fallback}`
 }
 
 function occurrenceKind(occurrence: InputOccurrence): 'selection' | 'annotation' | undefined {
@@ -169,13 +178,25 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     '}',
     `[${CHIP_ATTR}][${DISPLAY_ATTR}]::after{`,
     `content:attr(${DISPLAY_ATTR});`,
-    'position:absolute;', 'inset:0;', 'padding:0 20px 0 6px;', 'box-sizing:border-box;',
+    'position:absolute;', 'inset:0;', 'padding:0 20px 0 22px;', 'box-sizing:border-box;',
     'font-size:12px;',
     // 垂直居中用 flex(用户实测 line-height 继承对不齐);ellipsis 需要 block 容器,
     // 由内层 display:block + overflow 承担——flex 下直接给 ::after 生效于单行文本。
     'display:flex;', 'align-items:center;',
     'color:var(--dsw-alias-label-primary, #ece4d4);',
     'white-space:nowrap;', 'overflow:hidden;', 'text-overflow:ellipsis;',
+    '}',
+    // SVG 图标:mask + background-color,不吃 chip 的 transparent 文字色。
+    `[${CHIP_ATTR}][${DISPLAY_ATTR}]:not([${WRAPPED_ATTR}])::before{`,
+    "content:'';", 'position:absolute;', 'left:6px;', 'top:50%;',
+    'width:12px;', 'height:12px;', 'transform:translateY(-50%);',
+    'background:var(--dsw-alias-label-primary, #ece4d4);',
+    `-webkit-mask:${QUOTE_ICON_SVG} center / 12px 12px no-repeat;`,
+    `mask:${QUOTE_ICON_SVG} center / 12px 12px no-repeat;`,
+    '}',
+    `[${CHIP_ATTR}="annotation"][${DISPLAY_ATTR}]:not([${WRAPPED_ATTR}])::before{`,
+    `-webkit-mask-image:${PEN_ICON_SVG};`,
+    `mask-image:${PEN_ICON_SVG};`,
     '}',
     // 划选扫过 chip 时,透明的底层投影字符会以选区样式显形放大(用户实测);
     // 选中反馈只保留整块背景,不显字。
@@ -186,16 +207,17 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     `[${CHIP_ATTR}][${WRAPPED_ATTR}]{`,
     'color:var(--dsw-alias-label-primary, inherit) !important;',
     '}',
-    `[${CHIP_ATTR}][${WRAPPED_ATTR}]::after{ display:none; }`,
-    // 首段左缘的投影 @ 用底色块盖住,块内画对应图标——退化观感=图标+干净内容。
-    `[${CHIP_ATTR}][${WRAPPED_ATTR}]::before{`,
-    "content:'';", 'position:absolute;', 'left:0;', 'top:0;', 'bottom:0;', 'width:13px;',
-    'background:var(--dsw-specific-input-major, #1b1c1f);',
-    'color:var(--dsw-alias-label-primary, #ece4d4);',
-    'font-size:12px;', 'display:flex;', 'align-items:center;', 'justify-content:center;',
+    // 子元素也要显形:上面 [DISPLAY] * 的透明规则同特异性,靠声明顺序在此翻盘。
+    `[${CHIP_ATTR}][${WRAPPED_ATTR}] *{`,
+    'color:var(--dsw-alias-label-primary, inherit) !important;',
     '}',
-    `[${CHIP_ATTR}="selection"][${WRAPPED_ATTR}]::before{ content:'\u201C'; }`,
-    `[${CHIP_ATTR}="annotation"][${WRAPPED_ATTR}]::before{ content:'✎'; }`,
+    `[${CHIP_ATTR}][${WRAPPED_ATTR}]::after{ display:none; }`,
+    // 跨行时 @ 总在上一行行尾独占一小段(它与 label 间是天然断点)——用纯底色块
+    // 把这 15px 残段整个隐形化,内容主体从下一行干净起头。
+    `[${CHIP_ATTR}][${WRAPPED_ATTR}]::before{`,
+    "content:'';", 'position:absolute;', 'left:0;', 'top:0;', 'bottom:0;', 'width:16px;',
+    'background:var(--dsw-specific-input-major, #1b1c1f);',
+    '}',
     `[${CHIP_ATTR}][${WRAPPED_ATTR}]::selection{ color:var(--dsw-alias-label-primary, inherit); }`,
   ].join('')
   document.head.appendChild(style)

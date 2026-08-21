@@ -135,14 +135,16 @@ describe('chip 打标', () => {
 
     uninstall = installChipPresentation(harness.deps)
 
-    expect(selectionChip.getAttribute('data-qing-display')).toBe('\u201C选段：春风又绿江南岸,明月何时照我还')
-    expect(annotationChip.getAttribute('data-qing-display')).toBe('✎ 批注：改准数字与称谓并核对台账')
+    expect(selectionChip.getAttribute('data-qing-display')).toBe('选段：春风又绿江南岸,明月何时照我还')
+    expect(annotationChip.getAttribute('data-qing-display')).toBe('批注：改准数字与称谓并核对台账')
     const css = document.getElementById('qingagent-chip-presentation-style')?.textContent ?? ''
     expect(css).toContain('content:attr(data-qing-display)')
     expect(css).toContain('font-size:12px')
     expect(css).toContain('text-overflow:ellipsis')
     expect(css).toContain('align-items:center')
     expect(css).toContain('::selection{ color:transparent; }')
+    // 图标按 SVG 画(用户裁定),mask 数据 URI 注入
+    expect(css).toContain('mask:url(')
   })
 
   it('按 DOM 顺序与 occurrences(offset 升序)配对,只给本插件两来源打标', () => {

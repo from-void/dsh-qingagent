@@ -174,6 +174,6 @@ describe('label 原子化织入', () => {
     expect(reference.ref).not.toContain('⁠')
     expect(reference.clipboardText).not.toContain('⁠')
     // display fallback 剥 joiner
-    expect(chipDisplayText('selection', reference.label)).toBe('“选段：走访覆盖完整')
+    expect(chipDisplayText('selection', reference.label)).toBe('选段：走访覆盖完整')
   })
 })

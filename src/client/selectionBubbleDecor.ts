@@ -13,25 +13,30 @@ function clip(text: string, max: number): string {
   return plain.length > max ? `${plain.slice(0, max - 1)}…` : plain
 }
 
+/** 左双引号 SVG(与输入框 chip 同图形;用户裁定图标按 SVG 画)。 */
+const BUBBLE_QUOTE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M2 9.2C2 5.9 4 3.6 7 3v2C5.4 5.5 4.6 6.6 4.5 8H7v5H2V9.2Zm7 0C9 5.9 11 3.6 14 3v2c-1.6.5-2.4 1.6-2.5 3H14v5H9V9.2Z"/></svg>'
+
 function buildChip(title: string, quote: string, ordinal?: string): HTMLSpanElement {
   const chip = document.createElement('span')
   chip.setAttribute(DECORATED, '1')
   // 「第N段」是重复引文的消歧定位,气泡装饰后必须保留在 title/展示里,不能丢。
   chip.title = `《${title}》${ordinal ?? ''}:「${quote}」`
+  // 与输入框 chip 完全同款(用户裁定统一):金底 .38、1px 描边、直角、12px、SVG 引号图标。
   chip.style.cssText = [
-    'display:inline-flex', 'align-items:center', 'gap:4px', 'max-width:100%',
-    'padding:1px 8px', 'margin:0 2px', 'border-radius:6px',
-    'background:#6187d838', 'color:var(--dsw-alias-label-primary, inherit)',
-    'font-size:0.92em', 'line-height:1.5', 'vertical-align:baseline',
+    'display:inline-flex', 'align-items:center', 'gap:5px', 'max-width:100%',
+    'padding:1px 8px', 'margin:0 2px', 'border-radius:0',
+    'background:rgba(200,169,106,.38)', 'box-shadow:0 0 0 1px rgba(200,169,106,.75)',
+    'color:var(--dsw-alias-label-primary, inherit)',
+    'font-size:12px', 'line-height:1.6', 'vertical-align:baseline',
     'white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis',
   ].join(';')
-  const mark = document.createElement('span')
-  mark.textContent = '选段'
-  mark.style.cssText = 'opacity:.65;font-size:.9em;flex:none'
+  const icon = document.createElement('span')
+  icon.innerHTML = BUBBLE_QUOTE_SVG
+  icon.style.cssText = 'flex:none;display:inline-flex;align-items:center'
   const body = document.createElement('span')
-  body.textContent = `「${clip(quote, 18)}」`
+  body.textContent = `选段：${clip(quote, 12)}`
   body.style.cssText = 'overflow:hidden;text-overflow:ellipsis'
-  chip.append(mark, body)
+  chip.append(icon, body)
   return chip
 }
 
