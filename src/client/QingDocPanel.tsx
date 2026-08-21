@@ -74,6 +74,7 @@ export { computeExternalReviewChangeRatio } from '../reviewMode.js'
 export { QingBrandBadge } from './QingBrandBadge.js'
 import {
   assembleDshReviewQuery,
+  describeExportDegradations,
   exportFilename,
   QING_EXPORT_FORMATS,
   type QingExportFormat,

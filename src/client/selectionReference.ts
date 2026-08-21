@@ -161,3 +161,41 @@ export function installSelectionChipHoverTitles(
     document.getElementById(TIP_ID)?.remove()
   }
 }
+
+
+const SELECTION_REF_PATTERN = /\[选段\]《[^《》]*》:「[^「」]*」/u
+
+/** 刷新恢复后的草稿里,未发送的选段 chip 会退化为完整 ref 纯文本(宿主草稿持久化只存
+ *  clipboard 投影)。检测该模式并重铸回 occurrence chip:删文本、原位插 reference。
+ *  幂等:chip 的镜像投影是 @label,不含该模式;返回重铸数量。 */
+export function remintSelectionReferences(actx: ClientContext): number {
+  const input = actx.conversation.input.for(actx)
+  let reminted = 0
+  for (let guard = 0; guard < 8; guard += 1) {
+    const state = input.state.getSnapshot()
+    if (state.phase !== 'plain') return reminted
+    const match = SELECTION_REF_PATTERN.exec(state.draft)
+    if (!match || match.index === undefined) return reminted
+    const ref = match[0]
+    const quote = /「([^「」]*)」/u.exec(ref)?.[1] ?? ref
+    input.setDraft(state.draft.slice(0, match.index) + state.draft.slice(match.index + ref.length))
+    const cleared = input.state.getSnapshot()
+    const at = Math.min(match.index, cleared.draft.length)
+    const ok = actx.bail(actx, 'slash/input-insert-reference', {
+      reference: {
+        source: QING_SELECTION_REFERENCE_SOURCE,
+        ref,
+        label: selectionReferenceLabel(quote),
+        clipboardText: ref,
+      },
+      span: { start: at, end: at, draftRev: cleared.draftRev },
+    }) === true
+    if (!ok) {
+      // 插入被拒:把文本放回去,避免丢内容;停止本轮重铸。
+      input.setDraft(cleared.draft.slice(0, at) + ref + cleared.draft.slice(at))
+      return reminted
+    }
+    reminted += 1
+  }
+  return reminted
+}

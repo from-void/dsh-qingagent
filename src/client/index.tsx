@@ -20,6 +20,7 @@ import { qingClientStore } from './store.js'
 import {
   insertSelectionReference,
   qingSelectionReferenceSource,
+  remintSelectionReferences,
 } from './selectionReference.js'
 import {
   insertAnnotationReference,
@@ -224,6 +225,23 @@ export function apply(ctx: ClientContext): void {
         const inputFacade = selectionScope.ctx.conversation.input.for(selectionScope.ctx)
         const inputState = inputFacade.state
         const unsubscribeState = inputState.subscribe(syncSelectionReference)
+        // 刷新恢复的草稿把未发送选段 chip 退化成了 [选段] 纯文本——检测并重铸(微任务防抖,幂等)。
+        let remintQueued = false
+        const scheduleRemint = () => {
+          if (remintQueued) return
+          remintQueued = true
+          queueMicrotask(() => {
+            remintQueued = false
+            const scope = selectionScope
+            if (!scope) return
+            const snapshot = inputState.getSnapshot() as { draft?: string; phase?: string }
+            if (snapshot.phase === 'plain' && snapshot.draft?.includes('[选段]《')) {
+              remintSelectionReferences(scope.ctx)
+            }
+          })
+        }
+        const unsubscribeRemint = inputState.subscribe(scheduleRemint)
+        scheduleRemint()
         // chip 呈现层:打标+药丸样式+hover 面板+移除角标(布局零影响,详见 chipPresentation)。
         const scopeCtx = selectionScope.ctx
         const uninstallChips = installChipPresentation({
@@ -249,6 +267,7 @@ export function apply(ctx: ClientContext): void {
         })
         unsubscribeInput = () => {
           unsubscribeState()
+          unsubscribeRemint()
           uninstallChips()
         }
       }

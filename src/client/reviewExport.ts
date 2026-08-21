@@ -61,3 +61,19 @@ export function exportFilename(title: string, ext: string, now = new Date()): st
   ].join('')
   return `${safe}_${stamp}.${ext}`
 }
+
+
+/** 降级提示按引擎申报的 description 逐条转述——种类不同(源码导出 vs 画布布局未应用)不能混为一谈。 */
+export function describeExportDegradations(encoded: string | undefined): string {
+  if (!encoded) return ''
+  try {
+    const parsed = JSON.parse(decodeURIComponent(encoded)) as Array<{ kind?: string; description?: string }>
+    const notes = parsed
+      .map((item) => item.description?.trim())
+      .filter((note): note is string => Boolean(note))
+    if (notes.length === 0) return ' · 部分图表有降级'
+    return ` · ${[...new Set(notes)].join(';')}`
+  } catch {
+    return ' · 部分图表有降级'
+  }
+}
