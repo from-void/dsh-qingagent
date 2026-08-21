@@ -228,6 +228,23 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     }
     // 宿主重渲可能把 hover 中的 chip 换掉:旧节点已不在文档里就收浮层。
     if (hoverChip && !hoverChip.isConnected) hideOverlays()
+    scheduleWrapCheck()
+  }
+
+  // 投影字符流在行尾会被 overflow-wrap:anywhere 拆成两段(textarea 与镜像同规则,
+  // 数据层就跨行);absolute 覆盖层只画在第一段上,第二段成透明空块(用户实测)。
+  // 跨行的 chip 撤覆盖层退化为底层原样文字——宁可原样大字,不可空白。
+  let wrapCheckQueued = false
+  function scheduleWrapCheck(): void {
+    if (wrapCheckQueued || typeof requestAnimationFrame !== 'function') return
+    wrapCheckQueued = true
+    requestAnimationFrame(() => {
+      wrapCheckQueued = false
+      for (const el of document.querySelectorAll(`[${CHIP_ATTR}][${DISPLAY_ATTR}]`)) {
+        if (!(el instanceof HTMLElement)) continue
+        if (el.getClientRects().length > 1) el.removeAttribute(DISPLAY_ATTR)
+      }
+    })
   }
 
   // ---------------------------------------------------------------- 浮层单例
@@ -619,10 +636,13 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     }
   })
   observer.observe(document.body, { childList: true, subtree: true })
+  // 输入框宽度变化会改变折行形态:变窄要退化、变宽要恢复覆盖层,都走幂等 retag。
+  window.addEventListener('resize', retag)
   retag()
 
   return () => {
     observer.disconnect()
+    window.removeEventListener('resize', retag)
     unsubscribeInputState()
     document.removeEventListener('selectionchange', onSelectionChange)
     document.removeEventListener('keydown', onKeyDown, { capture: true })
