@@ -502,8 +502,29 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     })
     footer.appendChild(removeButton)
     if (kind === 'annotation') {
-      const confirmButton = panelButton('确认', true)
+      // 用户裁定:按钮叫「修改」;默认置灰不可点(hover 提示「请先修改内容」),
+      // 「修改方向」内容与初值不一致时点亮,点击即替换重组。
+      const confirmButton = panelButton('修改', true)
+      const initialDirection = (editArea?.value ?? '').trim()
+      const setEnabled = (enabled: boolean) => {
+        confirmButton.disabled = !enabled
+        confirmButton.title = enabled ? '' : '请先修改内容'
+        confirmButton.style.cursor = enabled ? 'pointer' : 'not-allowed'
+        confirmButton.style.opacity = enabled ? '1' : '.45'
+        confirmButton.style.background = enabled ? '#b3541e' : 'transparent'
+        confirmButton.style.color = enabled
+          ? '#f5efdf'
+          : 'var(--dsw-alias-label-secondary, #b9b3a8)'
+        confirmButton.style.borderColor = enabled
+          ? '#b3541e'
+          : 'var(--dsw-alias-border-l1, rgba(128,128,128,.35))'
+      }
+      setEnabled(false)
+      editArea?.addEventListener('input', () => {
+        setEnabled((editArea?.value ?? '').trim() !== initialDirection)
+      })
       confirmButton.addEventListener('click', () => {
+        if (confirmButton.disabled) return
         const direction = editArea?.value?.trim() ?? ''
         const quote = editArea?.dataset.qingQuote
         const summary = editArea?.dataset.qingSummary

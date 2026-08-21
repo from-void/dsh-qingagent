@@ -295,10 +295,14 @@ describe('hover 面板与 ✕ 角标', () => {
     expect(panel()!.textContent).toContain('晨光路19号801室')
     const editArea = panel()!.querySelector('textarea')!
     expect(editArea.value).toBe('删除房号')
+    // 默认置灰:内容未变时不可点,hover 提示引导
+    const modify = [...panel()!.querySelectorAll('button')].find((b) => b.textContent === '修改')! as HTMLButtonElement
+    expect(modify.disabled).toBe(true)
+    expect(modify.title).toBe('请先修改内容')
     editArea.value = '改为「家住本社区」'
-
-    const buttons = [...panel()!.querySelectorAll('button')]
-    buttons.find((b) => b.textContent === '确认')!.click()
+    editArea.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(modify.disabled).toBe(false)
+    modify.click()
     expect(harness.replaceOccurrenceRef).toHaveBeenCalledWith(
       9, '按批注修改：改为「家住本社区」（原文：『晨光路19号801室』）')
     expect(panel()!.style.display).toBe('none')
@@ -322,7 +326,8 @@ describe('hover 面板与 ✕ 角标', () => {
     const editArea = panel()!.querySelector('textarea')!
     expect(editArea.value).toBe('把时间改成四月')
     editArea.value = '改成五月'
-    ;[...panel()!.querySelectorAll('button')].find((b) => b.textContent === '确认')!.click()
+    editArea.dispatchEvent(new Event('input', { bubbles: true }))
+    ;[...panel()!.querySelectorAll('button')].find((b) => b.textContent === '修改')!.click()
     expect(harness.replaceOccurrenceRef).toHaveBeenCalledWith(9, '按批注修改：改成五月')
   })
 
@@ -331,7 +336,10 @@ describe('hover 面板与 ✕ 角标', () => {
     harness.replaceOccurrenceRef.mockReturnValue(false)
     vi.advanceTimersByTime(CHIP_PANEL_SHOW_DELAY)
 
-    ;[...panel()!.querySelectorAll('button')].find((b) => b.textContent === '确认')!.click()
+    const editArea = panel()!.querySelector('textarea')!
+    editArea.value = `${editArea.value}(改)`
+    editArea.dispatchEvent(new Event('input', { bubbles: true }))
+    ;[...panel()!.querySelectorAll('button')].find((b) => b.textContent === '修改')!.click()
     expect(harness.onToast).toHaveBeenCalledWith('输入框当前不可用,请稍后重试')
     expect(panel()!.style.display).toBe('block')
   })
