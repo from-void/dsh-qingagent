@@ -90,6 +90,24 @@ describe('QingML 流边界与摘要', () => {
     for (const qingml of valid) expect(findQingmlSourceSyntaxLeaks(qingml)).toEqual([])
   })
 
+  it('把 <p> 段内的 <math-block> 提升为独立块(引擎白名单拒段内块级)', () => {
+    const source = '<p>设计出流采用块公式 <math-block>Q=V\\times k</math-block>。其余正文。</p>'
+    const result = convertQingmlSourceSyntax(source)
+
+    expect(result.leaks).toEqual([])
+    expect(result.convertedFormulas).toBe(1)
+    expect(result.converted).toBe(1)
+    expect(result.qingml).toBe('<p>设计出流采用块公式 </p><math-block>Q=V\\times k</math-block><p>。其余正文。</p>')
+  })
+
+  it('段内多个 <math-block> 与纯公式段都拆干净,无空段残留', () => {
+    const source = '<p><math-block>A=1</math-block></p><p>前 <math-block>B=2</math-block> 后 <math-block>C=3</math-block></p>'
+    const result = convertQingmlSourceSyntax(source)
+
+    expect(result.convertedFormulas).toBe(3)
+    expect(result.qingml).toBe('<math-block>A=1</math-block><p>前 </p><math-block>B=2</math-block><p> 后 </p><math-block>C=3</math-block>')
+  })
+
   it('把配对的 GFM 脚注确定性转换为原生脚注并删除定义行', () => {
     const source = '<title>测试稿</title><h1>测试稿</h1><p>结论见来源[^1]。</p><p>[^1]: 《资料甲》，第 12 页。</p>'
     const result = convertQingmlSourceSyntax(source)

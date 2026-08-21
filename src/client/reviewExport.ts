@@ -38,7 +38,7 @@ export function assembleDshReviewQuery(
   // 用户只能忽略(评测 r3/r4 实证:去AI味、自定义审查都栽在这)。改写类审查(deai)更是强制。
   const suggestionContract = type === 'deai'
     ? '\n去AI味补充硬约束:每一处批注都必须给出 suggestion——一句结合上下文改写后的通顺整句,能直接替换原句;anchors[].find 必须是与 suggestion 对应的完整原句。禁止只指出问题不给改写。'
-    : '\n修改意见硬约束:凡问题存在明确可行的改法,必须在该批注的 suggestion 字段给出结合上下文改写后的通顺整句(可直接替换原句),且 anchors[].find 是与之对应的完整原句;只有无法在不改变原意的前提下安全改写时才允许省略 suggestion。在聊天里声称给了修改意见、批注里却没有 suggestion,视为未完成。'
+    : '\n修改意见硬约束:凡问题存在明确可行的改法,必须在该批注的 suggestion 字段给出结合上下文改写后的通顺整句(可直接替换原句),且 anchors[].find 是与之对应的完整原句;只有无法在不改变原意的前提下安全改写时才允许省略 suggestion。suggestion 只写改写后的整句本身,严禁「替换为:」「建议改为:」等前缀,也不要用引号包裹整句。在聊天里声称给了修改意见、批注里却没有 suggestion,视为未完成。'
   return `${withSourceGuide}${suggestionContract}`
 }
 

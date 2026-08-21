@@ -79,6 +79,21 @@ function collectChipElements(): HTMLElement[] {
   return chips
 }
 
+/** 「修改方向」初值只留改法本身:模型爱写「替换为:"…"」一类前缀与包裹引号,
+ *  评测口径(与客户端一致)要求初值不含前缀、不带引号包裹;确定性剥除比约束模型可靠。 */
+export function normalizeDirectionText(text: string): string {
+  let value = text.trim()
+  value = value.replace(/^(?:替换为|建议改为|改写为|修改为|改为)[:：]?\s*/u, '')
+  const wrappers: Array<[string, string]> = [['"', '"'], ['“', '”'], ['「', '」'], ['『', '』'], ["'", "'"]]
+  for (const [open, close] of wrappers) {
+    if (value.length > 1 && value.startsWith(open) && value.endsWith(close)) {
+      value = value.slice(open.length, value.length - close.length).trim()
+      break
+    }
+  }
+  return value || text.trim()
+}
+
 function occurrenceKind(occurrence: InputOccurrence): 'selection' | 'annotation' | undefined {
   if (occurrence.source === SELECTION_SOURCE) return 'selection'
   if (occurrence.source === ANNOTATION_SOURCE) return 'annotation'
@@ -291,7 +306,7 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
       // 真源 action = 「{问题摘要}——{改法}」:摘要只读展示,输入框只留改法(修改方向)。
       const dashSplit = /^([\s\S]{1,60}?)——([\s\S]*)$/u.exec(action)
       const summary = dashSplit?.[1]?.trim()
-      const direction = dashSplit?.[2]?.trim() ?? action
+      const direction = normalizeDirectionText(dashSplit?.[2]?.trim() ?? action)
       const fieldLabel = (text: string): HTMLElement => {
         const label = document.createElement('div')
         label.textContent = text

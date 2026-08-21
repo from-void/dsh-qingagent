@@ -274,6 +274,16 @@ describe('hover 面板与 ✕ 角标', () => {
     expect(panel()!.style.display).toBe('none')
   })
 
+  it('批注面板:「修改方向」初值剥掉「替换为:」前缀与包裹引号(评测 r4 口径)', () => {
+    const { harness } = mountHoveredChip('qingagent-annotation')
+    harness.state.current!.occurrences![0]!.ref
+      = '按批注修改：预算无上限——替换为："本计划经费由街道专项列支，单点位单月不超过两千元。"（原文：『按实际发生结算。』）'
+    vi.advanceTimersByTime(CHIP_PANEL_SHOW_DELAY)
+
+    const editArea = panel()!.querySelector('textarea')!
+    expect(editArea.value).toBe('本计划经费由街道专项列支，单点位单月不超过两千元。')
+  })
+
   it('批注面板:无原文尾缀的指令整段作为修改方向', () => {
     const { harness } = mountHoveredChip('qingagent-annotation')
     harness.state.current!.occurrences![0]!.ref = '按批注修改:把时间改成四月'

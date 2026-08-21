@@ -2670,6 +2670,33 @@ function readableError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+interface QingmlEngineDiagnostic {
+  failureKind?: string
+  warningKinds?: string[]
+}
+
+/** 引擎 QingML 白名单拒绝时响应体携带结构化 diagnostic;取不到就返回 null。 */
+function qingmlDiagnosticOf(body: unknown): QingmlEngineDiagnostic | null {
+  if (!body || typeof body !== 'object') return null
+  const diagnostic = (body as { diagnostic?: unknown }).diagnostic
+  if (!diagnostic || typeof diagnostic !== 'object') return null
+  const value = diagnostic as { failureKind?: unknown; warningKinds?: unknown }
+  return {
+    ...(typeof value.failureKind === 'string' ? { failureKind: value.failureKind } : {}),
+    ...(Array.isArray(value.warningKinds)
+      ? { warningKinds: value.warningKinds.filter((kind): kind is string => typeof kind === 'string') }
+      : {}),
+  }
+}
+
+function qingmlValidationErrorMessage(diagnostic: QingmlEngineDiagnostic | null): string {
+  const kinds = [diagnostic?.failureKind ?? '', ...(diagnostic?.warningKinds ?? [])]
+  if (kinds.some((kind) => kind === 'qingml_bad_block' || kind === 'inline-block-flattened')) {
+    return '文稿结构不合法:块级标签(<math-block>、<pre>、<mermaid> 等)必须独立成块,不能写在 <p> 段落内。请把段内的块级内容拆出为独立块后重新提交完整文稿。'
+  }
+  return '文稿结构不合法,未通过青简的 QingML 校验。请检查标签嵌套(块级标签不能嵌在段落内、列表/表格结构完整)后重新提交完整文稿。'
+}
+
 function engineErrorDetail(body: unknown): { code: string; error: string } {
   if (!body || typeof body !== 'object') return { code: '', error: '' }
   const value = body as { code?: unknown; error?: unknown }
@@ -2684,10 +2711,17 @@ function sanitizeToolBoundaryError(error: unknown): unknown {
   const detail = engineErrorDetail(error.body)
   const raw = `${detail.error}\n${error.message}`
   if (error.message.includes(STR_REPLACE_PLAIN_TEXT_ERROR)) return new Error(STR_REPLACE_PLAIN_TEXT_ERROR)
+  // QingML 白名单拒绝要在「未命中」映射之前识别:引擎 VALIDATION 的通用 nextStep 恰含
+  // 「未命中」两个字,曾把结构错误误报成定位错误,模型照提示重读重试同一 payload 死循环。
+  const qingmlDiagnostic = qingmlDiagnosticOf(error.body)
+  if (qingmlDiagnostic || detail.error.includes('QingML')) {
+    return new Error(qingmlValidationErrorMessage(qingmlDiagnostic))
+  }
   if (/位于多行|insertAfter(?:Line|Block)|paragraph\s*块/i.test(raw)) {
     return new Error('所选位置位于一段多行内容的中间，不能作为插入位置。请改在这段内容的末尾之后，或重新读取文稿后按整段定位。')
   }
-  if (/未命中|未唯一命中/u.test(raw)) {
+  // 只测 error 字段:真正的 strReplace 未命中错误文案本身含「未命中」;不再吃通用 nextStep。
+  if (/未命中|未唯一命中/u.test(detail.error)) {
     return new Error('没有找到唯一的目标文字。请重新读取文稿，缩小目标范围后再试。')
   }
   if (detail.code === 'REVIEW_PENDING') return new Error(REVIEW_PENDING_ERROR)
@@ -2985,6 +3019,15 @@ function installTurnTracking(
     const dshSessionId = String(agent.id)
     services.reviewTurnState.finish(dshSessionId, turn)
     await services.turnLeases.endTurn(dshSessionId, turn)
+  }))
+  // 宿主在 abort(用户停止)路径不发 turn-stopping,残留租约段会靠心跳把文稿永久锁死
+  // (评测 r4 实证:停止后 agentBusy 数小时不释放)。idle 是回合的最终边界,在此兜底
+  // 收口残留回合;正常路径 turn-stopping 已清空,本处幂等无操作。
+  ctx.effect(() => ctx.on('agent/status', async ({ agent, status }) => {
+    if (status !== 'idle') return
+    const dshSessionId = String(agent.id)
+    services.reviewTurnState.finish(dshSessionId)
+    await services.turnLeases.disposeAgent(dshSessionId)
   }))
   ctx.effect(() => ctx.on('agent/error', async ({ agent, turn }) => {
     const dshSessionId = String(agent.id)

@@ -161,6 +161,24 @@ describe('agent 文稿回合租约', () => {
     })
   })
 
+  it('abort 路径宿主不发 turn-stopping,status idle 兜底收口残留租约', async () => {
+    // 评测 r4 实证:用户点停止后回合被 abort,turn-stopping 不发射,残留段心跳把文稿
+    // 永久锁死(agentBusy 数小时不释放)。idle 状态边界必须兜底关段。
+    const fixture = harness(async (path) => {
+      if (path.endsWith('/doc?format=qingml')) return editableDoc()
+      throw new Error(`unexpected path: ${path}`)
+    })
+    const preStep = fixture.listeners.get('agent/pre-step')!
+    const status = fixture.listeners.get('agent/status')!
+
+    await preStep({ agent: { id: 'dsh-1' }, turn: 1 }, async () => ({ kind: 'enter', messages: [] }))
+    await status({ agent: { id: 'dsh-1' }, status: 'idle' })
+
+    const actions = signalActions(fixture.engine)
+    expect(actions.map(({ action }) => action)).toEqual(['begin', 'end'])
+    expect(actions[1]!.turnId).toBe(actions[0]!.turnId)
+  })
+
   it('没有预绑定目标时，显式纯读不申领租约', async () => {
     const fixture = harness(async (path) => {
       if (path.endsWith('/doc?format=qingml')) return editableDoc()
@@ -2379,6 +2397,32 @@ describe('qing_edit_draft', () => {
     })
     expect(proposalBody).toHaveProperty('clientMutationId', expect.any(String))
     expect(proposalBody).not.toHaveProperty('opId')
+  })
+
+  it('引擎 QingML 白名单拒绝转述结构错误,不再误报成定位错误', async () => {
+    // 真机实证(评测 r4):引擎 VALIDATION 通用 nextStep 含「未命中」,曾被误映射成
+    // 「没有找到唯一的目标文字」,模型照提示重读重试同一 payload 死循环。
+    const fixture = harness(async (path, init) => {
+      if (path === '/sessions' && init?.method === 'POST') return { sessionId: 'qing-new' }
+      if (path.endsWith('/doc?format=qingml')) {
+        return { sessionId: 'qing-new', docVersion: 0, state: 'empty', agentBusy: false, markdown: '', title: '' }
+      }
+      if (path.endsWith('/proposals')) {
+        throw new EngineHttpError(400, {
+          error: 'QingML 校验失败，请根据诊断修正后重试',
+          code: 'VALIDATION',
+          nextStep: '提案不合法(空文档只能 fullDraft/qingmlDraft / 已有文档禁 fullDraft / QingML 结构有害降级 / 未命中 / 超 50 处),按提示改',
+          diagnostic: { failureKind: 'qingml_bad_block', warningKinds: ['inline-block-flattened'] },
+        })
+      }
+      if (path.includes('/turn-signal')) return { active: true }
+      throw new Error(`unexpected path: ${path}`)
+    })
+
+    await expect(fixture.tools.get('qing_write_draft')!.execute({
+      qingml: '<h1>标题</h1><p>正文一段。</p>',
+      title: '标题',
+    }, exec(undefined, 'write-qingml-reject', 'qing_write_draft'))).rejects.toThrow('块级标签(<math-block>、<pre>、<mermaid> 等)必须独立成块')
   })
 
   it('markText 的引擎错误改写成用户可行动措辞', async () => {

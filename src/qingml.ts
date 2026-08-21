@@ -404,22 +404,50 @@ function escapeQingmlText(text: string): string {
 }
 
 /**
+ * 把 <p> 段落内的 <math-block> 提升为独立顶层块。引擎白名单拒绝段内块级节点
+ * (qingml_bad_block / inline-block-flattened),而模型「段落里提到块公式」的写法
+ * 极常见;确定性拆段比让模型凭错误信息重试可靠。<math-block> 内是原样文本不嵌
+ * 标签,非贪婪切分安全。
+ */
+function liftBlockMathOutOfParagraphs(qingml: string): { qingml: string; lifted: number } {
+  if (!qingml.includes('<math-block>')) return { qingml, lifted: 0 }
+  let lifted = 0
+  const out = qingml.replace(/<p>([\s\S]*?)<\/p>/gu, (whole, inner: string) => {
+    if (!inner.includes('<math-block>')) return whole
+    const parts = inner.split(/(<math-block>[\s\S]*?<\/math-block>)/gu)
+    const pieces: string[] = []
+    for (const part of parts) {
+      if (!part) continue
+      if (part.startsWith('<math-block>')) {
+        pieces.push(part)
+        lifted += 1
+      } else if (part.trim()) {
+        pieces.push(`<p>${part}</p>`)
+      }
+    }
+    return pieces.join('')
+  })
+  return { qingml: out, lifted }
+}
+
+/**
  * 把正文文本节点中的脚注/公式源写法确定性转换成 AI-IR 原生结构。
  * 只有配对且可无损处理的脚注、明确的块公式和带 LaTeX 特征的行内公式会转换。
  */
 export function convertQingmlSourceSyntax(qingml: string): QingmlSourceSyntaxConversion {
-  const parsed = qingmlParse(qingml)
+  const uplifted = liftBlockMathOutOfParagraphs(qingml)
+  const parsed = qingmlParse(uplifted.qingml)
   const definitions = sourceFootnoteDefinitions(parsed.blocks)
   const counts = { footnotes: 0, formulas: 0 }
   const blocks = convertSourceSyntaxBlocks(parsed.blocks, definitions, counts)
-  const converted = counts.footnotes + counts.formulas
-  const normalized = converted > 0
+  const converted = counts.footnotes + counts.formulas + uplifted.lifted
+  const normalized = counts.footnotes + counts.formulas > 0
     ? `${parsed.title ? `<title>${escapeQingmlText(parsed.title)}</title>` : ''}${aiBlocksToQingml(blocks)}`
-    : qingml
+    : uplifted.qingml
   return {
     qingml: normalized,
     convertedFootnotes: counts.footnotes,
-    convertedFormulas: counts.formulas,
+    convertedFormulas: counts.formulas + uplifted.lifted,
     converted,
     leaks: findQingmlSourceSyntaxLeaks(normalized),
   }
