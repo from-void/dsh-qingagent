@@ -22,9 +22,8 @@ function previewLabel(text: string): string {
     : plain
 }
 
-/** 批注 chip 只展示短摘要，完整修改指令保存在 ref 中。
- *  用户裁定:内容为「批注：{修改方向}」——只取指令里的改法部分,不再复述「按批注修改」
- *  前缀与问题摘要;方向至少展示 10 字(取 12),超出省略号。 */
+/** 批注 chip 底层 label 只留修改方向本体(10 字截断):图标与「批注:」前缀由呈现层
+ *  覆盖文本提供,底层越短 chip 越紧凑(用户裁定宽度自适应)。完整指令保存在 ref 中。 */
 export function annotationReferenceLabel(instruction: string): string {
   const summary = instruction.replace(/\s+/g, ' ').trim()
   const body = summary
@@ -32,7 +31,7 @@ export function annotationReferenceLabel(instruction: string): string {
     .replace(/[（(]原文[:\uFF1A]『[\s\S]*』[)）]\s*$/u, '')
     .trim()
   const direction = /^[\s\S]{1,60}?——([\s\S]+)$/u.exec(body)?.[1]?.trim() ?? body
-  return `批注：${previewLabel(direction)}`
+  return previewLabel(direction)
 }
 
 const CIRCLED_NUMBERS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩', '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳'] as const

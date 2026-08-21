@@ -78,7 +78,7 @@ describe('青简选段 inline reference chip', () => {
       span: { start: 6, end: 6, draftRev: 7 },
       reference: {
         source: 'qingagent-selection',
-        label: '选段：春风又绿江南岸',
+        label: '春风又绿江南岸',
       },
     })
     expect(payloads[1]?.span).toEqual({ start: 8, end: 8, draftRev: 8 })
@@ -137,5 +137,23 @@ describe('blockContainsId 嵌套块段号', () => {
     expect(doc.findIndex((b) => blockContainsId(b, 'li1p'))).toBe(1)
     expect(doc.findIndex((b) => blockContainsId(b, 'p2'))).toBe(2)
     expect(doc.findIndex((b) => blockContainsId(b, 'nope'))).toBe(-1)
+  })
+})
+
+describe('选段插入防御与 label 去重', () => {
+  it('空引文单槽拒插(连续快速划词竞态曾铸出空白 chip)', async () => {
+    const { insertSelectionReference } = await import('../src/client/selectionReference.js')
+    const actx = { bail: vi.fn(), conversation: { input: { for: () => ({ state: { getSnapshot: () => ({ draft: '', draftRev: 1, occurrences: [] }) } }) } } }
+    const selection = { dshSessionId: 'd', engineSessionId: 'q', quote: '   ', anchor: { blockId: 'b', from: 0, to: 0 } }
+    expect(insertSelectionReference(actx as never, selection as never)).toBe(false)
+    expect(actx.bail).not.toHaveBeenCalled()
+  })
+
+  it('相邻连选前 10 字相同时 label 圈号分叉,互不为前缀', async () => {
+    const { dedupeChipLabel } = await import('../src/client/selectionReference.js')
+    expect(dedupeChipLabel('走访覆盖完整,重点…', [])).toBe('走访覆盖完整,重点…')
+    expect(dedupeChipLabel('走访覆盖完整,重点…', ['走访覆盖完整,重点…'])).toBe('①走访覆盖完整,重点…')
+    expect(dedupeChipLabel('走访覆盖完整,重点…', ['①走访覆盖完整,重点…', '走访覆盖完整,重点…'])).toBe('②走访覆盖完整,重点…')
+    expect(dedupeChipLabel('全新内容', ['走访覆盖完整,重点…'])).toBe('全新内容')
   })
 })

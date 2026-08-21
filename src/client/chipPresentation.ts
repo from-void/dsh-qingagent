@@ -96,11 +96,25 @@ export function normalizeDirectionText(text: string): string {
   return value || text.trim()
 }
 
-/** 覆盖层文案:批注=笔图标,选段=左引号图标(用户裁定);dedupe 圈号是投影不变式
- *  需要的机器噪音,显示层剥掉。旧格式 label(历史草稿恢复)原样透传,重铸后自然更新。 */
-export function chipDisplayText(kind: 'selection' | 'annotation', label: string): string {
-  const clean = label.replace(/^[①-⑳]|^#\d+/u, '')
-  return kind === 'annotation' ? `✎ ${clean}` : `「${clean}`
+/** 覆盖层文案:批注=✎ 笔图标,选段=“中文弯双引号(用户裁定);内容取 ref 的完整
+ *  引文/修改方向,超宽由 CSS ellipsis 兜底(宽度自适应,不预截断)。ref 解析不出时
+ *  回落到底层 label(剥 dedupe 圈号)。 */
+export function chipDisplayText(
+  kind: 'selection' | 'annotation',
+  label: string,
+  ref?: string,
+): string {
+  const fallback = label.replace(/^[①-⑳]|^#\d+/u, '')
+  if (kind === 'annotation') {
+    const body = (ref ?? '').replace(/\s+/gu, ' ').trim()
+      .replace(/^按批注修改[:\uFF1A]/u, '')
+      .replace(/[（(]原文[:\uFF1A]『[\s\S]*』[)）]\s*$/u, '')
+      .trim()
+    const direction = /^[\s\S]{1,60}?——([\s\S]+)$/u.exec(body)?.[1]?.trim() ?? body
+    return `✎ 批注：${direction || fallback}`
+  }
+  const quote = /[:\uFF1A]\s*「([\s\S]*)」\s*$/u.exec(ref ?? '')?.[1]?.replace(/\s+/gu, ' ').trim()
+  return `\u201C选段：${quote || fallback}`
 }
 
 function occurrenceKind(occurrence: InputOccurrence): 'selection' | 'annotation' | undefined {
@@ -146,11 +160,18 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     '}',
     `[${CHIP_ATTR}][${DISPLAY_ATTR}]::after{`,
     `content:attr(${DISPLAY_ATTR});`,
-    'position:absolute;', 'inset:0;', 'padding:0 6px;', 'box-sizing:border-box;',
-    'font-size:12px;', 'line-height:inherit;',
+    'position:absolute;', 'inset:0;', 'padding:0 20px 0 6px;', 'box-sizing:border-box;',
+    'font-size:12px;',
+    // 垂直居中用 flex(用户实测 line-height 继承对不齐);ellipsis 需要 block 容器,
+    // 由内层 display:block + overflow 承担——flex 下直接给 ::after 生效于单行文本。
+    'display:flex;', 'align-items:center;',
     'color:var(--dsw-alias-label-primary, #ece4d4);',
     'white-space:nowrap;', 'overflow:hidden;', 'text-overflow:ellipsis;',
     '}',
+    // 划选扫过 chip 时,透明的底层投影字符会以选区样式显形放大(用户实测);
+    // 选中反馈只保留整块背景,不显字。
+    `[${CHIP_ATTR}][${DISPLAY_ATTR}]::selection{ color:transparent; }`,
+    `[${CHIP_ATTR}][${DISPLAY_ATTR}] *::selection{ color:transparent; }`,
   ].join('')
   document.head.appendChild(style)
 
@@ -201,7 +222,8 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
       if (el.getAttribute(OCC_ATTR) !== String(want.occurrenceId)) {
         el.setAttribute(OCC_ATTR, String(want.occurrenceId))
       }
-      const display = chipDisplayText(want.kind, occurrenceById.get(want.occurrenceId)?.label ?? '')
+      const source = occurrenceById.get(want.occurrenceId)
+      const display = chipDisplayText(want.kind, source?.label ?? '', source?.ref)
       if (el.getAttribute(DISPLAY_ATTR) !== display) el.setAttribute(DISPLAY_ATTR, display)
     }
     // 宿主重渲可能把 hover 中的 chip 换掉:旧节点已不在文档里就收浮层。
@@ -310,8 +332,9 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
   function positionBadge(rect: DOMRect) {
     badge.style.display = 'block'
     // 角标骑在 chip 右上角:中心对齐右上顶点。
-    badge.style.left = `${Math.round(rect.right - 8)}px`
-    badge.style.top = `${Math.round(rect.top - 8)}px`
+    // 用户裁定:✕ 不做浮动角标,贴在 chip 内部最右侧,垂直居中。
+    badge.style.left = `${Math.round(rect.right - 18)}px`
+    badge.style.top = `${Math.round(rect.top + (rect.height - 16) / 2)}px`
   }
 
   function showPanel(chip: HTMLElement) {

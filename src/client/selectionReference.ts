@@ -7,9 +7,23 @@ import type { QingSelection } from '../contracts.js'
 
 export const QING_SELECTION_REFERENCE_SOURCE = 'qingagent-selection'
 
-// 选区与批注共用同一段 chip label 预览预算(用户裁定:内容至少展示 10 字,取 12,
-// 超出省略号),完整内容仍由 ref 与 hover 承载。
-export const CHIP_LABEL_PREVIEW_LENGTH = 12
+// 选区与批注共用同一段 chip label 预览预算:底层投影 label 定 chip 宽度,显示层
+// (12px 覆盖文本「“选段:/✎ 批注:」+完整内容)按此宽度 ellipsis——10 个全角字的
+// 16px 底宽≈14 个 12px 显示字,恰好容纳图标+前缀+10 字内容(用户裁定的下限)。
+export const CHIP_LABEL_PREVIEW_LENGTH = 10
+
+const CIRCLED_NUMBERS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩', '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳'] as const
+
+/** 多枚 chip 的投影 label 必须互不为前缀(setDraft diff 歧义会吞相邻 occurrence)。
+ *  序号前置:首字符即分叉。选段连选相邻内容时前 10 字极易相同,与批注共用这道防线。 */
+export function dedupeChipLabel(label: string, takenLabels: readonly string[]): string {
+  if (!takenLabels.some((existing) => existing.startsWith(label) || label.startsWith(existing))) {
+    return label
+  }
+  const taken = new Set(takenLabels.map((existing) => existing.charAt(0)))
+  const circled = CIRCLED_NUMBERS.find((mark) => !taken.has(mark)) ?? `#${takenLabels.length + 1}`
+  return `${circled}${label}`
+}
 
 /**
  * 模型侧的选段表示。ref 自身携带文稿、块与字符范围，不能依赖 bridge 中稍后会清掉的
@@ -59,25 +73,26 @@ export function blockContainsId(block: PmBlockNode, blockId: string): boolean {
   return block.content?.some((child) => blockContainsId(child, blockId)) ?? false
 }
 
-/** 用户裁定:选段 chip 内容为「选段：{引文}」。 */
+/** 底层投影 label 只留引文本体(10 字截断):图标与「选段:」前缀由呈现层覆盖文本
+ *  提供,底层越短 chip 越紧凑(用户裁定宽度自适应,右侧不留空)。 */
 export function selectionReferenceLabel(quote: string): string {
   const plain = quote.replace(/\s+/g, ' ').trim()
-  const preview = plain.length > CHIP_LABEL_PREVIEW_LENGTH
+  return plain.length > CHIP_LABEL_PREVIEW_LENGTH
     ? `${plain.slice(0, CHIP_LABEL_PREVIEW_LENGTH)}…`
     : plain
-  return `选段：${preview}`
 }
 
 export function createSelectionReference(
   selection: QingSelection,
   title?: string | null,
   paragraphOrdinal?: number,
+  takenLabels: readonly string[] = [],
 ): ReferenceInsert {
   const ref = selectionReferenceText(selection, title, paragraphOrdinal)
   return {
     source: QING_SELECTION_REFERENCE_SOURCE,
     ref,
-    label: selectionReferenceLabel(selection.quote),
+    label: dedupeChipLabel(selectionReferenceLabel(selection.quote), takenLabels),
     // 草稿持久化、复制与 owner 暂时不可用时也保留完整选段语义。
     clipboardText: ref,
   }
@@ -93,8 +108,11 @@ export function insertSelectionReference(
   title?: string | null,
   paragraphOrdinal?: number,
 ): boolean {
+  // 连续快速划词的竞态可能送来空引文单槽——铸出来就是一枚空白 chip(用户实测),拒插。
+  if (!selection.quote.replace(/\s+/gu, ' ').trim()) return false
   const snapshot = actx.conversation.input.for(actx).state.getSnapshot()
-  const reference = createSelectionReference(selection, title, paragraphOrdinal)
+  const takenLabels = (snapshot.occurrences ?? []).map((occurrence) => occurrence.label)
+  const reference = createSelectionReference(selection, title, paragraphOrdinal, takenLabels)
   // 幂等守卫:bridge 状态重放/多路订阅可能对同一选段重复触发(用户实测双 chip);
   // 草稿里已有同 source+ref 的 occurrence 即视为已插入成功,由调用方清 ingress。
   if (snapshot.occurrences?.some((occurrence) =>

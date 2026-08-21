@@ -118,23 +118,31 @@ afterEach(() => {
 })
 
 describe('chip 打标', () => {
-  it('覆盖层显示文案:批注=✎、选段=「,剥 dedupe 圈号,12 号字样式注入(用户裁定)', () => {
+  it('覆盖层显示文案:批注=✎、选段=“弯引号,内容取 ref 完整文本,12 号字+选中不显形', () => {
     const { backdrop } = mountComposer()
     const selectionChip = appendChip(backdrop, 'uV2eYG', '选段:...')
     const annotationChip = appendChip(backdrop, 'uV2eYG', '批注:...')
     const harness = makeDeps([
-      occurrence({ occurrenceId: 1, offset: 0, source: 'qingagent-selection', label: '选段：春风又绿江南岸' }),
-      occurrence({ occurrenceId: 2, offset: 6, source: 'qingagent-annotation', label: '①批注：改准数字与称谓' }),
+      occurrence({
+        occurrenceId: 1, offset: 0, source: 'qingagent-selection', label: '春风又绿江南岸',
+        ref: '[选段]《测试稿》第2段:「春风又绿江南岸,明月何时照我还」',
+      }),
+      occurrence({
+        occurrenceId: 2, offset: 6, source: 'qingagent-annotation', label: '①改准数字与称谓',
+        ref: '按批注修改：口径漂移——改准数字与称谓并核对台账（原文：『原句。』）',
+      }),
     ])
 
     uninstall = installChipPresentation(harness.deps)
 
-    expect(selectionChip.getAttribute('data-qing-display')).toBe('「选段：春风又绿江南岸')
-    expect(annotationChip.getAttribute('data-qing-display')).toBe('✎ 批注：改准数字与称谓')
+    expect(selectionChip.getAttribute('data-qing-display')).toBe('\u201C选段：春风又绿江南岸,明月何时照我还')
+    expect(annotationChip.getAttribute('data-qing-display')).toBe('✎ 批注：改准数字与称谓并核对台账')
     const css = document.getElementById('qingagent-chip-presentation-style')?.textContent ?? ''
     expect(css).toContain('content:attr(data-qing-display)')
     expect(css).toContain('font-size:12px')
     expect(css).toContain('text-overflow:ellipsis')
+    expect(css).toContain('align-items:center')
+    expect(css).toContain('::selection{ color:transparent; }')
   })
 
   it('按 DOM 顺序与 occurrences(offset 升序)配对,只给本插件两来源打标', () => {
