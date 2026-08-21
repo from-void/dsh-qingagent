@@ -26,6 +26,26 @@ export function selectionReferenceText(
   return `[选段]《${documentTitle}》${locator}:「${selection.quote}」`
 }
 
+/**
+ * 解析选段 chip 的文稿名。匹配一律以 activeDoc 自带的 sessionId 为准,绝不信
+ * activeEngineSessionId:切稿时后者由 binding-changed 同步更新,activeDoc 却要等
+ * 异步 refresh 才换代——窗口期划词会把刚切出的稿名铸进 chip(评测 r4 席3 实证)。
+ */
+export function resolveSelectionTitle(
+  snapshot: {
+    activeDoc?: { sessionId?: string; title?: string | null }
+    state?: { binding: { docs: ReadonlyArray<{ engineSessionId: string; title?: string | null }> } }
+  },
+  engineSessionId: string,
+): string | undefined {
+  const activeTitle = snapshot.activeDoc?.sessionId === engineSessionId
+    ? snapshot.activeDoc.title
+    : undefined
+  return activeTitle ?? snapshot.state?.binding.docs.find(
+    (doc) => doc.engineSessionId === engineSessionId,
+  )?.title ?? undefined
+}
+
 export function selectionReferenceLabel(quote: string): string {
   const plain = quote.replace(/\s+/g, ' ').trim()
   return plain.length > CHIP_LABEL_PREVIEW_LENGTH

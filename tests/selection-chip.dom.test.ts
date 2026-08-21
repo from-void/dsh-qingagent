@@ -105,3 +105,20 @@ describe('青简选段 inline reference chip', () => {
     expect(payloads[1]?.reference.clipboardText).toBe(payloads[1]?.reference.ref)
   })
 })
+
+describe('resolveSelectionTitle 切稿竞态', () => {
+  it('activeDoc 尚是刚切出的稿时,不得借用其标题(以 activeDoc.sessionId 为准)', async () => {
+    const { resolveSelectionTitle } = await import('../src/client/selectionReference.js')
+    // 切稿 A→B→A 窗口期:activeEngineSessionId 已回 A,activeDoc 还是 B 的
+    const snapshot = {
+      activeDoc: { sessionId: 'doc-b', title: '刚切出的席2稿' },
+      state: { binding: { docs: [
+        { engineSessionId: 'doc-a', title: '主稿' },
+        { engineSessionId: 'doc-b', title: '刚切出的席2稿' },
+      ] } },
+    }
+    expect(resolveSelectionTitle(snapshot, 'doc-a')).toBe('主稿')
+    expect(resolveSelectionTitle(snapshot, 'doc-b')).toBe('刚切出的席2稿')
+    expect(resolveSelectionTitle({ ...snapshot, state: undefined }, 'doc-a')).toBeUndefined()
+  })
+})

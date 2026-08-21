@@ -20,6 +20,7 @@ import { qingClientStore } from './store.js'
 import {
   insertSelectionReference,
   qingSelectionReferenceSource,
+  resolveSelectionTitle,
 } from './selectionReference.js'
 import {
   insertAnnotationReference,
@@ -89,12 +90,7 @@ export function apply(ctx: ClientContext): void {
       if (!selection || snapshot.selectionFresh !== true) return
       // bail 同步发布 input state 会在插入返回前重入本函数;fresh 尚未消费,用进行中闸挡住。
       if (selectionInsertInFlight) return
-      const activeTitle = snapshot.activeEngineSessionId === selection.engineSessionId
-        ? snapshot.activeDoc?.title
-        : undefined
-      const title = activeTitle ?? snapshot.state?.binding.docs.find(
-        (doc) => doc.engineSessionId === selection.engineSessionId,
-      )?.title
+      const title = resolveSelectionTitle(snapshot, selection.engineSessionId)
 
       // 「第 N 段」人类可读定位:引文多处相同时的消歧信息(拿不到块索引则省略)。
       const panelPm = snapshot.panelEngineSessionId === selection.engineSessionId
