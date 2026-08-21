@@ -244,20 +244,35 @@ describe('hover 面板与 ✕ 角标', () => {
     expect(panel()!.textContent).not.toContain('确认')
   })
 
-  it('批注面板:textarea 初始值=ref,「确认」调 replaceOccurrenceRef 成功后关面板', () => {
+  it('批注面板结构化:原文只读、输入框只留修改方向;「确认」按真源格式重组', () => {
+    const { harness } = mountHoveredChip('qingagent-annotation')
+    harness.state.current!.occurrences![0]!.ref = '按批注修改：删除房号（原文：『晨光路19号801室』）'
+    vi.advanceTimersByTime(CHIP_PANEL_SHOW_DELAY)
+
+    expect(panel()!.textContent).toContain('批注修改')
+    expect(panel()!.textContent).toContain('原文')
+    expect(panel()!.textContent).toContain('晨光路19号801室')
+    const editArea = panel()!.querySelector('textarea')!
+    expect(editArea.value).toBe('删除房号')
+    editArea.value = '改为「家住本社区」'
+
+    const buttons = [...panel()!.querySelectorAll('button')]
+    buttons.find((b) => b.textContent === '确认')!.click()
+    expect(harness.replaceOccurrenceRef).toHaveBeenCalledWith(
+      9, '按批注修改：改为「家住本社区」（原文：『晨光路19号801室』）')
+    expect(panel()!.style.display).toBe('none')
+  })
+
+  it('批注面板:无原文尾缀的指令整段作为修改方向', () => {
     const { harness } = mountHoveredChip('qingagent-annotation')
     harness.state.current!.occurrences![0]!.ref = '按批注修改:把时间改成四月'
     vi.advanceTimersByTime(CHIP_PANEL_SHOW_DELAY)
 
-    expect(panel()!.textContent).toContain('完整修改指令')
     const editArea = panel()!.querySelector('textarea')!
-    expect(editArea.value).toBe('按批注修改:把时间改成四月')
-    editArea.value = '按批注修改:改成五月'
-
-    const buttons = [...panel()!.querySelectorAll('button')]
-    buttons.find((b) => b.textContent === '确认')!.click()
-    expect(harness.replaceOccurrenceRef).toHaveBeenCalledWith(9, '按批注修改:改成五月')
-    expect(panel()!.style.display).toBe('none')
+    expect(editArea.value).toBe('把时间改成四月')
+    editArea.value = '改成五月'
+    ;[...panel()!.querySelectorAll('button')].find((b) => b.textContent === '确认')!.click()
+    expect(harness.replaceOccurrenceRef).toHaveBeenCalledWith(9, '按批注修改：改成五月')
   })
 
   it('确认失败:不关面板并 toast 冻结文案', () => {

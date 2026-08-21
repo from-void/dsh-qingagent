@@ -45,6 +45,7 @@ export interface ChipPresentationDeps {
 /** 本插件的两类 chip 来源(与席 C 的 source 常量一致,本文件自洽不跨席 import)。 */
 const SELECTION_SOURCE = 'qingagent-selection'
 const ANNOTATION_SOURCE = 'qingagent-annotation'
+import { findOccurrenceProjection } from './annotationReference.js'
 
 /** 打标属性与浮层 id:宿主重绘丢标是常态,打标幂等、可重入。 */
 const CHIP_ATTR = 'data-qing-chip'
@@ -97,16 +98,16 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
   style.id = STYLE_ID
   style.textContent = [
     `[${CHIP_ATTR}="selection"]{`,
-    // 用户裁定:选区 chip 是「带一定颜色的块」,不能是浅浅一层。
+    // 用户裁定:选区 chip 是「带一定颜色的块」;文字色跟随宿主主题(写死浅字在亮色主题下看不清)。
     'background:rgba(200,169,106,.38);',
     'box-shadow:0 0 0 1px rgba(200,169,106,.75);',
-    'color:#f5efdf;',
+    'color:var(--dsw-alias-label-primary, inherit);',
     'border-radius:0;',
     '}',
     `[${CHIP_ATTR}="annotation"]{`,
     'background:rgba(186,92,38,.38);',
     'box-shadow:0 0 0 1px rgba(186,92,38,.8);',
-    'color:#f7ece2;',
+    'color:var(--dsw-alias-label-primary, inherit);',
     'border-radius:0;',
     '}',
   ].join('')
@@ -256,7 +257,7 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     const header = document.createElement('div')
     header.style.cssText = 'display:flex;align-items:baseline;gap:8px;margin-bottom:8px;font-weight:600'
     const title = document.createElement('span')
-    title.textContent = kind === 'selection' ? '选段内容' : '完整修改指令'
+    title.textContent = kind === 'selection' ? '选段内容' : '批注修改'
     header.appendChild(title)
     if (kind === 'selection') {
       const docTitle = deps.getDocTitle?.()?.trim()
@@ -281,18 +282,43 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
       ].join(';')
       panel.appendChild(body)
     } else {
+      // 结构化(用户裁定):原文只读,输入框只留「修改方向」。
+      // 指令真源格式:按批注修改:{方向}(原文:『{引文}』);引文缺省时整段视为方向。
+      const parsed = /^按批注修改[:：]([\s\S]*?)(?:[（(]原文[:：]『([\s\S]*)』[)）])?\s*$/u.exec(occurrence.ref)
+      const direction = parsed?.[1]?.trim() ?? occurrence.ref
+      const quote = parsed?.[2]
+      const fieldLabel = (text: string): HTMLElement => {
+        const label = document.createElement('div')
+        label.textContent = text
+        label.style.cssText = 'font-size:11px;opacity:.65;margin-bottom:4px'
+        return label
+      }
+      if (quote) {
+        panel.appendChild(fieldLabel('原文'))
+        const quoteBlock = document.createElement('div')
+        quoteBlock.textContent = quote
+        quoteBlock.style.cssText = [
+          'max-height:120px', 'overflow:auto', 'margin-bottom:10px', 'padding:6px 8px',
+          'white-space:pre-wrap', 'word-break:break-word', 'opacity:.85',
+          'border-left:2px solid rgba(186,92,38,.6)',
+          'background:var(--dsw-alias-bg-layer-1, rgba(128,128,128,.08))',
+        ].join(';')
+        panel.appendChild(quoteBlock)
+      }
+      panel.appendChild(fieldLabel('修改方向'))
       editArea = document.createElement('textarea')
-      editArea.value = occurrence.ref
+      editArea.value = direction
       editArea.style.cssText = [
-        'width:100%', 'box-sizing:border-box', 'height:96px', 'resize:none',
+        'width:100%', 'box-sizing:border-box', 'height:72px', 'resize:none',
         'padding:7px 8px', 'border-radius:0', 'margin-bottom:10px',
-        // 主题自适应:灰底灰字像禁用态(用户实测点名)。
         'background:var(--dsw-alias-bg-layer-1, rgba(255,255,255,.06))',
         'color:var(--dsw-alias-label-primary, #ece4d4)',
         'border:1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.35))',
         'font-size:12px', 'line-height:18px', 'outline:none',
       ].join(';')
       panel.appendChild(editArea)
+      // 确认时按真源格式重组完整指令(原文保持不动)。
+      editArea.dataset.qingQuote = quote ?? ''
     }
 
     const footer = document.createElement('div')
@@ -306,7 +332,12 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     if (kind === 'annotation') {
       const confirmButton = panelButton('确认', true)
       confirmButton.addEventListener('click', () => {
-        if (deps.replaceOccurrenceRef(occurrence.occurrenceId, editArea?.value ?? occurrence.ref)) {
+        const direction = editArea?.value?.trim() ?? ''
+        const quote = editArea?.dataset.qingQuote
+        const rebuilt = direction
+          ? `按批注修改：${direction}${quote ? `（原文：『${quote}』）` : ''}`
+          : occurrence.ref
+        if (deps.replaceOccurrenceRef(occurrence.occurrenceId, rebuilt)) {
           hideOverlays()
         } else {
           deps.onToast(TOAST_INPUT_UNAVAILABLE)
@@ -388,6 +419,53 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
   document.body.append(panel, badge)
   document.addEventListener('mousemove', onMouseMove, { capture: true, passive: true })
   document.addEventListener('mousedown', onMouseDown, { capture: true })
+  // ---------------------------------------------------------------- chip 原子化(用户裁定)
+  // chip 是整体:光标不允许落进投影文本内部;Backspace/Delete 命中时整体删除,不许拆字。
+  const ourProjections = (): Array<{ occurrenceId: number; start: number; end: number }> => {
+    const state = deps.getInputState()
+    if (!state) return []
+    const result: Array<{ occurrenceId: number; start: number; end: number }> = []
+    for (const occurrence of state.occurrences ?? []) {
+      if (!occurrenceKind(occurrence)) continue
+      const projection = findOccurrenceProjection(state as never, occurrence.occurrenceId)
+      if (projection) result.push({ occurrenceId: occurrence.occurrenceId, ...projection })
+    }
+    return result
+  }
+  const composerOf = (target: EventTarget | null): HTMLTextAreaElement | null =>
+    target instanceof HTMLTextAreaElement && collectChipElements().length >= 0 ? target : null
+  const onSelectionChange = () => {
+    const textarea = composerOf(document.activeElement)
+    if (!textarea || textarea.selectionStart !== textarea.selectionEnd) return
+    const pos = textarea.selectionStart
+    for (const projection of ourProjections()) {
+      if (pos > projection.start && pos < projection.end) {
+        const snap = pos - projection.start <= projection.end - pos ? projection.start : projection.end
+        textarea.setSelectionRange(snap, snap)
+        return
+      }
+    }
+  }
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key !== 'Backspace' && event.key !== 'Delete') return
+    const textarea = composerOf(event.target)
+    if (!textarea || textarea.selectionStart !== textarea.selectionEnd) return
+    const pos = textarea.selectionStart
+    for (const projection of ourProjections()) {
+      const hit = event.key === 'Backspace'
+        ? pos > projection.start && pos <= projection.end
+        : pos >= projection.start && pos < projection.end
+      if (hit) {
+        event.preventDefault()
+        event.stopPropagation()
+        if (!deps.removeOccurrence(projection.occurrenceId)) deps.onToast(TOAST_INPUT_UNAVAILABLE)
+        return
+      }
+    }
+  }
+  document.addEventListener('selectionchange', onSelectionChange)
+  document.addEventListener('keydown', onKeyDown, { capture: true })
+
   const unsubscribeInputState = deps.subscribeInputState(retag)
   const observer = new MutationObserver((mutations) => {
     // 浮层自身的增删不触发重打标(打标是差量的,理论上不会自激,这里再省一轮)。
@@ -407,6 +485,8 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
   return () => {
     observer.disconnect()
     unsubscribeInputState()
+    document.removeEventListener('selectionchange', onSelectionChange)
+    document.removeEventListener('keydown', onKeyDown, { capture: true })
     document.removeEventListener('mousemove', onMouseMove, { capture: true })
     document.removeEventListener('mousedown', onMouseDown, { capture: true })
     clearTimers()
