@@ -193,6 +193,29 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     'font-size:12px', 'line-height:18px',
   ].join(';')
 
+  // 自绘瞬时提示:宿主 notify 的 notice 呈现依赖输入机状态,cut 降级等场景用户
+  // 实测看不到(评测 r5 席3 4.5)——改为插件自绘,2.5 秒自动消失,主题令牌自适应。
+  const toastEl = document.createElement('div')
+  toastEl.setAttribute(PANEL_ATTR, '1')
+  toastEl.style.cssText = [
+    'position:fixed', 'z-index:100602', 'display:none', 'left:50%', 'bottom:96px',
+    'transform:translateX(-50%)', 'max-width:70vw', 'padding:7px 14px', 'border-radius:0',
+    'background:var(--dsw-alias-bg-layer-3, #2e2a24)',
+    'color:var(--dsw-alias-label-primary, #ece4d4)',
+    'border:1px solid var(--dsw-alias-border-l1, rgba(128,128,128,.25))',
+    'box-shadow:var(--dsw-shadow-lv2, 0 8px 24px rgba(0,0,0,.35))',
+    'font-size:12px', 'line-height:18px', 'white-space:nowrap', 'pointer-events:none',
+  ].join(';')
+  let toastTimer: ReturnType<typeof setTimeout> | undefined
+  const showToast = (text: string) => {
+    toastEl.textContent = text
+    toastEl.style.display = 'block'
+    if (toastTimer) clearTimeout(toastTimer)
+    toastTimer = setTimeout(() => { toastEl.style.display = 'none' }, 2_500)
+    // 宿主通道保留:输入机状态允许时 notice 同步出现,双保险不冲突。
+    deps.onToast(text)
+  }
+
   const badge = document.createElement('div')
   badge.setAttribute(BADGE_ATTR, '1')
   badge.textContent = '✕'
@@ -354,7 +377,7 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     const removeButton = panelButton('移除', false)
     removeButton.addEventListener('click', () => {
       if (deps.removeOccurrence(occurrence.occurrenceId)) hideOverlays()
-      else deps.onToast(TOAST_INPUT_UNAVAILABLE)
+      else showToast(TOAST_INPUT_UNAVAILABLE)
     })
     footer.appendChild(removeButton)
     if (kind === 'annotation') {
@@ -370,7 +393,7 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
         if (deps.replaceOccurrenceRef(occurrence.occurrenceId, rebuilt)) {
           hideOverlays()
         } else {
-          deps.onToast(TOAST_INPUT_UNAVAILABLE)
+          showToast(TOAST_INPUT_UNAVAILABLE)
         }
       })
       footer.appendChild(confirmButton)
@@ -434,7 +457,7 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     if (!hoverChip) return
     const occurrenceId = Number(hoverChip.getAttribute(OCC_ATTR))
     if (deps.removeOccurrence(occurrenceId)) hideOverlays()
-    else deps.onToast(TOAST_INPUT_UNAVAILABLE)
+    else showToast(TOAST_INPUT_UNAVAILABLE)
   }
   badge.addEventListener('mousedown', onBadgeMouseDown)
 
@@ -446,7 +469,7 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
   }
 
   // ---------------------------------------------------------------- 装配与卸载
-  document.body.append(panel, badge)
+  document.body.append(panel, badge, toastEl)
   document.addEventListener('mousemove', onMouseMove, { capture: true, passive: true })
   document.addEventListener('mousedown', onMouseDown, { capture: true })
   // ---------------------------------------------------------------- chip 原子化(用户裁定)
@@ -492,7 +515,7 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
       if (hit) {
         event.preventDefault()
         event.stopPropagation()
-        if (!deps.removeOccurrence(projection.occurrenceId)) deps.onToast(TOAST_INPUT_UNAVAILABLE)
+        if (!deps.removeOccurrence(projection.occurrenceId)) showToast(TOAST_INPUT_UNAVAILABLE)
         return
       }
     }
@@ -523,7 +546,7 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     event.preventDefault()
     // 原生 cut 的删除会被 preventDefault 一并拦下；保守降级为复制，避免宿主 diff
     // 在跨 chip 选区里误伤相邻 occurrence 的完整载荷。
-    if (event.type === 'cut') deps.onToast(TOAST_CUT_COPIED)
+    if (event.type === 'cut') showToast(TOAST_CUT_COPIED)
   }
   document.addEventListener('selectionchange', onSelectionChange)
   document.addEventListener('keydown', onKeyDown, { capture: true })
@@ -556,8 +579,10 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     document.removeEventListener('mousemove', onMouseMove, { capture: true })
     document.removeEventListener('mousedown', onMouseDown, { capture: true })
     clearTimers()
+    if (toastTimer) clearTimeout(toastTimer)
     panel.remove()
     badge.remove()
+    toastEl.remove()
     style.remove()
     hoverChip = null
     for (const el of document.querySelectorAll(`[${CHIP_ATTR}]`)) {

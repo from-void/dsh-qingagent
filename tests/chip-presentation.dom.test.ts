@@ -462,6 +462,11 @@ describe('copy/cut 完整展开', () => {
 
     expect(cut.event.defaultPrevented).toBe(true)
     expect(cut.clipboardData.getData('text/plain')).toBe('完整批注')
+    // 自绘瞬时 toast 必须可见:宿主 notify 的 notice 用户实测看不到(评测 r5 席3 4.5)。
+    const toast = [...document.querySelectorAll('[data-qing-chip-panel]')]
+      .find((el) => el.textContent === '已复制,请手动删除') as HTMLElement | undefined
+    expect(toast).toBeTruthy()
+    expect(toast!.style.display).toBe('block')
     expect(harness.onToast).toHaveBeenCalledWith('已复制,请手动删除')
     expect(harness.removeOccurrence).not.toHaveBeenCalled()
   })

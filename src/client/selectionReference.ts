@@ -46,6 +46,18 @@ export function resolveSelectionTitle(
   )?.title ?? undefined
 }
 
+export interface PmBlockNode {
+  attrs?: { blockId?: string }
+  content?: PmBlockNode[]
+}
+
+/** blockId 命中判定:顶层块自身或其任意后代——选中列表项/表格单元格等嵌套块时,
+ *  「第 N 段」按包含它的顶层块计序(评测 r5 席3 实证:列表项选段丢段号)。 */
+export function blockContainsId(block: PmBlockNode, blockId: string): boolean {
+  if (block.attrs?.blockId === blockId) return true
+  return block.content?.some((child) => blockContainsId(child, blockId)) ?? false
+}
+
 export function selectionReferenceLabel(quote: string): string {
   const plain = quote.replace(/\s+/g, ' ').trim()
   return plain.length > CHIP_LABEL_PREVIEW_LENGTH

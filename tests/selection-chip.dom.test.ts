@@ -122,3 +122,20 @@ describe('resolveSelectionTitle 切稿竞态', () => {
     expect(resolveSelectionTitle({ ...snapshot, state: undefined }, 'doc-a')).toBeUndefined()
   })
 })
+
+describe('blockContainsId 嵌套块段号', () => {
+  it('列表项/表格单元格等嵌套 blockId 按包含它的顶层块计序', async () => {
+    const { blockContainsId } = await import('../src/client/selectionReference.js')
+    const doc = [
+      { attrs: { blockId: 'p1' } },
+      { attrs: { blockId: 'ul1' }, content: [
+        { attrs: { blockId: 'li1' }, content: [{ attrs: { blockId: 'li1p' } }] },
+        { attrs: { blockId: 'li2' } },
+      ] },
+      { attrs: { blockId: 'p2' } },
+    ]
+    expect(doc.findIndex((b) => blockContainsId(b, 'li1p'))).toBe(1)
+    expect(doc.findIndex((b) => blockContainsId(b, 'p2'))).toBe(2)
+    expect(doc.findIndex((b) => blockContainsId(b, 'nope'))).toBe(-1)
+  })
+})

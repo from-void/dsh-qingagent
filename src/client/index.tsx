@@ -18,9 +18,11 @@ import {
 } from './QingToolCard.js'
 import { qingClientStore } from './store.js'
 import {
+  blockContainsId,
   insertSelectionReference,
   qingSelectionReferenceSource,
   resolveSelectionTitle,
+  type PmBlockNode,
 } from './selectionReference.js'
 import {
   insertAnnotationReference,
@@ -93,11 +95,13 @@ export function apply(ctx: ClientContext): void {
       const title = resolveSelectionTitle(snapshot, selection.engineSessionId)
 
       // 「第 N 段」人类可读定位:引文多处相同时的消歧信息(拿不到块索引则省略)。
+      // 选中列表项/表格等嵌套块时 blockId 不在顶层——递归下钻,按包含它的顶层块计序
+      // (评测 r5 席3 实证:列表项选段丢失段号)。
       const panelPm = snapshot.panelEngineSessionId === selection.engineSessionId
-        ? (snapshot.panelDoc as { pmDoc?: { content?: Array<{ attrs?: { blockId?: string } }> } } | undefined)?.pmDoc
+        ? (snapshot.panelDoc as { pmDoc?: { content?: PmBlockNode[] } } | undefined)?.pmDoc
         : undefined
       const blockIndex = panelPm?.content?.findIndex(
-        (block) => block.attrs?.blockId === selection.anchor.blockId) ?? -1
+        (block) => blockContainsId(block, selection.anchor.blockId)) ?? -1
       const paragraphOrdinal = blockIndex >= 0 ? blockIndex + 1 : undefined
 
       let inserted = false
