@@ -161,6 +161,32 @@ describe('agent 文稿回合租约', () => {
     })
   })
 
+  it('qing_export:发桥事件让面板执行真下载;空稿与审阅中拒绝(评测 0822-r1)', async () => {
+    const fixture = harness(async (path) => {
+      if (path.endsWith('/doc?format=qingml')) return doc({ state: 'editing', qingml: DRAFT_ONE, title: '测试稿' })
+      throw new Error(`unexpected path: ${path}`)
+    })
+    const result = await fixture.tools.get('qing_export')!.execute(
+      { format: 'pdf' },
+      exec(undefined, 'export-1', 'qing_export'),
+    )
+    expect(result).toMatchObject({ format: 'pdf', title: '测试稿' })
+    const event = fixture.events.find((item) => item.event.type === 'export-request')
+    expect(event?.event).toMatchObject({ type: 'export-request', engineSessionId: 'qing-1', format: 'pdf' })
+  })
+
+  it('qing_export:空稿给可行动错误,不发事件', async () => {
+    const fixture = harness(async (path) => {
+      if (path.endsWith('/doc?format=qingml')) return doc({ state: 'empty', qingml: '', title: '' })
+      throw new Error(`unexpected path: ${path}`)
+    })
+    await expect(fixture.tools.get('qing_export')!.execute(
+      { format: 'pdf' },
+      exec(undefined, 'export-2', 'qing_export'),
+    )).rejects.toThrow('还没有可导出的内容')
+    expect(fixture.events.some((item) => item.event.type === 'export-request')).toBe(false)
+  })
+
   it('abort 路径宿主不发 turn-stopping,status idle 兜底收口残留租约', async () => {
     // 评测 r4 实证:用户点停止后回合被 abort,turn-stopping 不发射,残留段心跳把文稿
     // 永久锁死(agentBusy 数小时不释放)。idle 状态边界必须兜底关段。

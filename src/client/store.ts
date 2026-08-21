@@ -32,6 +32,8 @@ export interface QingClientSnapshot {
   reviewCount?: number
   /** 直写落库后的一次性纸面逐字入场请求。 */
   revealRequest?: { engineSessionId: string; docVersion: number; nonce: number }
+  /** agent 的 qing_export 工具请求面板执行真下载;nonce 去重,面板消费后原样保留。 */
+  exportRequest?: { engineSessionId: string; format: string; nonce: number }
   panelEngineSessionId?: string
   panelDoc?: ExternalPmDocReadResponse
   reviewModel?: ExternalReviewRenderModelResponse
@@ -662,6 +664,7 @@ export class QingClientStore {
       'binding-changed',
       'focus-changed',
       'turn-ended',
+      'export-request',
       'selection-changed',
       'engine-status',
     ]
@@ -734,6 +737,10 @@ export class QingClientStore {
       void this.loadState(sessionId, entry)
       // 进入审阅态同样重拉 PM 面板(含 review render-model),装饰层才有数据。
       void this.refreshPanel(sessionId, event.engineSessionId).catch(() => undefined)
+      return
+    }
+    if (event.type === 'export-request') {
+      this.update(entry, { ...entry.snapshot, exportRequest: { engineSessionId: event.engineSessionId, format: event.format, nonce: event.nonce } })
       return
     }
     if (event.type === 'turn-ended') {

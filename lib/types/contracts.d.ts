@@ -164,6 +164,11 @@ export type BridgeEvent = ({
     type: 'turn-ended';
     engineSessionIds: string[];
 } | {
+    type: 'export-request';
+    engineSessionId: string;
+    format: string;
+    nonce: number;
+} | {
     type: 'selection-changed';
     selection: QingSelection | null;
 } | {

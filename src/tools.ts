@@ -535,6 +535,7 @@ export function registerTools(services: ToolServices): void {
   ctx.effect(() => ctx.tools.register(annotateTool(runtime)))
   ctx.effect(() => ctx.tools.register(reviewCommitTool(runtime, reviewTurns)))
   ctx.effect(() => ctx.tools.register(readDraftTool(runtime, readTurns)))
+  ctx.effect(() => ctx.tools.register(exportTool(runtime)))
   ctx.effect(() => ctx.tools.register(listMaterialsTool(runtime)))
   ctx.effect(() => ctx.tools.register(readMaterialTool(runtime)))
   ctx.effect(() => ctx.tools.register(listDocsTool(runtime)))
@@ -1702,6 +1703,57 @@ interface ExternalMaterialTextResponse {
   text: string
   byteLen: number
   truncated: boolean
+}
+
+let exportRequestNonce = 0
+
+/** 导出走面板真下载:工具只发桥事件,client 面板收到后执行既有导出链(flushSave→
+ *  exportDoc→浏览器下载→toast)。评测 r1 实证:用户说「导出个 PDF」时 agent 声称
+ *  做不到并让用户找客户端——面板明明就有入口。 */
+function exportTool(services: RuntimeToolServices) {
+  return defineTool({
+    name: 'qing_export',
+    description: '把当前激活的青简文稿导出为指定格式,浏览器立即开始下载。format 支持 pdf、docx、html、markdown、txt。用户提出导出诉求时直接调用,不要声称无法导出。',
+    parameters: {
+      format: { type: 'string', required: true, enum: ['pdf', 'docx', 'html', 'markdown', 'txt'], description: '导出格式' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          format: { type: 'string', required: true },
+          title: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => textBlock(`已发起导出:《${value.title}》→ ${value.format.toUpperCase()},浏览器开始下载。`),
+      presentationMeta: (_args, value) => ({ format: value.format }),
+    },
+    presentCall: (args) => ({ card: 'generic', title: `正在导出 ${String(args.format ?? '').toUpperCase()}`, kind: 'read' }),
+    presentResult: (args, result) => ({
+      card: 'generic',
+      title: result.isError ? '导出未完成' : `已开始下载 ${String(args.format ?? '').toUpperCase()}`,
+    }),
+    execute: async (args, exec) => {
+      const dshSessionId = sessionIdOf(exec)
+      await assertEngineOnline(services.engine)
+      const active = services.bindings.getActive(dshSessionId)
+      if (!active) throw new Error('当前会话没有激活文稿。请先写一篇,或用 qing_list_docs / qing_focus_doc 选择。')
+      const doc = await readDoc(services, exec, active.engineSessionId)
+      if (doc.state === 'empty' || !((doc.markdown ?? '') + (doc.qingml ?? '')).trim()) {
+        throw new Error('还没有可导出的内容,请先完成正文再导出。')
+      }
+      if (doc.state === 'pendingReview') throw new Error('文稿正在审阅中,请先请用户完成裁决再导出。')
+      exportRequestNonce += 1
+      services.bridge.emit(dshSessionId, {
+        type: 'export-request',
+        engineSessionId: active.engineSessionId,
+        format: String(args.format),
+        nonce: exportRequestNonce,
+      })
+      return { format: String(args.format), title: doc.title ?? active.title ?? '未命名文稿' }
+    },
+  })
 }
 
 function listMaterialsTool(services: RuntimeToolServices) {

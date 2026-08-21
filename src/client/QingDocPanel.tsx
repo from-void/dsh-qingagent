@@ -208,6 +208,38 @@ export function QingDocPanel(props: QingDocPanelProps) {
     void qingClientStore.refreshPanel(sessionId, activeEngineSessionId).catch(() => undefined)
   }, [activeEngineSessionId, observedState, observedVersion, sessionId, snapshot.state?.engine.state])
 
+  // agent 的 qing_export 请求:面板执行与导出菜单同一条真下载链(nonce 去重防重放)。
+  const exportRequest = snapshot.exportRequest
+  const consumedExportNonceRef = useRef(0)
+  useEffect(() => {
+    if (!exportRequest || exportRequest.nonce === consumedExportNonceRef.current) return
+    if (exportRequest.engineSessionId !== activeEngineSessionId) return
+    const format = QING_EXPORT_FORMATS.find((candidate) => candidate.id === exportRequest.format)
+    if (!format) return
+    consumedExportNonceRef.current = exportRequest.nonce
+    void (async () => {
+      try {
+        await flushPendingDocSave()
+        const result = await qingClientStore.exportDoc(sessionId, exportRequest.engineSessionId, format.id)
+        const url = URL.createObjectURL(result.blob)
+        try {
+          const anchor = document.createElement('a')
+          anchor.href = url
+          anchor.download = exportFilename((snapshot.panelDoc?.title || snapshot.activeDoc?.title || '青简导出') as string, format.ext)
+          document.body.appendChild(anchor)
+          anchor.click()
+          anchor.remove()
+        } finally {
+          window.setTimeout(() => URL.revokeObjectURL(url), 0)
+        }
+        setToast(`${format.savedToast}${describeExportDegradations(result.degradations)}`)
+      } catch (error) {
+        console.error('[qingagent-panel] agent export failed', error)
+        setToast('导出失败,请重试')
+      }
+    })()
+  }, [exportRequest, activeEngineSessionId, sessionId, flushPendingDocSave, snapshot.panelDoc?.title, snapshot.activeDoc?.title])
+
   useEffect(() => {
     const coordinator = new DocumentSaveCoordinator({
       send: (engineSessionId, request) => qingClientStore.replaceDocument(sessionId, engineSessionId, request),

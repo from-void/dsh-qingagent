@@ -14,6 +14,12 @@ export interface QingClientSnapshot {
         docVersion: number;
         nonce: number;
     };
+    /** agent 的 qing_export 工具请求面板执行真下载;nonce 去重,面板消费后原样保留。 */
+    exportRequest?: {
+        engineSessionId: string;
+        format: string;
+        nonce: number;
+    };
     panelEngineSessionId?: string;
     panelDoc?: ExternalPmDocReadResponse;
     reviewModel?: ExternalReviewRenderModelResponse;
