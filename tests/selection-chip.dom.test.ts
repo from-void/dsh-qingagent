@@ -78,7 +78,7 @@ describe('青简选段 inline reference chip', () => {
       span: { start: 6, end: 6, draftRev: 7 },
       reference: {
         source: 'qingagent-selection',
-        label: '春风又绿江南岸',
+        label: '春\u2060风\u2060又\u2060绿\u2060江\u2060南\u2060岸',
       },
     })
     expect(payloads[1]?.span).toEqual({ start: 8, end: 8, draftRev: 8 })
@@ -155,5 +155,25 @@ describe('选段插入防御与 label 去重', () => {
     expect(dedupeChipLabel('走访覆盖完整,重点…', ['走访覆盖完整,重点…'])).toBe('①走访覆盖完整,重点…')
     expect(dedupeChipLabel('走访覆盖完整,重点…', ['①走访覆盖完整,重点…', '走访覆盖完整,重点…'])).toBe('②走访覆盖完整,重点…')
     expect(dedupeChipLabel('全新内容', ['走访覆盖完整,重点…'])).toBe('全新内容')
+  })
+})
+
+describe('label 原子化织入', () => {
+  it('label 字符间织入 U+2060 禁断行,剥离后还原;display 层不含 joiner', async () => {
+    const { weaveAtomicLabel, unweaveAtomicLabel, createSelectionReference } = await import('../src/client/selectionReference.js')
+    const { chipDisplayText } = await import('../src/client/chipPresentation.js')
+    expect(weaveAtomicLabel('走访覆盖')).toBe('走⁠访⁠覆⁠盖')
+    expect(unweaveAtomicLabel('走⁠访⁠覆⁠盖')).toBe('走访覆盖')
+    const reference = createSelectionReference(
+      { dshSessionId: 'd', engineSessionId: 'q', quote: '走访覆盖完整', anchor: { blockId: 'b', from: 0, to: 6 } } as never,
+      '测试稿', 2,
+    )
+    expect(reference.label).toContain('⁠')
+    expect(unweaveAtomicLabel(reference.label)).toBe('走访覆盖完整')
+    // ref/clipboardText 绝不携带 joiner(发送与复制走它们)
+    expect(reference.ref).not.toContain('⁠')
+    expect(reference.clipboardText).not.toContain('⁠')
+    // display fallback 剥 joiner
+    expect(chipDisplayText('selection', reference.label)).toBe('“选段：走访覆盖完整')
   })
 })

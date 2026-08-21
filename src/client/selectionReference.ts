@@ -14,14 +14,29 @@ export const CHIP_LABEL_PREVIEW_LENGTH = 10
 
 const CIRCLED_NUMBERS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩', '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳'] as const
 
+/** WORD JOINER(U+2060):零宽、禁断行。织入 label 字符间让整枚 chip 成为浏览器眼中
+ *  的原子词——换行时整体挪行,从根上消灭「chip 中间被拆成两段、覆盖层只画一半」的
+ *  空白块(用户实测)。零宽不改字符度量,textarea 与镜像同规则;发送展开走 ref,
+ *  joiner 永不进入消息正文。 */
+export const CHIP_ATOMIC_JOINER = '\u2060'
+
+export function weaveAtomicLabel(label: string): string {
+  return Array.from(label).join(CHIP_ATOMIC_JOINER)
+}
+
+export function unweaveAtomicLabel(label: string): string {
+  return label.replaceAll(CHIP_ATOMIC_JOINER, '')
+}
+
 /** 多枚 chip 的投影 label 必须互不为前缀(setDraft diff 歧义会吞相邻 occurrence)。
  *  序号前置:首字符即分叉。选段连选相邻内容时前 10 字极易相同,与批注共用这道防线。 */
 export function dedupeChipLabel(label: string, takenLabels: readonly string[]): string {
-  if (!takenLabels.some((existing) => existing.startsWith(label) || label.startsWith(existing))) {
+  const taken = takenLabels.map(unweaveAtomicLabel)
+  if (!taken.some((existing) => existing.startsWith(label) || label.startsWith(existing))) {
     return label
   }
-  const taken = new Set(takenLabels.map((existing) => existing.charAt(0)))
-  const circled = CIRCLED_NUMBERS.find((mark) => !taken.has(mark)) ?? `#${takenLabels.length + 1}`
+  const first = new Set(taken.map((existing) => existing.charAt(0)))
+  const circled = CIRCLED_NUMBERS.find((mark) => !first.has(mark)) ?? `#${takenLabels.length + 1}`
   return `${circled}${label}`
 }
 
@@ -92,7 +107,7 @@ export function createSelectionReference(
   return {
     source: QING_SELECTION_REFERENCE_SOURCE,
     ref,
-    label: dedupeChipLabel(selectionReferenceLabel(selection.quote), takenLabels),
+    label: weaveAtomicLabel(dedupeChipLabel(selectionReferenceLabel(selection.quote), takenLabels)),
     // 草稿持久化、复制与 owner 暂时不可用时也保留完整选段语义。
     clipboardText: ref,
   }

@@ -120,7 +120,7 @@ describe('批注 reference 标签与 source', () => {
       reference: {
         source: QING_ANNOTATION_REFERENCE_SOURCE,
         ref: '改准事实',
-        label: '①改准事实',
+        label: '①\u2060改\u2060准\u2060事\u2060实',
         clipboardText: '改准事实',
       },
       span: { start: 1, end: 1, draftRev: 7 },
@@ -223,7 +223,7 @@ describe('occurrence 草稿操作', () => {
       reference: {
         source: QING_ANNOTATION_REFERENCE_SOURCE,
         ref: '请改为新事实',
-        label: '①请改为新事实',
+        label: '①\u2060请\u2060改\u2060为\u2060新\u2060事\u2060实',
         clipboardText: '请改为新事实',
       },
       span: { start: 1, end: 1, draftRev: 31 },
@@ -242,7 +242,7 @@ describe('occurrence 草稿操作', () => {
       '一二三四五六七八九十一二三四五六',
     )).toBe(true)
     expect(selectionHarness.bail.mock.calls[0]?.[2].reference.label)
-      .toBe('①一二三四五六七八九十…')
+      .toBe('①\u2060一\u2060二\u2060三\u2060四\u2060五\u2060六\u2060七\u2060八\u2060九\u2060十\u2060…')
 
     const foreign = occurrence(22, 0, '外部', { source: 'foreign-source' })
     const foreignHarness = contextHarness(inputState('\uFFFC', [foreign]))

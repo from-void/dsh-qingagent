@@ -6,6 +6,8 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import {
   CHIP_LABEL_PREVIEW_LENGTH,
+  unweaveAtomicLabel,
+  weaveAtomicLabel,
   QING_SELECTION_REFERENCE_SOURCE,
   selectionReferenceLabel,
 } from './selectionReference.js'
@@ -40,7 +42,7 @@ const CIRCLED_NUMBERS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧',
  *  setDraft 的 diff 依旧歧义,替换某枚时会把相邻 occurrence 吞掉(评测 r2 席3 两轮实证)。
  *  改为序号前置——首字符即分叉,任意两枚互不为前缀;序号取未被占用的最小圈号。 */
 export function dedupeAnnotationLabel(label: string, takenLabels: readonly string[]): string {
-  const taken = new Set(takenLabels.map((existing) => existing.charAt(0)))
+  const taken = new Set(takenLabels.map((existing) => unweaveAtomicLabel(existing).charAt(0)))
   const circled = CIRCLED_NUMBERS.find((mark) => !taken.has(mark)) ?? `#${takenLabels.length + 1}`
   return `${circled}${label}`
 }
@@ -49,7 +51,7 @@ function createAnnotationReference(instruction: string, takenLabels: readonly st
   return {
     source: QING_ANNOTATION_REFERENCE_SOURCE,
     ref: instruction,
-    label: dedupeAnnotationLabel(annotationReferenceLabel(instruction), takenLabels),
+    label: weaveAtomicLabel(dedupeAnnotationLabel(annotationReferenceLabel(instruction), takenLabels)),
     clipboardText: instruction,
   }
 }
@@ -183,7 +185,7 @@ function replacementReference(
     return {
       source,
       ref: newRef,
-      label: dedupeAnnotationLabel(selectionReferenceLabel(newRef), takenLabels),
+      label: weaveAtomicLabel(dedupeAnnotationLabel(selectionReferenceLabel(newRef), takenLabels)),
       clipboardText: newRef,
     }
   }

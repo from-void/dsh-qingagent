@@ -104,7 +104,7 @@ export function chipDisplayText(
   label: string,
   ref?: string,
 ): string {
-  const fallback = label.replace(/^[①-⑳]|^#\d+/u, '')
+  const fallback = label.replaceAll('\u2060', '').replace(/^[①-⑳]|^#\d+/u, '')
   if (kind === 'annotation') {
     const body = (ref ?? '').replace(/\s+/gu, ' ').trim()
       .replace(/^按批注修改[:\uFF1A]/u, '')
@@ -485,14 +485,25 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
 
   /** mousemove 坐标命中:镜像层 pointer-events:none,事件全落在 textarea 上。 */
   const hitChip = (event: MouseEvent): HTMLElement | null => {
+    // 逐 fragment 命中:跨行 chip 的 boundingRect 是两行的并集大矩形,会把相邻 chip
+    // 的悬浮区整个罩住(用户实测第 4 枚 hover 不到)。
     for (const el of document.querySelectorAll(`[${CHIP_ATTR}]`)) {
-      const rect = el.getBoundingClientRect()
-      if (event.clientX >= rect.left && event.clientX <= rect.right
-        && event.clientY >= rect.top && event.clientY <= rect.bottom) {
-        return el as HTMLElement
+      const fragments = el.getClientRects()
+      const rects = fragments.length > 0 ? [...fragments] : [el.getBoundingClientRect()]
+      for (const rect of rects) {
+        if (event.clientX >= rect.left && event.clientX <= rect.right
+          && event.clientY >= rect.top && event.clientY <= rect.bottom) {
+          return el as HTMLElement
+        }
       }
     }
     return null
+  }
+
+  // ✕ 定位锚点:内容末尾所在的最后一个 fragment(单行=唯一 rect;跨行不再悬在并集矩形外)。
+  const lastFragmentRect = (chip: HTMLElement): DOMRect => {
+    const rects = chip.getClientRects()
+    return rects.length > 0 ? rects[rects.length - 1]! : chip.getBoundingClientRect()
   }
 
   const onMouseMove = (event: MouseEvent) => {
@@ -512,7 +523,7 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
       return
     }
     if (hideTimer !== undefined) { clearTimeout(hideTimer); hideTimer = undefined }
-    positionBadge(chip.getBoundingClientRect())
+    positionBadge(lastFragmentRect(chip))
     if (chip !== hoverChip) {
       hoverChip = chip
       scheduleShow(chip)
