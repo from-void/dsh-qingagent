@@ -137,7 +137,7 @@ describe('occurrence 投影数学', () => {
     expect(findOccurrenceProjection(state, 2)).toEqual({ start: 1, end: 2 })
   })
 
-  it('精确定位相邻 @label 多字符投影，并只吞掉至多一个尾随空格', () => {
+  it('精确定位相邻 @label 多字符投影，且不吞尾随空格', () => {
     const firstLabel = '[甲].*?+$^(){}|\\'
     const secondLabel = '末个?[]'
     const firstProjection = `@${firstLabel}`
@@ -154,7 +154,8 @@ describe('occurrence 投影数学', () => {
     })
     expect(findOccurrenceProjection(state, 4)).toEqual({
       start: firstProjection.length,
-      end: firstProjection.length + secondProjection.length + 1,
+      // 不吞尾随空格:删除后残留空格是 diff 前缀破缺防线。
+      end: firstProjection.length + secondProjection.length,
     })
   })
 
@@ -170,14 +171,15 @@ describe('occurrence 投影数学', () => {
 
 describe('occurrence 草稿操作', () => {
   it.each([
-    ['U+FFFC', '头\uFFFC尾', occurrence(10, 1, '旧标签')],
-    ['@label', '头@旧[标].*? 尾', occurrence(10, 1, '旧[标].*?')],
-  ])('removeOccurrenceFromDraft 删除 %s 精确投影', (_shape, draft, target) => {
+    // U+FFFC 单字符投影本就无尾随空格;@label 形态保留尾随空格(diff 前缀破缺防线)。
+    ['U+FFFC', '头\uFFFC尾', occurrence(10, 1, '旧标签'), '头尾'],
+    ['@label', '头@旧[标].*? 尾', occurrence(10, 1, '旧[标].*?'), '头 尾'],
+  ])('removeOccurrenceFromDraft 删除 %s 精确投影', (_shape, draft, target, expected) => {
     const harness = contextHarness(inputState(draft, [target]))
 
     expect(removeOccurrenceFromDraft(harness.actx, 10)).toBe(true)
     expect(harness.setDraft).toHaveBeenCalledOnce()
-    expect(harness.getState().draft).toBe('头尾')
+    expect(harness.getState().draft).toBe(expected)
   })
 
   it.each(['adjudicating', 'claimed', 'submitting'] as const)(
@@ -207,13 +209,13 @@ describe('occurrence 草稿操作', () => {
   })
 
   it.each([
-    ['U+FFFC', '前\uFFFC后', occurrence(20, 1, '旧标签')],
-    ['@label', '前@旧标签 后', occurrence(20, 1, '旧标签')],
-  ])('replaceOccurrenceRef 原位替换 %s 投影并使用删除后的 draftRev', (_shape, draft, target) => {
+    ['U+FFFC', '前\uFFFC后', occurrence(20, 1, '旧标签'), '前后'],
+    ['@label', '前@旧标签 后', occurrence(20, 1, '旧标签'), '前 后'],
+  ])('replaceOccurrenceRef 原位替换 %s 投影并使用删除后的 draftRev', (_shape, draft, target, afterDelete) => {
     const harness = contextHarness(inputState(draft, [target], 'plain', 30))
 
     expect(replaceOccurrenceRef(harness.actx, 20, '请改为新事实')).toBe(true)
-    expect(harness.setDraft).toHaveBeenCalledWith('前后')
+    expect(harness.setDraft).toHaveBeenCalledWith(afterDelete)
     expect(harness.bail).toHaveBeenCalledOnce()
     expect(harness.bail.mock.calls[0]?.[2]).toEqual({
       reference: {
@@ -272,13 +274,14 @@ describe('occurrence 草稿操作', () => {
 
     expect(replaceOccurrenceRef(harness.actx, 23, '新指令')).toBe(false)
     expect(harness.bail).toHaveBeenCalledTimes(2)
+    // 删除保留尾随空格,回滚重插的投影自带一个空格 → 双空格是预期残留(载荷安全优先)。
     expect(harness.bail.mock.calls[1]?.[2].reference).toEqual({
       source: QING_ANNOTATION_REFERENCE_SOURCE,
       ref: '旧完整指令',
       label: '旧标签',
       clipboardText: '旧完整指令',
     })
-    expect(harness.getState().draft).toBe('前@旧标签 后')
+    expect(harness.getState().draft).toBe('前@旧标签  后')
   })
 })
 

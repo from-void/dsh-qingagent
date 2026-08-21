@@ -100,7 +100,10 @@ export function findOccurrenceProjection(
   const projectionEnd = start + projection.length
   return {
     start,
-    end: projectionEnd + (state.draft[projectionEnd] === ' ' ? 1 : 0),
+    // end 不吞尾随空格:删除 [start,end) 后残留的空格让宿主 diff 的公共前缀在此断开——
+    // 两枚投影都以 @ 开头,若把空格一并删掉,diff 前缀会吃掉后一枚的 @、把编辑窗口右移一位,
+    // 后一枚 occurrence 被判进编辑区间而死亡(评测 r2 席3 三轮实证的串绑真凶)。
+    end: projectionEnd,
   }
 }
 
@@ -115,10 +118,51 @@ export function removeOccurrenceFromDraft(
   const projection = findOccurrenceProjection(snapshot, occurrenceId)
   if (!projection) return false
 
+  const expectedSurvivors = snapshot.occurrences
+    .filter((candidate) => candidate.occurrenceId !== occurrenceId)
   input.setDraft(
     snapshot.draft.slice(0, projection.start) + snapshot.draft.slice(projection.end),
   )
+  repairLostOccurrences(actx, expectedSurvivors)
+  tidyWhitespaceOnlyDraft(actx)
   return true
+}
+
+/** 保底不变式:一次删除/替换只允许目标 occurrence 消亡。宿主 diff 若误伤相邻 occurrence,
+ *  用死者的 source/ref/label 在其投影文本原位重建,载荷零丢失。 */
+function repairLostOccurrences(
+  actx: ClientContext,
+  expectedSurvivors: readonly InputState['occurrences'][number][],
+): void {
+  const input = actx.conversation.input.for(actx)
+  for (const survivor of expectedSurvivors) {
+    const now = input.state.getSnapshot()
+    if (now.occurrences.some((candidate) => candidate.occurrenceId === survivor.occurrenceId)) continue
+    // 投影文本仍在草稿里(diff 只判了 occurrence 死亡,文本未删)时按文本位置原位重建。
+    const projection = `@${survivor.label}`
+    const at = now.draft.indexOf(projection)
+    if (at < 0) continue
+    input.setDraft(now.draft.slice(0, at) + now.draft.slice(at + projection.length))
+    const cleared = input.state.getSnapshot()
+    actx.bail(actx, 'slash/input-insert-reference', {
+      reference: {
+        source: survivor.source,
+        ref: survivor.ref,
+        label: survivor.label,
+        clipboardText: survivor.clipboardText,
+      },
+      span: { start: Math.min(at, cleared.draft.length), end: Math.min(at, cleared.draft.length), draftRev: cleared.draftRev },
+    })
+  }
+}
+
+/** 移除/替换后草稿只剩空白时收干净(此时已无 occurrence,setDraft 无误伤面)。 */
+function tidyWhitespaceOnlyDraft(actx: ClientContext): void {
+  const input = actx.conversation.input.for(actx)
+  const now = input.state.getSnapshot()
+  if (now.phase === 'plain' && now.draft.length > 0 && now.draft.trim() === '' && now.occurrences.length === 0) {
+    input.setDraft('')
+  }
 }
 
 function replacementReference(
@@ -180,7 +224,11 @@ export function replaceOccurrenceRef(
       draftRev: afterDelete.draftRev,
     },
   }) === true
-  if (inserted) return true
+  if (inserted) {
+    repairLostOccurrences(actx, before.occurrences.filter(
+      (candidate) => candidate.occurrenceId !== occurrenceId))
+    return true
+  }
 
   const rollbackState = input.state.getSnapshot()
   if (rollbackState.phase === 'plain' && rollbackState.draft === withoutOccurrence) {
