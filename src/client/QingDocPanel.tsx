@@ -1243,7 +1243,9 @@ export function QingDocPanel(props: QingDocPanelProps) {
         data-content={contentKind}
         // 内发光与「不可编辑」同频:引擎 busy 投影有刷新时差,本地回合运行态一并点亮
         // (用户实测:发消息后锁定生效但发光缺席)。
-        data-tool={busy || turnRunningEffective ? 'agentBusy' : 'none'}
+        // 审批态无条件熄灭(用户裁定 0822):发光=正在编写操作;文稿进入 pendingReview 即等
+        // 用户裁决,agent 不可能再操作纸面,任何滞留的 busy/running 标志都不得点亮。
+        data-tool={!pendingReview && (busy || turnRunningEffective) ? 'agentBusy' : 'none'}
         data-ws-state={revealActive ? 'revealing' : 'idle'}
         data-qingdoc-mode={interactiveEditable ? 'editable' : 'readonly'}
         data-save-state={docMissing ? undefined : saveState.kind}
