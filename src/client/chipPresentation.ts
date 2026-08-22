@@ -420,7 +420,10 @@ export function installChipPresentation(deps: ChipPresentationDeps): () => void 
     title.textContent = kind === 'selection' ? '选段内容' : '批注修改'
     header.appendChild(title)
     if (kind === 'selection') {
-      const docTitle = deps.getDocTitle?.()?.trim()
+      // 文稿名从 chip 自己的 ref 解析(payload 自证):取当前稿标题在切稿后会张冠李戴
+      // (评测 0822-r10:内容是通知稿,标题显示成刚切去的读书笔记)。
+      const refTitle = /^\[选段\]《([\s\S]*)》(?:第\d+段)?[:\uFF1A]\s*「/.exec(occurrence.ref)?.[1]?.trim()
+      const docTitle = refTitle || deps.getDocTitle?.()?.trim()
       if (docTitle) {
         const doc = document.createElement('span')
         doc.textContent = `《${docTitle}》`

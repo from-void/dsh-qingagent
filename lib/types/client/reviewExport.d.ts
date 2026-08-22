@@ -8,7 +8,7 @@ export interface DshReviewTemplate {
 export declare function assembleDshReviewQuery(type: QingReviewType, template: DshReviewTemplate, supplement: string, lexicons?: ReadonlyArray<{
     id: string;
     name: string;
-}>): string;
+}>, targetTitle?: string): string;
 export interface QingExportFormat {
     id: 'pdf' | 'docx' | 'html' | 'markdown' | 'txt';
     label: string;

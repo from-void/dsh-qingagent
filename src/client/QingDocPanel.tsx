@@ -1816,7 +1816,9 @@ export function QingDocFunctions(props: QingDocFunctionsProps) {
       marked = true
       await props.onSendMessage(
         props.sessionId,
-        assembleDshReviewQuery(type, template, supplement, lexicons),
+        // 目标标题随指令显式下发:「当前文档」曾被 agent 按对话记忆解读成刚写的另一稿,
+        // 引发问卷挂起(评测 0822-r10)。标题取面板聚焦稿(=review-turn 钉扎目标)。
+        assembleDshReviewQuery(type, template, supplement, lexicons, props.title),
       )
       props.onToast('审查请求已发给对话')
     } catch (error) {

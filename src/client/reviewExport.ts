@@ -22,12 +22,16 @@ export function assembleDshReviewQuery(
   template: DshReviewTemplate,
   supplement: string,
   lexicons: ReadonlyArray<{ id: string; name: string }> = [],
+  targetTitle?: string,
 ): string {
   const query = assembleReviewQuery(type, template, supplement, lexicons)
     .replaceAll('create_annotation_groups', 'qing_annotate')
     .replaceAll('readDraft', 'qing_read_draft')
     .replaceAll('editDraft', 'qing_edit_draft')
     .replaceAll('writeDraft', 'qing_write_draft')
+  const targetLine = targetTitle?.trim()
+    ? `\n本轮审查目标文稿:《${targetTitle.trim()}》(面板发起时聚焦的文稿)。「当前文档」即指它;不要凭对话记忆把目标理解成别的文稿,若读到的稿名与此一致就直接开始审查。`
+    : ''
   const withSourceGuide = type === 'source'
     ? query.replace(
         INDEPENDENT_REVIEW_CONTRACT,
@@ -39,7 +43,7 @@ export function assembleDshReviewQuery(
   const suggestionContract = type === 'deai'
     ? '\n去AI味补充硬约束:每一处批注都必须给出 suggestion——一句结合上下文改写后的通顺整句,能直接替换原句;anchors[].find 必须是与 suggestion 对应的完整原句。禁止只指出问题不给改写。'
     : '\n修改意见硬约束:凡问题存在明确可行的改法,必须在该批注的 suggestion 字段给出结合上下文改写后的通顺整句(可直接替换原句),且 anchors[].find 是与之对应的完整原句;只有无法在不改变原意的前提下安全改写时才允许省略 suggestion。suggestion 只写改写后的整句本身,严禁「替换为:」「建议改为:」等前缀,也不要用引号包裹整句。在聊天里声称给了修改意见、批注里却没有 suggestion,视为未完成。'
-  return `${withSourceGuide}${suggestionContract}`
+  return `${withSourceGuide}${suggestionContract}${targetLine}`
 }
 
 export interface QingExportFormat {
