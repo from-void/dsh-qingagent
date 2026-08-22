@@ -535,7 +535,7 @@ export function registerTools(services: ToolServices): void {
   ctx.effect(() => ctx.tools.register(annotateTool(runtime)))
   ctx.effect(() => ctx.tools.register(reviewCommitTool(runtime, reviewTurns)))
   ctx.effect(() => ctx.tools.register(readDraftTool(runtime, readTurns)))
-  ctx.effect(() => ctx.tools.register(exportTool(runtime)))
+  ctx.effect(() => ctx.tools.register(exportTool(runtime, writeTurns)))
   ctx.effect(() => ctx.tools.register(listMaterialsTool(runtime)))
   ctx.effect(() => ctx.tools.register(readMaterialTool(runtime)))
   ctx.effect(() => ctx.tools.register(listDocsTool(runtime)))
@@ -1724,7 +1724,7 @@ let exportRequestNonce = 0
 /** 导出走面板真下载:工具只发桥事件,client 面板收到后执行既有导出链(flushSave→
  *  exportDoc→浏览器下载→toast)。评测 r1 实证:用户说「导出个 PDF」时 agent 声称
  *  做不到并让用户找客户端——面板明明就有入口。 */
-function exportTool(services: RuntimeToolServices) {
+function exportTool(services: RuntimeToolServices, writeTurns: WriteTurnTracker) {
   return defineTool({
     name: 'qing_export',
     description: '把当前激活的青简文稿导出为指定格式,浏览器立即开始下载。format 支持 pdf、docx、html、markdown、txt。用户提出导出诉求时直接调用,不要声称无法导出。',
@@ -1750,6 +1750,11 @@ function exportTool(services: RuntimeToolServices) {
     }),
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
+      // 结算回合禁令:审阅期被阻断的导出不得在裁决后自动重放(评测 0822-r8);
+      // 用户要导出会自己再说一句,那是新回合。
+      if (writeTurns.isSettlementTurn(dshSessionId)) {
+        throw new Error('用户刚完成裁决;不要自动补做此前被阻断的操作。若用户需要导出,等他在新消息里提出。')
+      }
       await assertEngineOnline(services.engine)
       const active = services.bindings.getActive(dshSessionId)
       if (!active) throw new Error('当前会话没有激活文稿。请先写一篇,或用 qing_list_docs / qing_focus_doc 选择。')
