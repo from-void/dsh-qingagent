@@ -1007,10 +1007,6 @@ function editDraftTool(services: RuntimeToolServices, writeTurns: WriteTurnTrack
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
       try {
-        // 结算回合硬闸先于一切:裁决即终态,先读稿再改也不行(评测 0822-r5)。
-        if (writeTurns.isSettlementTurn(dshSessionId)) {
-          throw new Error('用户刚完成裁决,改动已定稿;本回合不允许再修改文稿。若用户提出新的修改意见,等下一条消息再动手。')
-        }
         services.reviewTurnState.assertAnnotationOnly(dshSessionId)
         await assertEngineOnline(services.engine)
         const engineSessionId = resolveDocRef(services, dshSessionId, args.docRef)
@@ -1750,11 +1746,6 @@ function exportTool(services: RuntimeToolServices, writeTurns: WriteTurnTracker)
     }),
     execute: async (args, exec) => {
       const dshSessionId = sessionIdOf(exec)
-      // 结算回合禁令:审阅期被阻断的导出不得在裁决后自动重放(评测 0822-r8);
-      // 用户要导出会自己再说一句,那是新回合。
-      if (writeTurns.isSettlementTurn(dshSessionId)) {
-        throw new Error('用户刚完成裁决;不要自动补做此前被阻断的操作。若用户需要导出,等他在新消息里提出。')
-      }
       await assertEngineOnline(services.engine)
       const active = services.bindings.getActive(dshSessionId)
       if (!active) throw new Error('当前会话没有激活文稿。请先写一篇,或用 qing_list_docs / qing_focus_doc 选择。')
@@ -2886,23 +2877,10 @@ class WriteTurnTracker {
     lengthResults: Array<{ actual: number; report: DraftLengthReport } | undefined>
   }>()
 
-  private readonly settlementTurns = new Map<string, number>()
-
   begin(agentId: string, turn: number): void {
     if (this.turns.get(agentId) === turn) return
     this.turns.set(agentId, turn)
     this.successful.delete(agentId)
-    this.settlementTurns.delete(agentId)
-  }
-
-  /** 本回合由【审核结果】回流触发:用户刚完成裁决,已定稿落盘。 */
-  markSettlementTurn(agentId: string, turn: number): void {
-    this.settlementTurns.set(agentId, turn)
-  }
-
-  isSettlementTurn(agentId: string): boolean {
-    const turn = this.turns.get(agentId)
-    return turn !== undefined && this.settlementTurns.get(agentId) === turn
   }
 
   dispose(agentId: string): void {
@@ -2911,11 +2889,6 @@ class WriteTurnTracker {
   }
 
   assertWriteAllowed(exec: ToolRunContext, docRef?: string): DraftRequirements | undefined {
-    // 审核结果回流回合的硬闸:prompt 纪律挡不住模型「拒绝后重做/全采纳后再提交」
-    // (评测 0822-r5 实证),裁决即终态,本回合一律禁写。
-    if (this.isSettlementTurn(sessionIdOf(exec))) {
-      throw new Error('用户刚完成裁决,改动已定稿;本回合不允许再修改文稿。若用户提出新的修改意见,等下一条消息再动手。')
-    }
     const agentId = sessionIdOf(exec)
     const key = this.key(agentId, exec)
     const state = this.successful.get(agentId)
@@ -3093,10 +3066,6 @@ function installTurnTracking(
     const activeReview = services.reviewTurnState.activate(dshSessionId, payload.turn)
     reviewTurns.begin(dshSessionId, payload.turn)
     writeTurns.begin(dshSessionId, payload.turn)
-    const messages = (payload as { messages?: Array<{ content?: Array<{ text?: string }> }> }).messages ?? []
-    if (messages.some((message) => message.content?.some((part) => typeof part.text === 'string' && part.text.startsWith('【审核结果】')))) {
-      writeTurns.markSettlementTurn(dshSessionId, payload.turn)
-    }
     readTurns.begin(dshSessionId, payload.turn)
     services.freshness.begin(dshSessionId, payload.turn)
     // 审查回合钉住弹窗发起稿；普通回合仍钉住回合起点的聚焦稿。
